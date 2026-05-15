@@ -56,11 +56,11 @@ flowchart TD
     O -->|yes| P[Deploy Gate C8<br/>人按按钮]
     P --> Q([Production])
 
-    style C fill:#e1f5ff
-    style D fill:#e1f5ff
-    style E fill:#e1f5ff
-    style RS fill:#fff3cd
-    style P fill:#ffe0e0
+    style C fill:#1565C0,color:#fff
+    style D fill:#1565C0,color:#fff
+    style E fill:#1565C0,color:#fff
+    style RS fill:#E65100,color:#fff
+    style P fill:#C62828,color:#fff
 ```
 
 **颜色**: 蓝 = 协商阶段（人参与）；黄 = 重复检查；红 = 人按按钮。
@@ -95,10 +95,10 @@ flowchart TD
     J --> K
     K --> L[进 Tasks]
     
-    style B fill:#fff3cd
-    style C fill:#d4edda
-    style F fill:#d4edda
-    style I fill:#d4edda
+    style B fill:#E65100,color:#fff
+    style C fill:#2E7D32,color:#fff
+    style F fill:#2E7D32,color:#fff
+    style I fill:#2E7D32,color:#fff
 ```
 
 **通用循环模式**:
@@ -127,8 +127,8 @@ flowchart TD
     B -->|Type D<br/>P0 紧急| H[Hotfix 直接修 main<br/>唯一允许绕过 worktree 铁律]
     H --> I[24h 内必须补 spec PR<br/>超时阻断下一次 deploy]
     
-    style H fill:#ffe0e0
-    style I fill:#ffe0e0
+    style H fill:#C62828,color:#fff
+    style I fill:#C62828,color:#fff
 ```
 
 ---
@@ -152,9 +152,9 @@ flowchart TD
     I -->|yes| J[Initiative Validation<br/>跨 spec 集成测试<br/>数据一致性 / 性能]
     J --> K([Initiative Complete])
     
-    style B fill:#e1f5ff
-    style C fill:#e1f5ff
-    style E fill:#ffe0e0
+    style B fill:#1565C0,color:#fff
+    style C fill:#1565C0,color:#fff
+    style E fill:#C62828,color:#fff
 ```
 
 ---
@@ -174,12 +174,12 @@ flowchart TD
     B -->|retry exhausted ≥3| H[标 human:needs-attention]
     H --> I[人审 fail 原因]
     
-    style C fill:#fff3cd
-    style F fill:#fff3cd
-    style H fill:#fff3cd
-    style D fill:#ffe0e0
-    style G fill:#ffe0e0
-    style I fill:#ffe0e0
+    style C fill:#E65100,color:#fff
+    style F fill:#E65100,color:#fff
+    style H fill:#E65100,color:#fff
+    style D fill:#C62828,color:#fff
+    style G fill:#C62828,color:#fff
+    style I fill:#C62828,color:#fff
 ```
 
 3 种异常都需要**人介入**——这跟 L1.D-business profile 一致：执行阶段 AI 自闭环，异常时人才出来。
@@ -211,12 +211,12 @@ flowchart LR
     EV -.周期触发.-> PE
     PE -.refactor task.-> SP
     
-    style L1 fill:#d4edda
-    style L2 fill:#d4edda
-    style L3 fill:#d4edda
-    style L4 fill:#fff3cd
-    style L5 fill:#fff3cd
-    style L6 fill:#e1f5ff
+    style L1 fill:#2E7D32,color:#fff
+    style L2 fill:#2E7D32,color:#fff
+    style L3 fill:#2E7D32,color:#fff
+    style L4 fill:#E65100,color:#fff
+    style L5 fill:#E65100,color:#fff
+    style L6 fill:#1565C0,color:#fff
 ```
 
 **颜色**: 绿 = 协商时介入（最早）；黄 = 执行时介入（自动）；蓝 = 周期介入（兜底）。
@@ -249,11 +249,11 @@ flowchart TB
     PlanMerge -.周期.-> Periodic
     Periodic -.refactor proposals.-> Spec
     
-    style L1 fill:#d4edda
-    style L2 fill:#d4edda
-    style L3a fill:#fff3cd
-    style L3b fill:#fff3cd
-    style L4 fill:#e1f5ff
+    style L1 fill:#2E7D32,color:#fff
+    style L2 fill:#2E7D32,color:#fff
+    style L3a fill:#E65100,color:#fff
+    style L3b fill:#E65100,color:#fff
+    style L4 fill:#1565C0,color:#fff
 ```
 
 L3 是工具链最复杂的一层——**双引擎**互相喂数据。
@@ -290,9 +290,9 @@ flowchart TB
     E1 -->|查询| Registry
     E2 -->|维护| Registry
     
-    style E1 fill:#e1f5ff
-    style E2 fill:#fff3cd
-    style Registry fill:#f8d7da
+    style E1 fill:#1565C0,color:#fff
+    style E2 fill:#E65100,color:#fff
+    style Registry fill:#6A1B9A,color:#fff
 ```
 
 **关键**: 两个引擎共享 `function-registry.yaml` 这个**单一数据源**。维护引擎写入，查询引擎读取，永远保持一致。
@@ -328,10 +328,10 @@ flowchart LR
     FN2 -.自动注册.-> REG
     REG -.语义检索.-> DG
     
-    style DG fill:#d4edda
-    style REG fill:#f8d7da
-    style FN1 fill:#fff3cd
-    style FN2 fill:#fff3cd
+    style DG fill:#2E7D32,color:#fff
+    style REG fill:#6A1B9A,color:#fff
+    style FN1 fill:#E65100,color:#fff
+    style FN2 fill:#E65100,color:#fff
 ```
 
 **追踪方向**:
@@ -398,9 +398,9 @@ flowchart TB
     C9 -.Initiative 时.-> S3
     C3 -.high crit task.-> C2
     
-    style C10 fill:#d4edda
-    style C11 fill:#d4edda
-    style C9 fill:#d4edda
+    style C10 fill:#2E7D32,color:#fff
+    style C11 fill:#2E7D32,color:#fff
+    style C9 fill:#2E7D32,color:#fff
 ```
 
 **统计**: 11 个组件 = 8 个原方案 + 3 个本次讨论新增（C9 / C10 / C11）。
