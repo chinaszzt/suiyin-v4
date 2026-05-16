@@ -403,7 +403,12 @@ flowchart TB
     style C9 fill:#2E7D32,color:#fff
 ```
 
-**统计**: 11 个组件 = 8 个原方案 + 3 个本次讨论新增（C9 / C10 / C11）。
+**统计**: 11 个节点 = **8 个自建组件 + 3 个行为契约**（C4 / C6 / C8 是契约，落地按谱系选实现：本地 hook / 通用 CI / GitHub 原生）。
+
+- **自建组件**（imperative logic）: C1 / C2 / C3 / C5 / C7 / C9 / C10 / C11
+- **行为契约**（declarative）: **C4 / C6 / C8**
+
+详见 `toolchain.md` §0.5 "组件 vs 契约：判定原则"。
 
 ---
 

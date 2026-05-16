@@ -18,7 +18,61 @@
 | 人介入点 | spec + plan + PR review + merge + deploy | 仅 spec/plan 协商 + spec 漂移仲裁 + deploy |
 | Merge gate | 人按按钮 | 自动化 gate（CI 绿 + AI 双 review） |
 
-业界没有为这套模式优化的工具链。**Layer 1（协商）借用 spec-kit，Layer 2-5（规划/执行/验证/Gate）自建，Layer 6（发布）用既有 CD**。本文档定义自建部分的需求。
+业界没有为这套模式优化的工具链。**Layer 1（协商）借用 spec-kit，Layer 2-6 部分自建 + 部分声明式契约**。本文档定义两者的规约。
+
+---
+
+## 〇.5、组件 vs 契约：判定原则
+
+设计每个工具链节点前，必须先问 2 层问题。
+
+### 第 1 层：是 imperative logic 还是 declarative contract？
+
+```
+工具链节点 → 是什么？
+  ├─ Imperative Logic（要写代码）       → 自建组件
+  └─ Declarative Contract（声明式约束） → 行为契约
+        └─ 实现选项谱系: 本地 hook / 通用 CI / SaaS 集成
+              ↑ v4 文档只定 contract，用户落地时选实现
+```
+
+**判定锚点**：
+
+- 节点的核心职责是"读取规则 + 执行声明式判定"？→ **契约**
+- 节点是"编排 / 决策 / 计算 / 生成产物"？→ **组件**
+
+### 第 2 层：行为契约的实现选项谱系（轻 → 重）
+
+| 选项 | 性质 | 适合场景 |
+|---|---|---|
+| (a) **本地 git hook + lefthook** | 纯本地，零 SaaS | 单人 / 小团队 / 离线 |
+| (b) **通用 CI**（GitLab / CircleCI / Jenkins） | 集中跑，CI 权威 | 中等规模 |
+| (c) **SaaS 集成**（GitHub Branch Protection + Merge Queue） | 完整集成 | 重度 SaaS 用户 |
+| (d) **混合**（本地 hook 反馈 + CI 权威） | 双层 | **推荐** |
+
+工具链文档**不绑定任何一种实现**，只定 contract。
+
+### 重审：v4 工具链 11 个节点分类
+
+| 类型 | 节点 | 数量 |
+|---|---|---|
+| **自建组件**（imperative） | C1 / C2 / C3 / C5 / C7 / C9 / C10 / C11 | **8** |
+| **行为契约**（declarative） | **C4 / C6 / C8** | **3** |
+
+8 个组件 + 3 个契约。**真正要写 imperative logic 的就 8 个**。C4/C6/C8 是契约，落地时按谱系选实现，工具链文档不规定怎么跑。
+
+### AI 提案审查清单 — 最简实现优先
+
+AI 提出工具/组件时，**必须先问**：
+
+1. 这是 imperative logic 还是 declarative contract？
+2. 如果是 contract，最轻实现是什么（本地 hook? 已有 CI? SaaS?）
+3. 现成工具能覆盖多少？
+4. 真正需要写代码的是哪一小块？
+
+**禁止默认重型 SaaS**。先列最简方案，再讨论是否升级到重型。
+
+(本条来自工具链设计中 C6 经历"过度设计 → thin layer → 配置 → 契约"三次降级的反思——把配置当组件、把契约当实现，会人为放大 P0 范围。)
 
 ---
 
@@ -28,13 +82,13 @@
 [人 + AI 协商]                  [AI 主写 + 自动化 Gate]              [人按按钮]
 
 Layer 1  业务协商              Layer 2-5  执行引擎                  Layer 6  发布
-- constitution                 - 规划 (C1)                          - Deploy Gate (C8)
-- spec (用户行为)              - 执行 (C2, C3)                      - 灰度 / 全量
-- clarify                      - 验证 (C4, C5)                      - 触发 CD
-- plan (技术方案)              - Gate (C6)
-- constraints/                 - 横跨调度 (C7)
+- constitution                 - 规划 (C1 组件)                      - C8 契约
+- spec (用户行为)              - 执行 (C2, C3 组件)                  - 灰度 / 全量
+- clarify                      - 验证 (C4 契约 + C5 组件)            - 触发 CD
+- plan (技术方案)              - Gate (C6 契约)
+- constraints/                 - 横跨调度 (C7 组件)
 
-[借用 spec-kit]               [自建 — 本文档]                       [既有 CD]
+[借用 spec-kit]               [8 组件 + 3 契约]                      [契约：多种 CD 实现]
 ```
 
 人介入点（按频率从高到低）：
@@ -60,46 +114,49 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
   - `.specify/specs/NNN-feature-name/tasks.yaml` — Task 拆解（**改用 yaml，不用默认 md**）
 - **必要配置变更**：`.specify/extensions.yml` 关掉 spec-kit 的 git auto-commit hooks（与我们 worktree 铁律冲突）
 
-### Layer 2 规划 — 自建（C1）
+### Layer 2 规划 — 自建（C1 组件）
 
 - **谁干**：AI 主导，人审"phase 划分是否合理"
 - **能力**：依赖图分析、文件冲突检测、并行 phase 划分
 - **产物**：`tasks.yaml` 升级版（含 `execution_plan`）
 
-### Layer 3 执行 — 自建（C2 + C3）
+### Layer 3 执行 — 自建（C2 + C3 组件）
 
 - **谁干**：AI 自闭环（worktree 隔离）
 - **能力**：worktree 创建、AI session 启动（Claude Code headless）、prompt 模板、双 AI 独立实现（high criticality）+ 仲裁
 - **产物**：可 merge 的 PR per task
 
-### Layer 4 验证 — 自建（C4 + C5）
+### Layer 4 验证 — C4 契约 + C5 组件
 
 - **谁干**：自动化工具 + AI session（独立）
-- **能力**：5 层 check + AI Reviewer 独立审
+- **能力**：5 层 check（C4 契约定义）+ AI Reviewer 独立审（C5 组件）
 - **产物**：`verify_report.json` + `ai_review.json`
 
-### Layer 5 Gate — 自建（C6 + C7）
+### Layer 5 Gate — C6 契约 + C7 组件
 
 - **谁干**：自动化（人通过 `human:block` 标签可紧急 override）
-- **能力**：gate 规则评估、自动 retry、失败升级
+- **能力**：gate 规则评估（C6 契约）+ phase 调度（C7 组件）
 - **产物**：merge to main / hold
 
-### Layer 6 发布 — 既有 CD + Deploy Gate（C8）
+### Layer 6 发布 — C8 契约（+ 1 个 imperative 子能力）
 
 - **谁干**：人按按钮触发，AI 提供决策辅助
-- **能力**：release summary、灰度选项、对接 CD
+- **能力**：release summary（imperative 子能力）、灰度选项、对接 CD
 - **产物**：production deploy
 
 ---
 
-## 三、工具链组件需求
+## 三、工具链节点（8 组件 + 3 契约）
 
-每个组件给 6 个字段：作用 / 输入 / 输出 / 核心能力 / 依赖 / 未决问题。
+**自建组件**（imperative logic）和**行为契约**（declarative contract）分开列。组件给 6 字段；契约多一个"实现选项谱系"字段。
 
-### C1. Planning Engine（Layer 2）
+### 自建组件（imperative）
+
+#### C1. Planning Engine（Layer 2）
 
 | 项 | 内容 |
 |---|---|
+| **性质** | 自建组件 |
 | **作用** | 把扁平 task 列表升级成"phase + 并行组"执行计划 |
 | **输入** | `tasks.yaml`（spec-kit 初版）+ `spec.md` + `plan.md` |
 | **输出** | `tasks.yaml`（新增 `execution_plan: [{phase, parallel: [ids]}]`） |
@@ -107,10 +164,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **依赖** | tasks.yaml schema、文件路径解析 |
 | **未决 Q1** | 语义冲突分析的精度（false positive 会过度串行化） |
 
-### C2. Task Executor（Layer 3）
+#### C2. Task Executor（Layer 3）
 
 | 项 | 内容 |
 |---|---|
+| **性质** | 自建组件（核心） |
 | **作用** | 单个 task 从 spec 到 PR 的全自动实现 |
 | **输入** | 单个 task（id + spec_ref + plan_ref + context_seeds + verify_cmd 等） |
 | **输出** | 可 merge 的 PR + verify report |
@@ -118,10 +176,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **依赖** | `git worktree`、Claude Code SDK / CLI、`.specify/` 目录 |
 | **未决 Q2** | 单 AI session 长度上限（>2h 自动 kill？） |
 
-### C3. Multi-Implementation Arbiter（Layer 3，高 criticality）
+#### C3. Multi-Implementation Arbiter（Layer 3，高 criticality）
 
 | 项 | 内容 |
 |---|---|
+| **性质** | 自建组件 |
 | **作用** | 双 AI 独立实现 + 交叉审 + 仲裁出最终版本 |
 | **输入** | 1 个 high criticality task + 2 个独立 session 的 impl + 双向 review |
 | **输出** | 1 个仲裁后的最终 PR |
@@ -135,21 +194,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 - `medium`（默认）：C2 单 AI 写 + C5 单 AI review
 - `high`：触碰 NON-NEGOTIABLE 原则的代码（认证、支付、数据迁移）／跨 module ／新模式引入 → **C3 双 AI 独立实现 + 仲裁**
 
-### C4. Verify Engine（Layer 4）
+#### C5. AI Reviewer（Layer 4）
 
 | 项 | 内容 |
 |---|---|
-| **作用** | 5 层独立 check 串成可解析报告 |
-| **输入** | PR / 当前 working state |
-| **输出** | `verify_report.json`（每个 check 各自 pass/fail + details） |
-| **核心能力** | **L1 Static**: lint + type check + formatter ／ **L2 Tests**: unit + integration ／ **L3 Spec compliance**: 每个 AC 是否有对应 passing test（命名映射）／ **L4 Constitution compliance**: AI 读 constitution + diff 输出违反项 ／ **L5 Coverage delta**: 覆盖率不下降（warning，不阻断） |
-| **依赖** | 项目 toolchain（dart analyze / flutter test / eslint / jest）／ AI session |
-| **未决 Q4** | AC ↔ test 映射的强制方式（命名约定 `test('AC-1', ...)` ／ metadata file ／ 显式注解） |
-
-### C5. AI Reviewer（Layer 4）
-
-| 项 | 内容 |
-|---|---|
+| **性质** | 自建组件 |
 | **作用** | 独立 AI session 评估 PR 是否实现意图 |
 | **输入** | spec + plan + constitution + PR diff（**不读 implementer 工作过程**） |
 | **输出** | 结构化 verdict（`approve` / `request_changes` / `block`）+ findings 列表 |
@@ -157,21 +206,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **依赖** | Claude Code SDK |
 | **未决 Q5** | 单次还是 N=2 + 分歧仲裁（按 task.criticality 路由？） |
 
-### C6. Auto Merge Gate（Layer 5）
+#### C7. Phase Coordinator（横跨 Layer 2-5）
 
 | 项 | 内容 |
 |---|---|
-| **作用** | 所有 check 通过自动 merge，否则 retry / 升级 |
-| **输入** | PR + verify_report + review verdict |
-| **输出** | merge / hold（带 reason） |
-| **核心能力** | Gate 规则评估：`verify.all.pass && review.verdict == approve && pr.ff_mergeable && !pr.has_label("human:block")` ／ 自动 retry（≤3 次）／ 失败升级（标 `human:needs-attention` + 通知）／ 紧急 override 监听（`human:block` 标签） |
-| **依赖** | GitHub API、C4 + C5 |
-| **未决 Q6** | 失败升级通知渠道（issue comment / Slack / email） |
-
-### C7. Phase Coordinator（横跨 Layer 2-5）
-
-| 项 | 内容 |
-|---|---|
+| **性质** | 自建组件 |
 | **作用** | 按 execution_plan 调度 phase，**phase 间逐次 merge to main** |
 | **输入** | tasks.yaml 含 execution_plan |
 | **输出** | 所有 task 完成 / phase 失败标记 |
@@ -179,16 +218,46 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **依赖** | C2 + C6 |
 | **未决 Q7** | phase 内某 task 卡住、其他已 merge——卡住的回滚还是隔离 |
 
-### C8. Deploy Gate（Layer 6）
+### 行为契约（declarative）
+
+#### C4. Verify Contract（Layer 4）
 
 | 项 | 内容 |
 |---|---|
-| **作用** | 人按按钮触发 deploy，AI 提供决策辅助 |
+| **性质** | **行为契约** — 定义 PR/working state 必须通过的 5 层 check |
+| **输入** | PR / working state |
+| **输出契约** | `verify_report.json`（每层 check 各自 pass/fail + details） |
+| **5 层 check（必须实现）** | **L1 Static** (lint + tsc + formatter) ／ **L2 Tests** (unit + integration) ／ **L3 Spec compliance** (每个 AC 是否有对应 passing test，命名映射) ／ **L4 Constitution compliance** (AI 读 constitution + diff 输出违反项) ／ **L5 Coverage delta** (覆盖率不下降，warning，不阻断) |
+| **实现选项谱系** | (a) **本地 lefthook + 各语言工具**（最轻）／ (b) 通用 CI（GitLab / CircleCI）／ (c) GitHub Actions ／ (d) **混合**（本地快反馈 + CI 权威，推荐） |
+| **真正 imperative 部分** | L3 (AC ↔ test 映射查询) + L4 (AI constitution check) — 这两个是脚本，挂在选定实现下跑 |
+| **依赖** | 项目 toolchain（dart analyze / flutter test / eslint / jest）+ AI session (L3/L4) |
+| **未决 Q4** | AC ↔ test 映射强制方式（命名约定 `test('AC-1', ...)` ／ metadata file ／ 显式注解） |
+
+#### C6. Gate Contract（Layer 5）
+
+| 项 | 内容 |
+|---|---|
+| **性质** | **行为契约** — 所有职责都是配置 / 编排，**没有 imperative logic** |
+| **输入** | PR + C4 verify_report + C5 review verdict |
+| **输出** | merge / hold |
+| **契约规则** | `verify.all.pass && review.verdict == approve && pr.ff_mergeable && !pr.has_label("human:block")` |
+| **失败处理** | `ff_mergeable false` → rebase（不重做 C2/C4/C5），`human:block` → 等人解锁 |
+| **实现选项谱系** | (a) **git pre-push hook + 5 行 shell**（最轻，零 SaaS）／ (b) 通用 CI + 仓库规则 ／ (c) GitHub Branch Protection + Merge Queue（最完整）／ (d) 混合 |
+| **依赖** | git + （C4/C5 status）|
+| **未决 Q6** | 失败升级通知渠道（取决于实现选项） |
+
+#### C8. Deploy Contract（Layer 6）
+
+| 项 | 内容 |
+|---|---|
+| **性质** | **大部分行为契约 + 1 个 imperative 子能力**（release summary generator） |
 | **输入** | 本次发版 PR 列表 + change history |
 | **输出** | 触发 deploy pipeline / 暂缓 |
-| **核心能力** | AI 自动生成 release summary（spec 实现状况 + 风险 hint）／ 灰度 / 全量 / 暂缓 选项 ／ 触发 CD（GitHub Actions / Vercel / 自建） |
-| **依赖** | 既有 CD |
-| **未决 Q8** | 风险 summary 的格式（人 30 秒读完） |
+| **契约规则** | 人按按钮 → AI 生成 release summary → 人决定灰度 / 全量 / 暂缓 |
+| **实现选项谱系** | (a) **本地脚本 + 手动 deploy**（最轻）／ (b) 通用 CD（CircleCI / GitLab CI / Jenkins）／ (c) GitHub Actions + Vercel ／ (d) 混合 |
+| **唯一 imperative 子能力** | release summary generator（AI 跑一次 prompt 生成发版摘要）|
+| **依赖** | 既有 CD 或本地脚本 |
+| **未决 Q8** | 风险 summary 格式（人 30s 读完） |
 
 ---
 
@@ -208,6 +277,8 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **H** | 仲裁 AI = 独立第 3 个 session | 不沾染 implementer 或 reviewer 视角 |
 | **I** | Spec 漂移触发动作 = AI 标 `spec-drift` issue + 暂停 task | 人介入仲裁后回到 Layer 1 |
 
+待拍 Fork J-S 见 `discussion-notes.md`（新增 S：工具链整体实现栈选择）。
+
 ---
 
 ## 五、命名建议
@@ -223,15 +294,21 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 
 ---
 
-## 六、落地优先级
+## 六、落地优先级（修订版）
 
-| 优先级 | 组件 | 价值 |
-|---|---|---|
-| **P0 MVP** | C2 Task Executor + C4 Verify Engine（仅 L1 + L2） | 跑通"AI 写 1 个 task + 测试通过"最小循环 |
-| **P1** | C5 AI Reviewer + C6 Auto Merge Gate | 自闭环 merge（不要人审 PR） |
-| **P2** | C1 Planning Engine + C7 Phase Coordinator | 并行加速 |
-| **P3** | C3 Arbiter + C4 Verify Engine 补 L3/L4 | 强化关键路径 |
-| **P4** | C8 Deploy Gate UI | 收尾 |
+| 优先级 | 节点 | 价值 | 性质 |
+|---|---|---|---|
+| **P0 MVP** | C2 Task Executor + C4 Verify Contract（仅 L1+L2，本地 lefthook） | 跑通"AI 写 1 个 task + 测试通过"最小循环 | C2 组件 + C4 配置 |
+| **P1** | C5 AI Reviewer + C6 Gate Contract（git hook 或 GitHub）| 自闭环 merge（不要人审 PR）| C5 组件 + C6 配置 |
+| **P2** | C1 Planning Engine + C7 Phase Coordinator | 并行加速 | 组件 |
+| **P3** | C3 Arbiter + C4 补 L3/L4 imperative 部分 | 强化关键路径 | C3 组件 + C4 imperative 子能力 |
+| **P4** | C8 release summary generator + CD 配置 | 收尾 | C8 imperative 子能力 + 配置 |
+
+**关键变化**：
+
+- **C6 不在 P0/P1 单独列**——它是配置，跟着 C5 一起配齐即可，半天的工作量
+- **C4 拆成两步**：L1/L2 在 P0（lefthook 配齐即可），L3/L4 的 imperative 部分在 P3
+- **C8 拆成两步**：CD 配置 + summary generator，后者才是真要写代码的
 
 P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看结果。后面按价值往上叠。
 
@@ -256,11 +333,12 @@ P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看
        │                            │      open PR               │
        │                            │          │                 │
        │                            │          ▼                 │
-       │                            │      C4 Verify (L1-5)      │
+       │                            │      C4 Verify Contract    │
+       │                            │      (lefthook / CI)       │
        │                            │      C5 AI Review (独立)   │
        │                            │          │                 │
        │                            │          ▼                 │
-       │                            └─► C6 Auto Merge Gate       │
+       │                            └─► C6 Gate Contract         │
        │                                       │                 │
        │                                       ▼                 │
        │                                  merge to main          │
@@ -268,35 +346,41 @@ P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看
        └─────────────────────────────────────────────────────────┘
                                        │
                                        ▼
-                                  C8 Deploy Gate (人按按钮)
+                              C8 Deploy Contract (人按按钮)
+                              (CD 配置 + AI summary)
 ```
+
+**节点性质标注**：
+
+- **自建组件**：C1 / C2 / C3 / C5 / C7（标准矩形）
+- **行为契约**：C4 / C6 / C8（应在图里用不同形状，但 ASCII 表达力有限，见 `diagrams.md` Mermaid 版）
 
 ---
 
 ## 附录 A：跟 methodology.md / constitution.md 的关系
 
 - **methodology.md**：方法论原则（spec 怎么写、bug 怎么分类、spec rot 怎么防御）— 给团队所有参与者
-- **toolchain.md（本文档）**：工具链需求（要做哪些工具、各自接什么输入输出）— 给工具链开发者
+- **toolchain.md（本文档）**：工具链需求（节点定义：组件 + 契约）— 给工具链开发者
 - **constitution.md（未来）**：项目宪法（不可妥协的原则 + 治理）— 团队对齐用，principles 引用 methodology 和 toolchain
 
 未来如果 methodology 和 toolchain 冲突，constitution 仲裁。Constitution 还没写，预期在工具链 P0 落地前定。
 
 ## 附录 B：未决问题清单
 
-汇总 C1-C8 的"未决"字段，便于追踪。每个未决问题在该组件做 spec 阶段时解决。
+汇总 C1-C8 的"未决"字段，便于追踪。每个未决问题在该节点做 spec 阶段时解决。
 
-| 编号 | 问题 | 涉及组件 |
+| 编号 | 问题 | 涉及节点 |
 |---|---|---|
 | **Q1** | 语义冲突分析的精度（false positive 风险） | C1 |
 | **Q2** | 单 AI session 长度上限（>2h kill？） | C2 |
 | **Q3** | 仲裁 AI 是第 3 个独立 session 还是 reviewer 兼任 | C3 |
 | **Q4** | AC ↔ test 映射强制方式（命名约定 vs metadata vs 注解） | C4 |
 | **Q5** | AI Reviewer 单次还是 N=2 分歧仲裁 | C5 |
-| **Q6** | Merge Gate 升级通知渠道（issue / Slack / email） | C6 |
+| **Q6** | Gate Contract 失败升级通知渠道（取决于实现选项） | C6 |
 | **Q7** | phase 内某 task 卡住，已 merge 的回滚还是隔离 | C7 |
-| **Q8** | Deploy Gate 风险 summary 格式（人 30s 读完） | C8 |
+| **Q8** | Deploy Contract 风险 summary 格式（人 30s 读完） | C8 |
 
 ---
 
-**Version**: 0.1.0-draft（与 methodology.md 一起作为 v4 协作框架的基线，未来正式 ratify 后升 1.0.0）
-**Last Updated**: 2026-05-15
+**Version**: 0.2.0-draft（v0.1 → v0.2 修订内容：引入"组件 vs 契约"判定原则；C4/C6/C8 重新定位为行为契约；落地优先级调整反映 C6 是配置非组件）
+**Last Updated**: 2026-05-16
