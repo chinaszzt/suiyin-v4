@@ -328,6 +328,80 @@ J / K / L / M / N / Q / R — 一次过完。
 
 ---
 
-**Version**: 0.1.0-WIP
-**Last Updated**: 2026-05-15
-**Status**: 待后续 2 天讨论消化到正式文档
+## 八、工具链定位二次修正（2026-05-16）
+
+把 C4 / C6 / C8 重新定位为**行为契约**（declarative），不是组件。已写入 `toolchain.md` v0.2.0。
+
+### 8.1 三次过度设计的反思（以 C6 为例）
+
+| 阶段 | 误判 | 修正 |
+|---|---|---|
+| 第 1 次 | 当 verify 延续，fail 代价 = C2 + C4 + C5 白跑 | 实际是 thin policy layer，到 C6 时代码已过关 |
+| 第 2 次 | 当组件，给出"作用 / 输入 / 输出 / 核心能力" | 实际是 GitHub 原生配置，没代码要写 |
+| 第 3 次 | 默认绑定 GitHub Branch Protection + Merge Queue | 实际是行为契约，可本地 git hook 5 行 shell |
+
+根因：**没问"最简实现是什么"，默认重型 SaaS**。
+
+### 8.2 判定原则升级（3 层）
+
+详见 `toolchain.md` §0.5。
+
+```
+工具链节点 → 是什么？
+  ├─ Imperative Logic（写代码）        → 自建组件
+  └─ Declarative Contract              → 行为契约
+        └─ 实现选项: 本地 hook / 通用 CI / SaaS 集成
+              ↑ v4 文档只定 contract，用户落地时选实现
+```
+
+### 8.3 重新分类结果
+
+11 节点 = **8 自建组件 + 3 行为契约**：
+
+- **自建组件**（imperative）: C1 / C2 / C3 / C5 / C7 / C9 / C10 / C11
+- **行为契约**（declarative）: **C4 / C6 / C8**
+
+真正要写 imperative logic 的就 8 个。C4 / C6 / C8 是契约，按实现选项谱系（本地 / CI / SaaS）落地。
+
+### 8.4 落地优先级调整
+
+| 之前 | 现在 |
+|---|---|
+| P0: C2 + C4 (L1+L2) | P0: C2 + C4 Contract (lefthook + L1+L2 工具) |
+| P1: C5 + C6 Gate（当组件实现） | P1: C5 + C6 Contract（git hook 配齐 5 行 shell） |
+| P4: C8 Deploy Gate UI | P4: C8 release summary generator（imperative）+ CD 配置 |
+
+**关键变化**：
+
+- C6 不再单独占 P 优先级 — 跟 C5 一起配齐（半天工作量）
+- C4 拆两步：L1/L2 在 P0（lefthook），L3/L4 imperative 在 P3
+- C8 拆两步：CD 配置 + summary generator，后者才是真要写代码的
+
+P0 启动门槛大幅降低，**不依赖任何 SaaS** 也能跑起来。
+
+### 8.5 新增 Fork S（工具链整体实现栈）
+
+| Fork | 选项 |
+|---|---|
+| **S. 工具链整体实现栈** | (a) 本地 git hook + lefthook / (b) 通用 CI（GitLab / CircleCI / Jenkins）/ (c) GitHub 原生（Branch Protection + Merge Queue + Actions）/ (d) **混合**（本地 hook 反馈 + CI 权威，推荐）|
+
+每个契约（C4 / C6 / C8）可独立覆盖 S 选项 — 比如 C4 用 (a) 本地，C6 用 (c) GitHub。
+
+### 8.6 AI 提案审查清单（新增方法论原则）
+
+已写入 `toolchain.md` §0.5 末尾。下次提工具组件前必须走：
+
+1. 是 imperative 还是 declarative？
+2. 如果 declarative，最轻实现是什么（本地 hook? 已有 CI? SaaS?）？
+3. 现成工具能覆盖多少？
+4. 真正需要写代码的是哪一小块？
+
+**禁止默认重型 SaaS**。
+
+未来应该把这条提炼进 `methodology.md` 或 `constitution.md`，作为 v4 SDD 工具链设计的硬约束。
+
+---
+
+**Version**: 0.2.0-WIP
+**Last Updated**: 2026-05-16
+**Status**: 待后续 2 天讨论消化到正式文档；本次二次修正已写入 toolchain.md v0.2.0
