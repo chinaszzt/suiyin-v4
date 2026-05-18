@@ -402,6 +402,90 @@ P0 启动门槛大幅降低，**不依赖任何 SaaS** 也能跑起来。
 
 ---
 
-**Version**: 0.2.0-WIP
-**Last Updated**: 2026-05-16
-**Status**: 待后续 2 天讨论消化到正式文档；本次二次修正已写入 toolchain.md v0.2.0
+## 九、流程图 Review 推演结论（2026-05-18）
+
+第一轮限时 review 完成。原列出 7 个潜在漏洞，逐条决策：
+
+### 9.1 推演决策
+
+| # | 漏洞 | 决策 | 落地 |
+|---|---|---|---|
+| 1 | **Plan 死锁**（80%+ 改造扩大 scope → 又触发 80%+ → 循环） | **80%+ 一次循环 break，不再 re-scan** | diagrams.md 图 3 加注释 |
+| 2 | **Bug Type B/C 重做粒度**（走完整 feature 流程是否太重）| **记 TODO，以后优化**（小 bug 走 mini-spec 探索） | 本文档 §9.2 TODO |
+| 3 | **C11 跟 C1 概念重叠** | **不重叠**（C1 = task 间冲突；C11 = 函数间重复） | toolchain.md / 本文档 §9.3 澄清 |
+| 4 | **异常退出恢复路径** | **不画完整恢复**，遵循"按需补"原则；显式列 C4/C5/spec drift 三个入口 | diagrams.md 图 6 加入口说明 + 恢复说明 |
+| 5 | **C11 双引擎一致性** | **Plan Lookup 强制 sync main**；开发并行重复靠 post-merge audit 兜底 | toolchain.md §四 Forks 后约束记录 |
+| 6 | **Task Retry 时机** | 三处触发：C2 fail / C4 fail / C5 block；session 策略优先**同 session 复用**（context 保留），满 / kill 时新开 + 前次 summary | 本文档 §9.4 解释；细节属于 Q2 |
+| 7 | （review 圈出只有以上 6 个有价值的，C9/C10/C11 粒度问题留待 v0.4 整理） | — | — |
+
+### 9.2 Bug Type B/C 重做粒度 — TODO
+
+当前 Bug Type B/C 走"完整 feature 流程"。但对小 bug（比如 spec 漏了一个边界 case，AC 加一条），跑完整 spec → clarify → plan → tasks 太重。
+
+**TODO**：定义 "mini-feature" 流程：
+- 触发：Bug Type B/C，但 spec 改动 < N 条 AC
+- 跳过：clarify（如果 AC 改动够清楚）
+- 简化：plan 可以是"沿用现有 plan + 补一段"
+- 验证：仍然走 verify/review/gate
+
+留待 P2/P3 阶段定义。
+
+### 9.3 C11 vs C1 不重叠（澄清）
+
+| | C1 Planning Engine | C11 Function Registry |
+|---|---|---|
+| 输入 | tasks.yaml + spec/plan | plan v0 描述 |
+| 输出 | tasks.yaml + `execution_plan` | `reuse_candidates` |
+| 分析维度 | **task 间冲突**（要不要并行）| **函数间重复**（要不要复用） |
+| 时机 | tasks 拆完后 | plan 阶段 AI 查询 |
+
+都在 Plan 阶段附近触发，但**分析维度完全不同**。可能共享 codebase indexing 基础设施。
+
+### 9.4 Task Retry 时机解释
+
+发生在 3 处：
+
+| 触发 | retry 内容 |
+|---|---|
+| C2 自己 fail（session crash / timeout） | 重启 C2，新 session |
+| C4 verify fail（lint / test 不过） | C2 修代码 → 重 verify |
+| C5 review block（high finding） | C2 修代码 → 重 review |
+
+**Session 策略**（初步）：
+
+- 优先 **同 session 复用**（context 保留前次失败信息）
+- session 已 kill / context 满时新开 session + 前次 summary 作为 context anchor
+
+细节属于 Q2（C2 spec 阶段决定）。
+
+### 9.5 Fork J-S 全部拍板（合并进 toolchain.md v0.3）
+
+| Fork | 决策 |
+|---|---|
+| **J** 复杂度量化阈值 | 函数 ≤ 80 / 文件 ≤ 600 / 嵌套 ≤ 5 / 圈复杂度 ≤ 18（折中，前端 UI 嵌套天然深）|
+| **K** Plan 简单性节 | 不强制，依赖 C5 reviewer `complexity` finding |
+| **L** Reviewer 扫重复 | 复用 C11 query 接口 + jscpd 语法兜底 |
+| **M** 季度盘点触发 | TODO stub，迭代版决定 |
+| **N** 领域词典位置 | `docs/sdd/domain-glossary.md` 独立文件 |
+| **Q** embedding 模型 | 本地 sentence-transformers |
+| **R** missed reuse 处理 | 标 issue + 额外记录原因分析（C11 迭代反馈数据）|
+| **S** 工具链整体实现栈 | (d) 混合（本地 hook + CI），每个契约可独立覆盖 |
+
+详见 toolchain.md §四。
+
+### 9.6 进入下一阶段
+
+Review + Fork 全部拍完。下一阶段候选（按 leverage 排序）：
+
+1. **constitution.md v0.1 最小草稿** — 立项目身份 + 5 条核心原则（来自 methodology.md §10）+ governance。**量化指标 / NON-NEGOTIABLE 严格规则待 v1.0**（spike 后立）。
+2. **domain-glossary.md 框架** — 空模板，第一个 spec 触发添加。
+3. **第一个 feature spec dogfood** — 挑一个最小 feature 实际跑 spec-kit Layer 1 → C1 → ... 流程，暴露真实问题。
+4. **C2/C4 P0 spike** — 直接动手实现 P0 MVP。
+
+constitution 先于 spec 是 SDD 标准顺序，但 constitution v0.1 应该是**最小版**——避免没 spike 经验拍精确指标。
+
+---
+
+**Version**: 0.3.0-WIP
+**Last Updated**: 2026-05-18
+**Status**: review 第一轮完成；待开 constitution.md v0.1 + 第一个 spec dogfood

@@ -85,10 +85,8 @@ flowchart TD
     F -->|yes| G[Plan v1:<br/>抽片段 Y 为 helper<br/>双方各保留差异]
     F -->|no| D
     
-    C -->|80%+| H[改造 X 为公共函数<br/>差异参数化<br/>调用方迁移]
-    H --> I{改造扩大<br/>plan scope?}
-    I -->|yes| B
-    I -->|no| J[Plan v1:<br/>使用改造后的公共函数]
+    C -->|80%+| H[改造 X 为公共函数<br/>差异参数化<br/>调用方迁移<br/>一次 break 不 re-scan 避免死锁]
+    H --> J[Plan v1:<br/>使用改造后的公共函数]
     
     D --> K[Plan final]
     G --> K
@@ -98,7 +96,6 @@ flowchart TD
     style B fill:#E65100,color:#fff
     style C fill:#2E7D32,color:#fff
     style F fill:#2E7D32,color:#fff
-    style I fill:#2E7D32,color:#fff
 ```
 
 **通用循环模式**:
@@ -183,6 +180,16 @@ flowchart TD
 ```
 
 3 种异常都需要**人介入**——这跟 L1.D-business profile 一致：执行阶段 AI 自闭环，异常时人才出来。
+
+**3 个明确入口**（用户 review 决定显式列出）：
+
+- **C4 verify retry exhausted** (≥3 次失败) → 异常类型 = retry exhausted
+- **C5 review block 反复 retry** (≥3 次失败) → 异常类型 = retry exhausted
+- **Spec drift detected**（plan / implement 阶段 AI 发现 spec 有歧义） → 异常类型 = spec drift
+
+Cross-spec impact 入口在 C2 / C5 中触发（diff 影响别的 spec 时），归到 cross-spec 分支。
+
+**恢复路径（未画，遵循"按需补"原则）**：人仲裁完后回相应节点：spec drift → 回 Specify；cross-spec → 回 Plan；retry exhausted → 视根因决定回 C2 还是回 Specify。
 
 ---
 
