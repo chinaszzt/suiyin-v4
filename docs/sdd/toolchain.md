@@ -202,8 +202,8 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **作用** | 独立 AI session 评估 PR 是否实现意图 |
 | **输入** | spec + plan + constitution + PR diff（**不读 implementer 工作过程**） |
 | **输出** | 结构化 verdict（`approve` / `request_changes` / `block`）+ findings 列表 |
-| **核心能力** | 独立 session（context 干净）／ findings 分类（severity + category + location + suggested_fix）／ Verdict 规则（high → block；medium → request_changes；low → approve） |
-| **依赖** | Claude Code SDK |
+| **核心能力** | 独立 session（context 干净）／ findings 分类（severity + category + location + suggested_fix；**含 `complexity` 类**：过度设计 / 重复实现 / 不必要抽象 / 函数超长）／ Verdict 规则（high → block；medium → request_changes；low → approve） |
+| **依赖** | Claude Code SDK；`complexity` 类查重时**调用 C11 query 接口** |
 | **未决 Q5** | 单次还是 N=2 + 分歧仲裁（按 task.criticality 路由？） |
 
 #### C7. Phase Coordinator（横跨 Layer 2-5）
@@ -276,8 +276,20 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **G** | AC ↔ test 映射 = 命名约定 `test('AC-1', ...)`，C4 L3 解析测试名 | 比 metadata file 简单 |
 | **H** | 仲裁 AI = 独立第 3 个 session | 不沾染 implementer 或 reviewer 视角 |
 | **I** | Spec 漂移触发动作 = AI 标 `spec-drift` issue + 暂停 task | 人介入仲裁后回到 Layer 1 |
+| **J** | 复杂度量化阈值 = **函数 ≤ 80 行 / 文件 ≤ 600 行 / 嵌套 ≤ 5 层 / 圈复杂度 ≤ 18** | 折中（比 TigerBeetle 70/500/4/15 略松，前端 UI 嵌套天然深），先这个跑、问题再迭代 |
+| **K** | Plan 不强制写 "Could this be simpler?" 节 | 依赖 C5 reviewer 的 `complexity` finding 兜底 |
+| **L** | Reviewer 扫重复 = **复用 C11 query 接口**（embedding 语义检索）+ jscpd 语法级兜底 | 不引入新机制 |
+| **M** | 季度复杂度盘点触发 = **TODO stub** | 工具包预留 stub，迭代版决定（人手动 / AI 自动 / merge 累积触发） |
+| **N** | 领域词典位置 = `docs/sdd/domain-glossary.md` 独立文件 + 各处引用 | 跟 methodology / toolchain 同级 |
+| **Q** | embedding 模型 = **本地 sentence-transformers** | 作为工具包一部分，轻量本地跑，无 SaaS 依赖 |
+| **R** | C11 agent 发现 missed reuse 时 = 标 issue + **额外记录原因分析** | 作为 C11 迭代的反馈数据（context 缺失 / 描述不准 / 等） |
+| **S** | 工具链整体实现栈 = **(d) 混合**（本地 hook 反馈 + CI 权威） | 每个契约 C4 / C6 / C8 可独立覆盖谱系选项 |
 
-待拍 Fork J-S 见 `discussion-notes.md`（新增 S：工具链整体实现栈选择）。
+**Plan ⇌ reuse-scan 死锁防御**：80%+ 触发改造后**一次循环 break**，不再 re-scan（避免改造扩大 scope → 又触发 80%+ → 死循环）。来自图 3 推演结论。
+
+**C11 一致性约束**（待 C11 spec 阶段细化）：
+- Plan Lookup 时强制 sync main（确保 registry 是最新）
+- 开发中并行产生的重复代码靠 post-merge audit 兜底
 
 ---
 
@@ -382,5 +394,5 @@ P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看
 
 ---
 
-**Version**: 0.2.0-draft（v0.1 → v0.2 修订内容：引入"组件 vs 契约"判定原则；C4/C6/C8 重新定位为行为契约；落地优先级调整反映 C6 是配置非组件）
-**Last Updated**: 2026-05-16
+**Version**: 0.3.0-draft（v0.2 → v0.3 修订内容：Fork J-S 全部拍板进表；C5 加 `complexity` finding 类 + 调用 C11 query；Plan 死锁防御明确；C11 一致性约束记录）
+**Last Updated**: 2026-05-18
