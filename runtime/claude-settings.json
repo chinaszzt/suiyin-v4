@@ -1,0 +1,18 @@
+{
+  "$comment": "suiyin-flow Claude Code settings — git automation allowlist. Installed by bin/init.sh to .claude/settings.json (only if no existing settings file). See suiyin-v4/docs/sdd/role-profiles.md for context.",
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git fetch:*)",
+      "Bash(git ls-files:*)"
+    ]
+  }
+}

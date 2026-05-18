@@ -1,0 +1,40 @@
+# Role Profile — defines AI's autonomy in this project
+# See suiyin-v4/docs/sdd/role-profiles.md for full 4-tier definitions
+#
+# Loaded by /sy-* skills at runtime to determine behavior.
+# v4 default = autonomous (suiyin-flow project's own usage).
+
+# Preset (one of: assistant, junior, collaborator, autonomous)
+preset: autonomous
+
+# AI capabilities (boolean flags)
+ai_capabilities:
+  draft_spec: true                  # AI drafts spec.md
+  draft_plan: true                  # AI drafts plan.md
+  challenge_spec: true              # AI can push back / propose changes
+  ask_clarify_questions: true       # AI initiates clarification questions
+  modify_plan_in_execution: true    # AI can adjust plan during implementation
+  modify_spec_in_execution: false   # spec changes always need human (spec_drift_arbitration)
+  auto_review_pr: true              # AI reviews PR (independent session)
+  auto_merge_pr: true               # Gate-pass PRs auto-merge
+  arbitrate_minor: true             # AI decides within constitution boundaries (e.g. complexity threshold tweaks)
+
+# Git automation
+git_automation:
+  auto_commit_on_sy_command: true   # Each /sy-* completion → commit changes
+  auto_push: false                  # Push requires explicit human action (except bootstrap)
+
+# Bootstrap special cases (apply REGARDLESS of preset)
+# These ALWAYS auto-commit AND auto-push, because they are project foundation
+# and team-wide visibility is critical.
+bootstrap_special_cases:
+  - sy-constitution                 # Project foundation
+  # Future candidates: sy-domain-glossary (when added)
+
+# Human gates (where humans MUST decide)
+human_gates:
+  - spec_pinning                    # spec.md 最终拍板
+  - plan_pinning                    # plan.md 最终拍板
+  - spec_drift_arbitration          # AI 执行中发现 spec 不对
+  - production_deploy               # 发版按钮
+  - emergency_override              # human:block label 紧急叫停

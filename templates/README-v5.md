@@ -56,8 +56,29 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 |---|---|---|
 | `.specify/` | suiyin-flow | 工作目录（constitution / specs / templates） |
 | `.specify/templates/constitution-template.md` | **suiyin-flow customized** | v4 流派的 constitution 模板 |
+| `.specify/role-profile.yml` | **suiyin-flow customized** | AI 角色配置（4 档预设，default = autonomous） |
 | `.claude/skills/sy-*` | suiyin-flow | Claude Code slash commands |
+| `.claude/settings.json` | **suiyin-flow customized** | git 命令 allowlist（auto-commit/push） |
 | `CLAUDE.md` | suiyin-flow | Claude Code 项目级配置 |
+
+---
+
+## AI 角色 + Git 自动化
+
+本项目默认 AI 角色 = **autonomous**（D 档）—— AI 主写、自动 merge、人按 deploy + 拍 spec/plan + 紧急 override。
+
+修改：编辑 `.specify/role-profile.yml`，把 `preset` 改成 `assistant` / `junior` / `collaborator` / `autonomous`。完整定义见 [role-profiles.md](https://github.com/chinaszzt/suiyin-v4/blob/main/docs/sdd/role-profiles.md)。
+
+### Git 自动化行为
+
+| 触发 | 行为 |
+|---|---|
+| **`/sy-constitution` 完成**（bootstrap 特例） | ✅ 自动 commit + ✅ 自动 push（**所有档**） |
+| **其他 `/sy-*` 完成**（autonomous / collaborator 档） | ✅ 自动 commit；❌ 不 push |
+| **其他 `/sy-*` 完成**（assistant / junior 档） | ❌ 不自动 commit；❌ 不 push |
+
+> Constitution 是项目立基产物，团队可见性关键 → 所有档强制 push 到 remote。
+> 其他产物（spec / plan / task）push 仍要人按。
 
 ---
 
