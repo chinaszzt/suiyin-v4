@@ -112,6 +112,27 @@ P1.1 阶段 1 时拍 Q-C-2 = Python（C2 §0 / C4 §7 已记录）。按 governa
   - 子任务：跑通 C4 §5 AC-1..AC-8
 - [ ] **Dogfood task**：用 C2 + C4 实现 C5 AI Reviewer spec（自举验证）
 
+#### 阶段 2 验证 protocol（dogfood 时执行）
+
+P1.1 阶段 2 验证矩阵存在 bootstrap 缺位：C5 (独立 reviewer) / C6 (gate) 都未实现，AC 自检 +
+人 final review 是仅有兜底。明确两条增强 protocol：
+
+- [ ] **A. spec 冻结 + 逐 AC 审计表**
+  - 阶段 2 PR 禁动 `components/c2-*.md` / `components/c4-*.md` spec（spec 已在阶段 1 PR
+    人审过，实现期作为 source of truth 冻结）
+  - 实现 + test 完成后，PR description 强制附逐 AC 审计表：
+
+    | AC | spec 原文（摘） | test 函数 | test 实际验的行为 | 实现位置 |
+
+  - 人 review 时按表 scan "spec ↔ test 实际对齐性"，半小时事
+- [ ] **C. dogfood 选"产物可读"task**
+  - 阶段 2 实现完后，用 C2 跑一个**文档类** task（产出人能直接判质量）
+  - 候选：用 C2 实现 P0.3 ADR-0002（v4 技术栈 Python 拍板），人读 ADR 看是否合理
+  - 不选"写代码"的 dogfood（产出太抽象，无法快速判质量）
+- [ ] **B. C5 v0.1 简陋版（已决定 skip）**
+  - 决策：不在 P1.1 提前做 C5，避免给 P1.2 设计透支锚定
+  - 阶段 2 接受"AC 中间段自检"风险，靠 A + C + 人 final review 兜底
+
 预估：3-5 天 dogfood，1-2 周打磨
 
 ### P1.2 P1 — 自闭环 merge
