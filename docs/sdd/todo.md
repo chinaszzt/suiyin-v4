@@ -36,16 +36,18 @@ User 在 v5 跑 `/sy-constitution`，发现 v0.1 层次混淆问题（SDD 通用
 
 ## P0 — 立刻该做的（小工作量、高价值）
 
-### P0.1 修 constitution-template 防止 v0.1 层次混淆复现
+### P0.1 修 constitution-template 防止 v0.1 层次混淆复现 ✅ (2026-05-20)
 
 User 改 v0.2 时去掉了 5 铁律和量化指标（属于 SDD 通用 / 业务 specific，不该塞 constitution）。**当前 v4 提供给 v5 的模板可能让下个项目踩同样坑**。
 
-- [ ] 审查 `runtime/templates/constitution-template.md`
-- [ ] 把"5 principles 引导"改成"项目独有约束引导"（NC-* 不可妥协 + PC-* 偏好约束）
-- [ ] AI collaboration profile section 直接 reference role-profile.yml（不重复内容）
-- [ ] 加防御性指引："禁止塞 SDD 通用规则 / 业务 specific 量化指标"
+- [x] 审查 `runtime/templates/constitution-template.md`
+- [x] 把"5 principles 引导"改成"项目独有约束引导"（NC-* 不可妥协 + PC-* 偏好约束）
+- [x] AI collaboration profile section 直接 reference role-profile.yml（不重复内容）
+- [x] 加防御性指引："禁止塞 SDD 通用规则 / 业务 specific 量化指标"
 
-预估：2-3 小时
+**改动**：按 v0.2 dogfood 结构重写 template — 顶部加 `extends: methodology.md` + 边界教戒 callout（三问法 + v0.1 历史教训）；删 §5 Core Principles + §6 Quantitative Standards；加 §5 Project Identity / §6 NC-PC Constraints / §7 AI Collaboration Profile (含 Bootstrap 特例引用) / §8 Governance；保留完整 component-spec 结构（§0-4 + §5b/6b/7b）。
+
+**下游校验**：plan-template.md 的 Constitution Check 章节用抽象引用，不绑旧 Principle I-V 名字 → 不断；speckit.manifest.json hash 不更新（manifest 无消费者，保留 spec-kit 0.8.10 上游指纹意义）。
 
 ### P0.2 第一个 ADR
 
