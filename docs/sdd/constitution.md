@@ -213,17 +213,30 @@ properties:
 ```
 constitution.md  ← 最高约束（本文档）
        │
-       ├─ methodology.md      （方法论实践细则，给团队读）
-       ├─ toolchain.md        （工具链规约：组件 + 契约）
-       ├─ workflows.md        （状态机和流程图）
-       ├─ diagrams.md         （流程图集）
-       ├─ domain-glossary.md  （业务概念词典，待建）
+       ├─ methodology.md          （方法论实践细则，给团队读）
+       ├─ toolchain.md            （工具链规约：组件 + 契约）
+       ├─ workflows.md            （状态机和流程图）
+       ├─ diagrams.md             （流程图集）
+       ├─ role-profiles.md        （AI 角色定义 4 档，配置工作模式）
+       ├─ domain-glossary.md      （业务概念词典，待建）
        ├─ component-spec-template.md  （C 模块 spec meta-template）
-       ├─ components/         （各 C 模块 spec）
-       └─ adrs/               （决策记录，待建）
+       ├─ components/             （各 C 模块 spec）
+       └─ adrs/                   （决策记录，待建）
+
+runtime/role-profile.yml          （v4 自身的 role-profile，default = autonomous）
+v5/.specify/role-profile.yml      （v5 项目协商后的 role-profile）
 ```
 
 **冲突时**：constitution > methodology > toolchain > 其他。constitution 修改触发 cascade 检查下层文档。
+
+### 7.2.1 跟 role-profile 的边界
+
+- **constitution** 约束 **行为原则**（principles 不可妥协 / quantitative standards）
+- **role-profile** 配置 **工作模式**（AI 自治程度 / git automation / 人介入点）
+
+两者**不重叠**。constitution 引用 role-profile（"v4 自身用 autonomous 档"），但不内嵌内容。修改 role-profile 不需要 ADR；修改 constitution 才需要。
+
+**Constitution bootstrap 特例**：`/sy-constitution` 不在 role-profile 管辖（chicken-and-egg）—— 所有档强制 auto-commit + auto-push 立基产物到远程。详见 `role-profiles.md`。
 
 ### 7.3 单向引用
 

@@ -75,13 +75,26 @@ hooks:
     prompt: Commit outstanding changes before issue sync?
     description: Auto-commit before tasks-to-issues conversion
     condition: null
+  # ─────────────────────────────────────────────────────────────────
+  # CONSTITUTION BOOTSTRAP SPECIAL CASE
+  # Constitution is the project foundation; team-wide visibility is critical.
+  # ALL role-profiles (A/B/C/D) force auto-commit + auto-push here.
+  # See docs/sdd/role-profiles.md "Bootstrap 特例" section.
+  # ─────────────────────────────────────────────────────────────────
   after_constitution:
   - extension: git
     command: sy.git.commit
     enabled: true
-    optional: true
-    prompt: Commit constitution changes?
-    description: Auto-commit after constitution update
+    optional: false                                                    # MANDATORY (all profiles)
+    prompt: Commit constitution changes (mandatory for all profiles)
+    description: Auto-commit after constitution update (bootstrap)
+    condition: null
+  - extension: git
+    command: sy.git.push
+    enabled: true
+    optional: false                                                    # MANDATORY (all profiles)
+    prompt: Push constitution to remote (mandatory for all profiles)
+    description: Auto-push constitution to origin (bootstrap, team visibility)
     condition: null
   after_specify:
   - extension: git

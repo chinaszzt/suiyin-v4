@@ -87,25 +87,42 @@ echo "   $skill_count skills installed (/sy-*)"
 
 # ─── 7. Install runtime (templates + scripts + extensions) ───
 echo "==> Installing runtime (templates + scripts + extensions)"
-# Memory/ is user content — only fill in v4 defaults for missing files (never overwrite user constitution etc.)
+# User-tunable items (memory/, role-profile.yml): preserve, only install v4 default if missing
+# Other items (templates/scripts/extensions/etc): replace with v4 latest each reinstall
 for item in "$V4_DIR/runtime/"*; do
   [ -e "$item" ] || continue
   name=$(basename "$item")
-  if [ "$name" = "memory" ]; then
-    # Memory: preserve user files, only copy v4 defaults if target file doesn't exist
-    mkdir -p "$TARGET_DIR/.specify/memory"
-    for f in "$item"/*; do
-      [ -e "$f" ] || continue
-      target_f="$TARGET_DIR/.specify/memory/$(basename "$f")"
+  case "$name" in
+    memory)
+      # Memory: preserve user files, only copy v4 defaults for missing files
+      mkdir -p "$TARGET_DIR/.specify/memory"
+      for f in "$item"/*; do
+        [ -e "$f" ] || continue
+        target_f="$TARGET_DIR/.specify/memory/$(basename "$f")"
+        if [ ! -e "$target_f" ]; then
+          cp -r "$f" "$target_f"
+          echo "   - memory/$(basename "$f") (v4 default, no user file existed)"
+        fi
+      done
+      ;;
+    role-profile.yml)
+      # User-tunable config: preserve if exists, install v4 default if missing
+      target_f="$TARGET_DIR/.specify/$name"
       if [ ! -e "$target_f" ]; then
-        cp -r "$f" "$target_f"
-        echo "   - memory/$(basename "$f") (v4 default, no user file existed)"
+        cp "$item" "$target_f"
+        echo "   - $name (v4 default: autonomous)"
+      else
+        echo "   - $name preserved (user-tuned, not overwritten)"
       fi
-    done
-  else
-    # Other dirs (templates / scripts / extensions / workflows / integrations): replace with v4 latest
-    cp -r "$item" "$TARGET_DIR/.specify/"
-  fi
+      ;;
+    claude-settings.json)
+      # Handled in step 8 (installed to .claude/settings.json), skip here
+      ;;
+    *)
+      # Other (templates/scripts/extensions/workflows/integrations): replace with v4 latest
+      cp -r "$item" "$TARGET_DIR/.specify/"
+      ;;
+  esac
 done
 echo "   .specify/ populated"
 
@@ -125,13 +142,29 @@ else
   echo "   - README.md exists, suggested version saved to README.suiyin-suggested.md"
 fi
 
-# ─── 8. Write CLAUDE.md (Claude Code project hint) ───
+# ─── 8. Install .claude/settings.json (git allowlist for auto-commit/push) ───
+if [ -f "$V4_DIR/runtime/claude-settings.json" ]; then
+  mkdir -p "$TARGET_DIR/.claude"
+  if [ ! -f "$TARGET_DIR/.claude/settings.json" ]; then
+    cp "$V4_DIR/runtime/claude-settings.json" "$TARGET_DIR/.claude/settings.json"
+    echo "==> Installed .claude/settings.json (git allowlist for auto-commit/push)"
+  else
+    cp "$V4_DIR/runtime/claude-settings.json" "$TARGET_DIR/.claude/settings.suiyin-suggested.json"
+    echo "   - .claude/settings.json exists, suggested version saved to .claude/settings.suiyin-suggested.json"
+  fi
+fi
+
+# ─── 9. Write CLAUDE.md (Claude Code project hint) ───
 if [ ! -f "$TARGET_DIR/CLAUDE.md" ]; then
   cat > "$TARGET_DIR/CLAUDE.md" <<EOF
 <!-- SUIYIN-FLOW START -->
 This project uses [suiyin-flow](https://github.com/chinaszzt/suiyin-v4) for SDD workflow.
 
 Slash commands: \`/sy-constitution\` \`/sy-specify\` \`/sy-clarify\` \`/sy-plan\` \`/sy-tasks\` \`/sy-implement\` \`/sy-analyze\`
+
+Role profile: see \`.specify/role-profile.yml\` (default: autonomous).
+Git automation: \`/sy-constitution\` always auto-commits + auto-pushes (bootstrap special case);
+other \`/sy-*\` follow role-profile.
 
 See \`README.md\` for the full workflow.
 <!-- SUIYIN-FLOW END -->
