@@ -9,14 +9,14 @@
 
 **实现谱系优先级**（见 toolchain.md §0.5）：
 
-| 选项 | P0 MVP | 备注 |
+| 选项 | v4 立场 | 备注 |
 |---|---|---|
-| (a) **本地 lefthook**（git hook 触发 lint + tests） | ✅ **P0 默认** | NC-1 零 SaaS 兼容；最轻 |
-| (b) 通用 CI（GitLab / CircleCI / Jenkins） | 后续 | 跟着业务项目走 |
-| (c) GitHub Actions | 后续 | NC-1 要求降级 |
-| (d) **混合**（本地快反馈 + CI 权威） | **P1+ 目标**（Fork S）| v4 整体推荐 |
+| (a) **本地 lefthook**（git hook 触发 lint + tests） | ✅ **v4 唯一首选** | NC-1 零 SaaS 兼容；最轻；P0/P1/P2 都用这个 |
+| (b) 通用 CI（GitLab / CircleCI / Jenkins） | 业务项目自决 | v4 不提供配置；业务项目自带 CI 可叠加 |
+| (c) GitHub Actions | 业务项目自决（且违反 NC-1 默认走 (a)） | v4 不提供配置 |
+| (d) 混合（本地 + CI） | 业务项目自决 | (a) 之外的部分由业务项目自己加 |
 
-P0 落地：本地 lefthook + 各语言 toolchain（pytest / flutter test / eslint / dart analyze）。CI 升级路径见 §7。
+**实际落地**：v4 工具链锁 (a) —— 本地 lefthook + 各语言 toolchain（pytest / flutter test / eslint / dart analyze）。verify_report.json schema 跨谱系保持一致（I5），业务项目若自加 CI 也产出同 schema 即可。
 
 ## 1. Purpose
 
@@ -37,15 +37,22 @@ properties:
         required: [kind, worktree_path]
         properties:
           kind: { const: worktree }
-          worktree_path: { type: string }
+          worktree_path: { type: string, description: '绝对路径' }
       - description: 跑在 PR diff 上
         required: [kind, pr_ref]
         properties:
           kind: { const: pr }
           pr_ref: { type: string, description: 'PR URL 或本地分支名' }
+  task_id:
+    type: string
+    pattern: '^T-\d{3,}$'
+    description: |
+      optional —— C2 闭环调用时透传（C2 知道是哪个 task）；
+      独立跑 C4（CI / 人手动）时可空。
+      存在则回写 verify_report.json，让 C5 / 人能回链 task。
   spec_ref:
     type: string
-    description: spec.md 路径（L3 检查时用）
+    description: spec.md 路径（L3 检查时用），相对 repo_root 或绝对路径
   ac_list:
     type: array
     items: { type: string, pattern: '^AC-\d+$' }
@@ -58,6 +65,7 @@ properties:
     description: 'P0 MVP 只支持 L1/L2；L3-L5 在 P3+'
   repo_root:
     type: string
+    description: 绝对路径
   toolchain_hints:
     type: object
     description: 业务项目语言/工具提示，缺省时 contract 自动探测
@@ -76,6 +84,10 @@ type: object
 required: [target, overall_verdict, levels, generated_at, contract_version]
 properties:
   target: { type: object, description: '同 §2.1 target' }
+  task_id:
+    type: string
+    pattern: '^T-\d{3,}$'
+    description: optional；input.task_id 透传，让 C5 / 人能回链 task
   overall_verdict:
     enum: [pass, fail, warn_only]
   generated_at: { type: string, format: date-time }
@@ -266,6 +278,21 @@ C4 contract layer 包一层 `suiyin-flow verify run` CLI：
 
 P0 MVP 先实现 Python + Dart（v4 自身 + v5 业务）。其他语言 P1+ 按需加。
 
+### 跨平台兼容性（macOS / Linux / Windows）
+
+C4 contract 自身是 Python 包装 + shell 命令调度，跨平台约束同 C2 §7：
+
+| 项 | 规则 |
+|---|---|
+| 路径处理 | `pathlib.Path`；verify_report.json 中所有 path 字段标"绝对路径" |
+| subprocess | `shell=False` + `list[str]` 调 `pytest` / `flutter` / `eslint` 等 runner |
+| lefthook | lefthook 本身跨平台 OK，但 `run:` 后的 shell 命令要写跨平台版本（避免 bash-only 语法如 `[[ ]]` / heredoc） |
+| 工具探测 | `shutil.which('pytest')` / `shutil.which('flutter')`，找不到报 `TOOLCHAIN_NOT_FOUND` |
+| 文件编码 | 读取 reporter JSON 输出强制 `encoding='utf-8'`，避免 Windows 默认 cp936 / cp1252 |
+| 测试 reporter 调用 | Windows 上 `flutter` / `pytest` 是 `.bat` shim，subprocess 必须用 `shell=False` 但允许 `executable=shutil.which('flutter.bat')` 兜底 |
+
+**P0 阶段**：macOS + Linux 必跑通；Windows spike 时手测一次确认无致命问题，Windows CI 进 P1+。
+
 ### 模块拆分建议
 
 ```
@@ -305,6 +332,10 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.0-draft
+**Version**: v0.1.1-draft
 **Last Updated**: 2026-05-20
 **Status**: draft — P0 阶段 L1+L2，P3 阶段补 L3/L4
+
+**Changelog**:
+- v0.1.1 (2026-05-20): §0 实现谱系简化为"(a) 唯一首选，其他业务项目自决"；§2.1 Input 加 optional `task_id`；§2.2 verify_report 加 optional `task_id`；§7 加"跨平台兼容性"节
+- v0.1.0 (2026-05-20): 初稿

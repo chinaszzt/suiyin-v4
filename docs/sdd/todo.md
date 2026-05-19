@@ -23,8 +23,8 @@
 | 14 个 `/sy-*` slash commands | `skills/` | ✅ |
 | Constitution bootstrap 特例（auto-commit + push） | `runtime/extensions.yml` | ✅ |
 | Git 类命令 allowlist | `runtime/claude-settings.json` | ✅ |
-| **C2 Task Executor spec** | `components/c2-task-executor.md` v0.1 | ✅ (P1.1 阶段 1) |
-| **C4 Verify Contract spec** | `components/c4-verify-contract.md` v0.1 | ✅ (P1.1 阶段 1) |
+| **C2 Task Executor spec** | `components/c2-task-executor.md` v0.1.1 | ✅ (P1.1 阶段 1，user 审 → v0.1.1 修订) |
+| **C4 Verify Contract spec** | `components/c4-verify-contract.md` v0.1.1 | ✅ (P1.1 阶段 1，user 审 → v0.1.1 修订) |
 
 ### v5 dogfood 第一次验证
 

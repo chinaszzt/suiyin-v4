@@ -11,7 +11,14 @@
 
 ## 1. Purpose
 
-接收单个 task 描述，在隔离 worktree 内跑 Claude Code headless session 完成代码实现，产出一个可被 C4/C5/C6 流转的 PR。
+接收单个 task 描述，在隔离 worktree 内跑 Claude Code headless session 完成代码实现，**含闭环 verify**（worktree 内调用 `verify_cmd` 跑 C4 验证，不绿不 push、不开 PR），产出一个可被 C5/C6 流转的 PR。
+
+verify 是 C2 闭环内的步骤，不是下一阶段：
+
+```
+AI session 写代码 → verify_cmd 跑 (C4) → 非绿 → 重试 session 让 AI 修
+                                       → 绿   → commit + push + PR
+```
 
 ## 2. Public API
 
@@ -69,40 +76,109 @@ properties:
 
 ### 2.2 Output Schema
 
+> **填写约定**：每字段标 `always` (终态必填) / `conditional` (条件填) / `optional` (尽量填)。所有 path 字段约定为**绝对路径**（避免 caller 跨 cwd 困惑）。
+
 ```yaml
 type: object
-required: [task_id, status, worktree_path, pr_url_or_branch, attempts, verify_report_path]
+required: [task_id, status, attempts, worktree_path, session_logs]
 properties:
-  task_id: { type: string }
+  task_id:
+    type: string
+    description: 'always；回传 input.task_id'
   status:
     enum: [success, failed]
-  worktree_path:
-    type: string
-    description: 'worktrees/<task_id>' 完整路径
-  pr_url_or_branch:
-    type: string
-    description: success 时返回 PR URL 或本地分支名（取决于 remote 是否配置）
+    description: 'always；终态'
   attempts:
     type: integer
-    description: 实际跑的 session 轮数（含成功那轮，≤ max_retries+1）
+    description: 'always；实际跑的 session 轮数（含成功那轮，≤ max_retries+1）'
+  worktree_path:
+    type: string
+    description: |
+      always；**绝对路径**。这是 retain artifact 字段（不是主产物），
+      用于：(1) 失败时人/上游去看现场；(2) 透传给 C4/C5 作为 verify/review input。
+      主产物是 pr_url_or_branch。
+  pr_url_or_branch:
+    type: string
+    description: |
+      conditional（when status=success）；success 时必填：
+      gh 可用 + remote 配置 → PR URL（如 'https://github.com/o/r/pull/42'）；
+      gh 不可用 / 无 remote → 本地分支名（如 'task/T-042'）。
+      status=failed 时此字段为 null（应同时看 pr_created 字段）。
+  pr_created:
+    type: boolean
+    description: |
+      always；true = PR 真的开了；false = 只有本地分支或未推送。
+      用来消歧 pr_url_or_branch 的两种语义。
   verify_report_path:
     type: string
-    description: C4 verify_report.json 路径
+    description: |
+      conditional（when 至少跑过 1 次 verify_cmd）；C4 输出文件**绝对路径**。
+      success 时指向最后一次（pass）的 report；
+      failed 时指向最后一次（fail）的 report，供人看错因；
+      verify 一次没跑（极早期失败如 SPEC_NOT_FOUND）时为 null。
   session_logs:
     type: array
+    description: 'always；每次 attempt 一项，按时间顺序'
     items:
       type: object
+      required: [attempt, log_path, duration_seconds, verify_pass]
       properties:
         attempt: { type: integer }
-        log_path: { type: string }
+        log_path:
+          type: string
+          description: '绝对路径，指向 .suiyin/sessions/attempt-{N}.log'
         duration_seconds: { type: number }
-        verify_pass: { type: boolean }
+        verify_pass:
+          type: boolean
+          description: '本 attempt 末次 verify 是否绿（未跑到 verify 阶段则为 false）'
   diff_stats:
     type: object
+    description: 'conditional（when status=success）；git diff 统计'
     properties:
       files_changed: { type: integer }
       insertions: { type: integer }
       deletions: { type: integer }
+```
+
+#### Example outputs
+
+**Success case**:
+
+```json
+{
+  "task_id": "T-042",
+  "status": "success",
+  "attempts": 2,
+  "worktree_path": "/Users/u/repo/worktrees/T-042",
+  "pr_url_or_branch": "https://github.com/o/r/pull/77",
+  "pr_created": true,
+  "verify_report_path": "/Users/u/repo/worktrees/T-042/.suiyin/verify/latest.json",
+  "session_logs": [
+    {"attempt": 1, "log_path": "/Users/u/repo/worktrees/T-042/.suiyin/sessions/attempt-1.log", "duration_seconds": 421.5, "verify_pass": false},
+    {"attempt": 2, "log_path": "/Users/u/repo/worktrees/T-042/.suiyin/sessions/attempt-2.log", "duration_seconds": 287.3, "verify_pass": true}
+  ],
+  "diff_stats": {"files_changed": 4, "insertions": 156, "deletions": 23}
+}
+```
+
+**Failed case (RETRY_EXHAUSTED)**:
+
+```json
+{
+  "task_id": "T-042",
+  "status": "failed",
+  "attempts": 4,
+  "worktree_path": "/Users/u/repo/worktrees/T-042",
+  "pr_url_or_branch": null,
+  "pr_created": false,
+  "verify_report_path": "/Users/u/repo/worktrees/T-042/.suiyin/verify/latest.json",
+  "session_logs": [
+    {"attempt": 1, "log_path": "...attempt-1.log", "duration_seconds": 380.0, "verify_pass": false},
+    {"attempt": 2, "log_path": "...attempt-2.log", "duration_seconds": 412.1, "verify_pass": false},
+    {"attempt": 3, "log_path": "...attempt-3.log", "duration_seconds": 396.7, "verify_pass": false},
+    {"attempt": 4, "log_path": "...attempt-4.log", "duration_seconds": 405.2, "verify_pass": false}
+  ]
+}
 ```
 
 ### 2.3 Error Schema
@@ -254,6 +330,22 @@ verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 - session 调用：`claude` CLI headless 模式（待 P0 spike 验证）
 - PR 创建：`gh pr create`（gh CLI 已有 → NC-1 零 SaaS 兼容：无 gh 时降级本地分支）
 
+### 跨平台兼容性（macOS / Linux / Windows）
+
+v4 主跑 macOS + Linux，但 Python impl 必须兼容 Windows（业务项目可能跑 Windows dev box）。**约束**：
+
+| 项 | 规则 | 反面例子 |
+|---|---|---|
+| 路径处理 | 全程 `pathlib.Path`，**绝不**手拼 `/` 或 `os.sep` | `worktree_path + "/.suiyin/..."` ❌ → `worktree_path / ".suiyin" / ...` ✅ |
+| 进程 kill | 用 `psutil.Process(pid).kill()` —— 它跨平台映射到对的 signal/API | `os.kill(pid, signal.SIGKILL)` ❌（Windows 没 SIGKILL） |
+| 进程树 kill | `psutil.Process(pid).children(recursive=True)` 拿子进程再批量 kill；**不要**用 `os.killpg`（POSIX only） | — |
+| subprocess 调用 | `shell=False` + `list[str]` args | `shell=True` ❌（Windows cmd 语义不同，引号转义陷阱） |
+| worktree 命名 | 只用 ASCII (`task_id` pattern 已限制 `T-\d+`) | 非 ASCII 路径在 Windows NTFS / Git for Windows 下 quirks |
+| 换行 | 文件读写 binary 模式或 explicit `encoding='utf-8', newline=''` | text 模式默认 newline 转换在 Windows 上会改写 CRLF |
+| gh / git CLI | 用 `shutil.which('gh')` 探测，找不到降级 | hardcode `/usr/local/bin/gh` ❌ |
+
+**测试要求**：CI matrix 跑 macOS + Linux + Windows（GitHub Actions 矩阵或本地 lefthook 至少手测 Windows 1 次）。**P0 阶段**：macOS + Linux 必跑通，Windows 在 spike 时手测一次确认无致命问题，正式 Windows CI 进 P1+。
+
 ### 模块拆分建议
 
 ```
@@ -288,6 +380,10 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.0-draft
+**Version**: v0.1.1-draft
 **Last Updated**: 2026-05-20
 **Status**: draft — 待 P0 spike 验证 Q2-2 / Q2-3 后升 v0.2
+
+**Changelog**:
+- v0.1.1 (2026-05-20): §1 Purpose 加"含闭环 verify"；§2.2 Output schema 强化（conditionality + path 绝对/相对标注 + failed fallback + 2 examples）；新增 `pr_created` 字段消歧；§7 加"跨平台兼容性"节
+- v0.1.0 (2026-05-20): 初稿
