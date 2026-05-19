@@ -1,10 +1,10 @@
 # 碎银 v4 项目宪法 (Constitution)
 
-> v4 项目最高约束。**所有 spec / plan / task 必须符合本宪法**。
+> **v4 工具链项目自身的宪法**。约束 v4 这个 **SDD 研发工具项目本身**的开发。
 >
-> 修改本宪法须走 ADR + PR 流程（见 §7 Governance）。
+> **不是** v5 / v6 业务项目的 constitution——业务项目的 constitution 应由 v4 提供的 `/sy-constitution` generator 在各自仓里交互生成。
 >
-> 本宪法用 `component-spec-template.md` 格式写——dogfood 该模板（principles 是一种 spec，统一格式便于 AI 跑 review）。
+> **`extends: methodology.md`** —— SDD 流派规则（5 铁律 + 流程）隐式继承，本文档**不重复定义**。
 
 ---
 
@@ -12,13 +12,20 @@
 
 **Meta-spec**（项目级约束，非 C 编号工具链组件）
 
-- [x] 行为契约（declarative — 定义"什么算合规"，但本身没 imperative logic）
+- [x] 行为契约（declarative — 定义"什么算合规"，本身没 imperative logic）
 
 实现谱系不适用——constitution 是 spec / plan / task 的判定依据，由 C4 L4 (Constitution compliance) 和 C5 AI Reviewer 在它们各自实现里 enforce。
 
 ## 1. Purpose
 
-一句话：**定义碎银 v4 项目的不可妥协原则、项目身份、治理流程，作为所有 spec / plan / task 的最高约束。**
+定义 **v4 工具链项目本身**的：
+
+- 项目身份（v4 是什么 / 不是什么）
+- 项目独有约束（业务 NON-NEGOTIABLE / preference）
+- AI 协作 profile（role-profile 选择）
+- Governance（修改本宪法的流程）
+
+**这些都是 v4 独有的，跟 v5 / v6 等业务项目无关**。SDD 通用规则在 methodology.md。
 
 ## 2. Public API
 
@@ -27,49 +34,50 @@
 ```yaml
 type: object
 oneOf:
-  - description: Spec/plan/task 请求合规校验
+  - description: 工具链 spec/plan/task 请求合规校验
     required: [type, target_doc]
     properties:
       type: { const: compliance_check }
-      target_doc: { type: string, description: "被校验的 spec/plan/task 路径" }
+      target_doc: { type: string, description: "被校验的 v4 仓内 spec/plan/task 路径" }
 
   - description: 宪法修改请求
     required: [type, proposed_change, adr_ref, version_bump_type]
     properties:
       type: { const: amendment }
       proposed_change: { type: string }
-      adr_ref: { type: string, description: "ADR 文档路径" }
+      adr_ref: { type: string }
       version_bump_type:
         enum: [MAJOR, MINOR, PATCH]
 ```
 
-### 2.2 Output Schema（宪法当前状态 + 校验结果）
+### 2.2 Output Schema
 
 ```yaml
 type: object
 oneOf:
   - description: Compliance 校验结果
-    required: [target_doc, verdict, violated_principles]
+    required: [target_doc, verdict, violated_constraints]
     properties:
       target_doc: { type: string }
       verdict:
         enum: [pass, warn, block]
-      violated_principles:
+      violated_constraints:
         type: array
         items:
           type: object
           properties:
-            principle_id: { type: string, pattern: '^P-[IVX]+$' }
+            constraint_id: { type: string, pattern: '^(NC|PC)-\d+$' }
             severity:
               enum: [non_negotiable_violation, preference_violation]
             details: { type: string }
 
   - description: 宪法当前文档状态
-    required: [version, principles, governance, last_amended]
+    required: [version, extends, project_constraints, role_profile, last_amended]
     properties:
       version: { type: string, pattern: '^v\d+\.\d+\.\d+$' }
-      principles: { type: array, items: { type: object } }
-      governance: { type: object }
+      extends: { type: string, description: "methodology.md 路径" }
+      project_constraints: { type: array, items: { type: object } }
+      role_profile: { type: string, enum: [assistant, junior, collaborator, autonomous] }
       last_amended: { type: string, format: date }
 ```
 
@@ -81,10 +89,11 @@ required: [code, message]
 properties:
   code:
     enum:
-      - PRINCIPLE_NOT_FOUND        # 引用了不存在的 principle id
-      - INVALID_VERSION_BUMP        # 版本 bump 类型不匹配实际变更
-      - MISSING_ADR                 # 修改没附 ADR
-      - CIRCULAR_REFERENCE          # constitution 引用了下层文档（应单向）
+      - CONSTRAINT_NOT_FOUND       # spec 引用了不存在的 NC/PC id
+      - INVALID_VERSION_BUMP       # 版本 bump 类型不匹配实际变更
+      - MISSING_ADR                # 修改没附 ADR
+      - CIRCULAR_REFERENCE         # constitution 引用了下层文档
+      - SDD_RULE_DUPLICATION       # 本宪法重复定义了 methodology.md 的 SDD 通用规则
   message: { type: string }
   details: { type: object }
 ```
@@ -93,192 +102,231 @@ properties:
 
 ### 3.1 Invariants
 
-- **I1**: 所有 spec / plan / task 必须 reference 至少一条 principle（隐式或显式）
-- **I2**: principles 之间正交，无重复（review 时校验）
-- **I3**: principles 可证伪（违反时能被发现，否则不是 principle 而是装饰）
-- **I4**: NON-NEGOTIABLE 标签的 principle 违反 = 阻断 PR（不可 override）
-- **I5**: 非 NON-NEGOTIABLE 违反 = warn（可走 ADR 解释 override）
-- **I6**: 一年内 principle 数量稳定（频繁改的不是 principle，是 plan）
+- **I1**: v4 仓相关 spec / plan / task 必须 reference 本 constitution 的至少一条 constraint
+- **I2**: project_constraints (NC/PC) 之间正交，无重复
+- **I3**: NON-NEGOTIABLE 约束违反 = 阻断 PR（不可 override）
+- **I4**: Preference 约束违反 = warn（可走 ADR 解释 override）
+- **I5**: **本宪法不重复 SDD 通用规则** — 5 铁律在 methodology.md，本宪法 `extends` 它
+- **I6**: 一年内 NC 数量稳定（频繁改的不是 NC，是 plan）
 
 ### 3.2 Side Effects
 
 - 写入 `docs/sdd/constitution.md`（本文件）
 - 写入 `docs/sdd/adrs/NNN-{slug}.md`（修改时）
-- 触发 C4 L4 + C5 finding rule 更新（principles 改变后）
+- 触发 C4 L4 + C5 finding rule 更新（constraints 改变后）
 
 ### 3.3 Failure Modes
 
 | 失败类型 | 触发条件 | 处理 |
 |---|---|---|
-| `PRINCIPLE_NOT_FOUND` | spec 引用未定义的 principle id | block PR，提示补 principle |
-| `INVALID_VERSION_BUMP` | PATCH 改动改了 principle 语义 | block PR，要求改 MINOR / MAJOR |
+| `CONSTRAINT_NOT_FOUND` | spec 引用未定义的 NC/PC id | block PR |
+| `INVALID_VERSION_BUMP` | PATCH 改动改了 constraint 语义 | block PR，要求 MINOR / MAJOR |
 | `MISSING_ADR` | 修改本文件但 PR 无 ADR | block PR |
-| `CIRCULAR_REFERENCE` | constitution 引用 spec/plan | block PR，constitution 是 root 单向 |
+| `CIRCULAR_REFERENCE` | constitution 引用 spec/plan | block PR |
+| `SDD_RULE_DUPLICATION` | 本宪法塞 SDD 通用规则（应在 methodology.md） | block PR，要求移出 |
 
 ## 4. AI Prompt Template
 
-**N/A** — constitution 是 declarative meta-spec，不跑 AI prompt。它由 C4 L4 (Constitution compliance check) 和 C5 AI Reviewer (`constitution_breach` finding) 在它们各自的 prompt 里被 reference。
+**N/A** — declarative meta-spec，不跑 AI prompt。由 C4 L4 + C5 AI Reviewer 在它们的 prompt 里 reference。
 
-## 5. Core Principles
+## 5. Project Identity
 
-5 条核心原则，来自 `methodology.md §10` 的 5 条铁律。每条都可证伪、正交、稳定。
+### v4 是什么
 
-### Principle I: Spec 先于代码 (NON-NEGOTIABLE)
+**碎银 SDD 工具链研发项目**。**不是业务产品**——是给业务项目（v5 / v6 / ...）用的 SDD 流程引擎。
 
-**Statement**: 任何新能力必须先写 spec 再写代码——不允许跳过。
+### 用户画像
 
-**Rationale**: AI 主写项目中 spec 是 AI 的长期记忆和意图契约，跳过会导致多 session 间漂移。
+- 业务专家 + 后端老兵（前端代码看不懂）
+- AI 主写、人在 spec/plan 层拍板
+- 多 session 并行开发
 
-**Test**: 任何 PR 必须 reference 一个 spec.md（含 spec_ref anchor）。无 spec_ref 的 PR → C4 L3 block。
+### 核心交付物
 
-**Severity**: NON-NEGOTIABLE — 违反 = block PR，不可 override。
+| 交付物 | 性质 |
+|---|---|
+| `suiyin-flow` CLI（installer + spec-kit fork + 自建 C1-C11） | 工具二进制 |
+| Skill templates / Prompt templates（给业务项目生成 SDD 产物） | 数据 |
+| 文档（methodology / workflows / diagrams / 本 constitution） | 知识 |
 
-### Principle II: Spec 范围 = 用户/外部观察者可观察行为
+### v4 不是什么
 
-**Statement**: Spec 只写用户/外部观察者可观察的行为（含异常、边界、外部约束传染）。实现细节归 plan。
+- ❌ 不是业务产品（碎银业务在 v5/v6）
+- ❌ 不是 spec-kit 替代品（v4 用 spec-kit 当 Layer 1 backbone）
+- ❌ 不是 SaaS（必须能零 SaaS 跑）
 
-**Rationale**: 意图与实现分离让 spec 在重写实现时仍然成立——它是行为契约，不是技术方案。
+## 6. Project-Specific Constraints
 
-**Test**: C5 AI Reviewer 跑 review 时检查 spec.md 是否含实现术语（widget / SQL / API path 等）。含 → finding `severity: medium`。
+v4 独有的约束。**SDD 通用规则在 methodology.md，本节不重复**。
 
-**Severity**: Preference（违反 → warn，需走 ADR 说明）。
+### NC-1: 零 SaaS 依赖（NON-NEGOTIABLE）
 
-### Principle III: Bug 必须先翻 spec
+v4 工具链必须能在零 SaaS 环境下跑。GitHub / GitLab / 其他 SaaS 是**可选实现谱系**之一，不是 hard dependency。
 
-**Statement**: 每个 bug 第一步是找相关 spec → 对照 AC 分类（Type A/B/C/D）→ 按 type 处理。**找不到 spec 不能绕过**。
+**Rationale**: 业务项目可能在内网 / 私有部署 / 离线环境用 v4。绑死任何 SaaS = 失去这部分市场。
 
-**Rationale**: Bug 是 spec 最高频的鲜活机制；跳过 = spec rot 的入口。
+**Test**: 任何引入 SaaS 调用的 PR 必须提供 fallback 实现，否则 C5 finding `severity: high` → block。
 
-**Test**: bug ticket 模板第一项必填"相关 spec 路径"（未填阻断 issue 提交）。
+### NC-2: spec-kit 作为 Layer 1 backbone（NON-NEGOTIABLE）
 
-**Severity**: NON-NEGOTIABLE — issue 模板硬约束。
+v4 不重造协商阶段轮子。spec-kit fork（`sy-*` 命名空间）是 Layer 1 唯一实现。
 
-### Principle IV: 代码改 = spec 改 (NON-NEGOTIABLE)
+**Rationale**: spec-kit 是 GitHub 官方维护的成熟工具；重造没意义、维护成本高、跟 spec-kit 上游脱节。
 
-**Statement**: 任何修改代码 MUST 在同一个 PR 内同步修改对应 spec。CI 校验代码注释里的 `spec_ref` 锚点。
+**Test**: 任何在 Layer 1 自建新机制的 PR 必须解释为什么不能用 spec-kit fork → block by default。
 
-**Rationale**: Spec rot 是 SDD 最大失败模式；硬约束是唯一防御手段，自律靠不住。
+### NC-3: 业务项目独立性（NON-NEGOTIABLE）
 
-**Test**: PR diff 含代码改动但无对应 spec 改动 → C4 L4 check 标 `spec_drift` finding → block。
+v4 工具的输出（v5 等业务项目的 SDD 产物）必须**独立于 v4 自身**。业务项目 clone 下来后不依赖 v4 仓存在也能跑（除了 update v4 时）。
 
-**Severity**: NON-NEGOTIABLE — 违反 = block PR。
+**Rationale**: v4 是工具，业务项目不该耦合到工具仓的目录结构。
 
-### Principle V: 拍板前移到 spec / plan 层
+**Test**: v5 init 后 `cd v5 && rm -rf <v4 路径>`，业务项目自身命令仍可跑（除了 update）。
 
-**Statement**: 资深判断力用在 Constitution / Spec / Plan 层；PR 层只对照验收标准（自动化 + AI Review）。
+### PC-1: 最简实现优先（Preference）
 
-**Rationale**: 改 spec 比改代码便宜 100 倍——在更高杠杆点做决定。
+设计新组件时必须先问"最简实现是什么"。**禁止默认重型 SaaS**。
 
-**Test**: PR review 阶段如果出现 plan 级以上的设计争议 → 标 `spec-drift` issue 回 Plan 阶段（不在 PR 阶段决策）。
+**Rationale**: 见 toolchain.md §0.5 AI 提案审查清单。来自 C6 三次过度设计的反思。
 
-**Severity**: Preference（违反 → warn）。
+**Test**: 新组件 spec 必须含"最简实现" + "为什么不选最简"两节。
 
-## 6. Quantitative Standards（v0.1 暂定，spike 后调整）
+### PC-2: 组件 vs 契约明确分离（Preference）
 
-**这些是 v0.1 暂定值**，来自 Fork J 决策。**P0 spike 后视实际跑出来的结果调整到 v1.0**。
+每个工具链节点必须明确标 imperative 组件还是 declarative 契约。详见 toolchain.md §0.5。
 
-| 维度 | 阈值 | 来源 | Enforce 位置 |
-|---|---|---|---|
-| 函数长度 | ≤ 80 行 | Fork J | C4 L1 Static |
-| 文件长度 | ≤ 600 行 | Fork J | C4 L1 Static |
-| 嵌套深度 | ≤ 5 层 | Fork J | C4 L1 Static |
-| 圈复杂度 | ≤ 18 | Fork J | C4 L1 Static |
+### PC-3: 中文优先双语支持（Preference）
 
-**Severity**: Preference（v0.1 阶段）— warn 但不 block。v1.0 阶段重新评估是否升 NON-NEGOTIABLE。
+所有面向用户的产物（CLI 提示、README、错误信息）以中文为主、英文为辅。
 
-## 7. Governance
+**Rationale**: 项目主用户是中文工程师，但工具应能 onboard 英文社区。
 
-### 7.1 修改流程
+## 7. AI Collaboration Profile
+
+**v4 自身用 `D-autonomous`** —— 4 档 role-profile 中的最高自治档。
+
+详见 `role-profiles.md`。4 档简介：
+
+| 档 | AI 自治程度 | v4 选择 |
+|---|---|---|
+| A assistant | 工具 | ❌ |
+| B junior | AI 起草 + 人审 | ❌ |
+| C collaborator | 自审 + 自动 merge | ❌ |
+| **D autonomous** | 自治微调 | ✅ v4 default |
+
+实际配置见 `runtime/role-profile.yml`（即 v4 仓内的 role-profile 实例）。
+
+### Constitution 与 role-profile 的边界
+
+- **constitution** 约束**行为原则**（NC/PC 不可妥协 / 项目身份）
+- **role-profile** 配置**工作模式**（AI 自治程度 / git automation / 人介入点）
+
+**两者不重叠**。constitution 引用 role-profile（"v4 用 D-autonomous"），但不内嵌 role-profile 内容。
+
+修改 role-profile 不需要 ADR；修改 constitution 才需要。
+
+### Constitution Bootstrap 特例
+
+`/sy-constitution` 是 chicken-and-egg 入口——constitution 没立 → role-profile 没意义。所以：
+
+- **所有 role-profile 档**强制 auto-commit + auto-push constitution 立基产物
+- 协商可能多轮 → 每轮 commit + push 防丢失
+- 实现：`runtime/extensions.yml` 的 `after_constitution` hook = `optional: false`（mandatory）
+
+详见 `role-profiles.md`。
+
+## 8. Governance
+
+### 8.1 修改流程
 
 修改本宪法须：
 
-1. **写 ADR**（`docs/sdd/adrs/NNN-{slug}.md`），说明：
-   - 为什么改
-   - 改前 → 改后 对比
-   - 影响范围（哪些下层文档要 cascade）
-   - 兼容性 / 迁移方案
-2. **提 PR**（修改 constitution.md + 加 ADR 文件，同一 PR）
-3. **C5 AI Reviewer review**（检查 invariants I1-I6）
+1. **写 ADR**（`docs/sdd/adrs/NNN-{slug}.md`）说明：为什么改 / 改前→改后 / 影响范围 / 兼容性
+2. **提 PR**（修改 constitution.md + 加 ADR，同一 PR）
+3. **C5 AI Reviewer review**（检查 invariants I1-I6，特别 I5 — 不能塞 SDD 通用规则）
 4. **人审通过**（项目负责人拍板，宪法不允许 AI 自动 merge）
 5. **merge**，版本号 bump：
 
 | Bump | 触发 |
 |---|---|
-| **MAJOR** | 移除 / 重定义 principle，或修改 NON-NEGOTIABLE 性质 |
-| **MINOR** | 新增 principle，或加 NON-NEGOTIABLE 标签 |
-| **PATCH** | wording / 量化阈值微调 / 笔误修正 |
+| **MAJOR** | 移除 / 重定义 NC，或修改 NON-NEGOTIABLE 性质 |
+| **MINOR** | 新增 NC / PC |
+| **PATCH** | wording / 笔误修正 |
 
-### 7.2 跟其他文档的关系
+### 8.2 跟其他文档的关系
 
 ```
-constitution.md  ← 最高约束（本文档）
+methodology.md (SDD 通用规则 — 5 铁律 + 流程)
+       ↑
+       │ extends
        │
-       ├─ methodology.md          （方法论实践细则，给团队读）
-       ├─ toolchain.md            （工具链规约：组件 + 契约）
-       ├─ workflows.md            （状态机和流程图）
-       ├─ diagrams.md             （流程图集）
-       ├─ role-profiles.md        （AI 角色定义 4 档，配置工作模式）
-       ├─ domain-glossary.md      （业务概念词典，待建）
-       ├─ component-spec-template.md  （C 模块 spec meta-template）
-       ├─ components/             （各 C 模块 spec）
-       └─ adrs/                   （决策记录，待建）
+constitution.md (本文档 — v4 项目独有)
+       │
+       │ 引用
+       ↓
+┌──────────────────────────────────┐
+│ toolchain.md       (工具链规约)   │
+│ workflows.md       (状态机)       │
+│ diagrams.md        (流程图)       │
+│ role-profiles.md   (AI 角色 4 档) │
+│ component-spec-template.md       │
+│ components/        (C 模块 spec)  │
+│ adrs/              (决策记录)     │
+└──────────────────────────────────┘
 
-runtime/role-profile.yml          （v4 自身的 role-profile，default = autonomous）
-v5/.specify/role-profile.yml      （v5 项目协商后的 role-profile）
+runtime/role-profile.yml (v4 自身 = autonomous)
 ```
 
-**冲突时**：constitution > methodology > toolchain > 其他。constitution 修改触发 cascade 检查下层文档。
+**冲突时**：methodology > constitution > toolchain > 其他。methodology 是 root（SDD 流派本身），constitution 在它之上叠 v4 独有内容。
 
-### 7.2.1 跟 role-profile 的边界
+### 8.3 单向引用
 
-- **constitution** 约束 **行为原则**（principles 不可妥协 / quantitative standards）
-- **role-profile** 配置 **工作模式**（AI 自治程度 / git automation / 人介入点）
-
-两者**不重叠**。constitution 引用 role-profile（"v4 自身用 autonomous 档"），但不内嵌内容。修改 role-profile 不需要 ADR；修改 constitution 才需要。
-
-**Constitution bootstrap 特例**：`/sy-constitution` 不在 role-profile 管辖（chicken-and-egg）—— 所有档强制 auto-commit + auto-push 立基产物到远程。详见 `role-profiles.md`。
-
-### 7.3 单向引用
-
-- constitution **只能引用**：spec 行为契约、methodology 的方法论原则
+- constitution **可以引用**：methodology.md（extends）
 - constitution **不能引用**：具体 spec / plan / task / 代码（避免 circular reference）
-- 下层文档**可以引用** constitution（principle id）
+- 下层文档**可以引用** constitution（constraint id）
 
 违反 → `CIRCULAR_REFERENCE` error。
 
-## 5b. Acceptance Criteria（合规验证）
+## 5b. Acceptance Criteria
 
-constitution 的"AC"是跨 PR 维度的 invariants 校验。不是单点 AC。
+constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC。
 
-- **AC-1**: 任何被 merge 的 PR，其对应 spec/plan/task 都 reference 至少一条 principle（I1）
-- **AC-2**: 5 条 principles 之间无 logical overlap（I2，C5 季度 review）
-- **AC-3**: NON-NEGOTIABLE 违反在 100% 的情况下被 C4/C5 阻断（I4）
-- **AC-4**: 修改 constitution 的 PR 100% 含 ADR（I3 governance）
-- **AC-5**: 一年内 principle 数量变化 ≤ 2 条（I6，否则 governance 失败）
+- **AC-1**: v4 仓相关 PR 都 reference 本 constitution 至少一条 constraint (I1)
+- **AC-2**: NC/PC 之间 logical orthogonality (I2，C5 季度 review)
+- **AC-3**: NON-NEGOTIABLE 违反 100% 被 C4/C5 阻断 (I3)
+- **AC-4**: 修改本宪法的 PR 100% 含 ADR (I4 governance)
+- **AC-5**: **本宪法不重复 methodology.md 内容**（I5，C5 specific check）— 这条 AC 由 `SDD_RULE_DUPLICATION` error 触发
+- **AC-6**: 一年内 NC 数量变化 ≤ 2 条 (I6)
 
 ## 6b. Open Questions
 
-- **Q-C-1**: NON-NEGOTIABLE 严格规则完整集合 — P0 spike 后定 v1.0（当前只有 P-I, P-III, P-IV 是 NON-NEGOTIABLE）
-- **Q-C-2**: 完整技术栈选型（Flutter / React 等）— 应该走 Initiative 决策，不在 constitution 里硬塞
-- **Q-C-3**: 性能 / 安全 / 可观察性硬指标 — 业务场景跑过才知道
-- **Q-C-4**: 项目身份描述（"碎银 v4 是什么"的精确措辞）— 待跟用户共建第一个 spec 时同步沉淀
-- **Q-C-5**: ADR template 详细格式 — 第一个 ADR 写完后定型
+- **Q-C-1**: 完整 NON-NEGOTIABLE 集合 — P0 spike 后定 v1.0（当前 NC-1/2/3 是 NON-NEGOTIABLE）
+- **Q-C-2**: v4 自身技术栈（CLI 用什么语言：Python / Shell / Bun / ...）— 待 C2/C4 实现时定
+- **Q-C-3**: ADR template 详细格式 — 第一个 ADR 写完后定型
+- **Q-C-4**: NC-3 (业务项目独立性) 的具体 test 实现 — P0 spike 验证
 
 ## 7b. Implementation Notes
 
-- 本宪法**用 `component-spec-template.md` 格式写**，作为 template 的第一个 dogfood
-- 写完发现 template 有不适配 meta-spec 的地方（如 AI Prompt Template / 单点 AC）→ template 自身需要 v0.2 调整
-- 章节编号有 5b/6b/7b — 因为前 4 章是 template 标准章节，5/6/7 适用于 imperative 组件；meta-spec 用 b 编号区分
-- 跟 methodology.md 的 5 条铁律完全对齐 — methodology 是给团队读的叙事版，constitution 是给 AI/工具 read 的契约版
+- 本宪法用 `component-spec-template.md` 格式写——template 的第一个 dogfood
+- 章节 5/6/7 适用 imperative 组件；meta-spec 用 5b/6b/7b 区分
+- **v0.1 → v0.2 重大重构**：
+  - 删除 5 铁律内容（搬走，那是 methodology.md 的）
+  - 删除通用量化阈值（业务项目 specific，应该由 generator 在 v5/v6 各自的 constitution 里生成）
+  - 加 §5 Project Identity（v4 自身定义）
+  - 加 §6 NC/PC 项目独有约束
+  - 加 §7 AI Collaboration Profile（含 PR #6 引入的 role-profile 引用）
+  - 加 §8 Constitution Bootstrap 特例（PR #6 引入）
+  - 明确 `extends: methodology.md`
 
-## 8. Version History
+## 9. Version History
 
 | Version | Date | Changes |
 |---|---|---|
-| **v0.1.0** | 2026-05-18 | 初版：5 principles + governance + 暂定量化阈值；NON-NEGOTIABLE 严格规则 / 技术栈 / 性能 等待 v1.0 |
+| v0.1.0 | 2026-05-18 | 初版（含 5 铁律复述，**层次混淆**）|
+| v0.2.0 | 2026-05-18 | **重大重构**：去 SDD 通用内容、加 v4 项目独有约束（NC-1/2/3 + PC-1/2/3）；明确 extends methodology.md；保留 PR #6 引入的 role-profile 边界章节 |
 
 ---
 
-**Version**: v0.1.0
+**Version**: v0.2.0
 **Last Updated**: 2026-05-18
 **Status**: 暂定，待 P0 spike 跑过后升 v1.0
