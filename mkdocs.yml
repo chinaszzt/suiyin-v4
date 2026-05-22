@@ -1,0 +1,88 @@
+site_name: 碎银 v4 — SDD 工具链
+site_description: SDD methodology / toolchain / workflows / ADRs for 碎银 v4 project
+site_url: https://suiyin-v4-docs.pages.dev/
+repo_url: https://github.com/chinaszzt/suiyin-v4
+repo_name: chinaszzt/suiyin-v4
+edit_uri: edit/main/docs/sdd/
+
+docs_dir: docs/sdd
+site_dir: site
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换到深色
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换到浅色
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - 总览 (TODO): todo.md
+  - 方法论: methodology.md
+  - 工具链组件: toolchain.md
+  - 流程图: diagrams.md
+  - 工作流: workflows.md
+  - 项目宪法: constitution.md
+  - AI 角色 4 档: role-profiles.md
+  - C 模块 Spec 模板: component-spec-template.md
+  - 讨论记录: discussion-notes.md
+  - ADRs:
+      - 模板: adrs/0000-adr-template.md
+      - 0001 — Constitution v0.1→v0.2 分层修正: adrs/0001-constitution-v0.1-to-v0.2-layering-fix.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+      toc_depth: 4
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search:
+      lang:
+        - zh
+        - en
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/chinaszzt/suiyin-v4
