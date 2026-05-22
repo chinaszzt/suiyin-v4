@@ -225,6 +225,12 @@ P1.1 阶段 2 验证矩阵存在 bootstrap 缺位：C5 (独立 reviewer) / C6 (g
   - 当前只有 `sy-constitution`，未来加 `sy-domain-glossary`（团队立基）
 - [ ] **季度复杂度盘点 trigger 机制**（Fork M 是 TODO stub）
 - [ ] **C11 missed reuse 原因分析记录格式**（Fork R）
+- [ ] **C12 Knowledge Capture Prompt**（2026-05-20 识别，post-MVP follow-up）
+  - 起因：P1.1 阶段 1 审 spec 时发现"非 post-merge 反思时刻"沉淀 gap（例：跨平台兼容性 reusable 约束默默活在 C2/C4 §7 没升级）
+  - 性质：prompt / ritual / lint 规则，不是图谱
+  - 设计：触发时刻 + 沉淀目标层 mapping protocol + C5 finding category `reusable_knowledge_not_captured`
+  - 必须前的依赖：P1.2 C5 Reviewer 设计前回头讨论（C5 finding enum 需要这条时拍）
+  - 详见 `discussion-notes.md` §十、`diagrams.md` 图 11 C12 dashed placeholder
 
 ---
 

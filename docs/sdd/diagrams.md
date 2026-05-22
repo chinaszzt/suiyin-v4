@@ -392,6 +392,7 @@ flowchart TB
     subgraph Cross[跨层级 - 自建]
         C9[C9 Affected Specs Cascade<br/>Initiative 触发]
         C11[C11 Function Registry Steward<br/>双引擎]
+        C12[C12 Knowledge Capture Prompt<br/>post-MVP follow-up<br/>非 post-merge 反思时刻沉淀]
     end
     
     S3 <-->|查询| C11
@@ -404,16 +405,20 @@ flowchart TB
     C11 -.post-merge.-> L5
     C9 -.Initiative 时.-> S3
     C3 -.high crit task.-> C2
+    C12 -.审 spec / debug / 反思.-> L1
+    C12 -.finding category.-> C5
     
     style C10 fill:#2E7D32,color:#fff
     style C11 fill:#2E7D32,color:#fff
     style C9 fill:#2E7D32,color:#fff
+    style C12 stroke-dasharray: 5 5,stroke:#9E9E9E,fill:#ECEFF1,color:#37474F
 ```
 
-**统计**: 11 个节点 = **8 个自建组件 + 3 个行为契约**（C4 / C6 / C8 是契约，落地按谱系选实现：本地 hook / 通用 CI / GitHub 原生）。
+**统计**: 11 + 1 placeholder 节点 = **8 个自建组件 + 3 个行为契约 + C12 post-MVP placeholder**（C4 / C6 / C8 是契约，落地按谱系选实现：本地 hook / 通用 CI / GitHub 原生）。
 
 - **自建组件**（imperative logic）: C1 / C2 / C3 / C5 / C7 / C9 / C10 / C11
 - **行为契约**（declarative）: **C4 / C6 / C8**
+- **post-MVP follow-up**（虚框）: **C12 Knowledge Capture Prompt** — 见 `discussion-notes.md` §十
 
 详见 `toolchain.md` §0.5 "组件 vs 契约：判定原则"。
 
@@ -437,5 +442,9 @@ flowchart TB
 
 ---
 
-**Version**: 0.1.0-WIP
-**Last Updated**: 2026-05-15
+**Version**: 0.1.1-WIP
+**Last Updated**: 2026-05-20
+
+**Changelog**:
+- v0.1.1 (2026-05-20): 图 11 加 C12 Knowledge Capture Prompt dashed placeholder（post-MVP follow-up，见 `discussion-notes.md` §十）
+- v0.1.0 (2026-05-15): 初稿 11 张图
