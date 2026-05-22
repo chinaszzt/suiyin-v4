@@ -3,9 +3,14 @@ name: PR Documentation Diff Comparison
 # 在 Cloudflare Pages 给每个 PR 部署完 preview 后触发，
 # 在 PR 上贴一张「文件清单 + main / PR 双链接」对比表，
 # 业务专家点链接开两个 tab 自己肉眼对照。
+#
+# Cloudflare Pages 用 GitHub Check Runs（不是 Deployments API）上报
+# 部署状态，所以这里监听 check_run completed，从 output.summary 提取
+# preview URL（HTML 表格里的 commit-specific Preview URL，不是 Branch URL）。
 
 on:
-  deployment_status:
+  check_run:
+    types: [completed]
 
 permissions:
   pull-requests: write
@@ -18,33 +23,50 @@ env:
 
 jobs:
   comment:
-    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment_url != ''
+    if: |
+      github.event.check_run.name == 'Cloudflare Pages' &&
+      github.event.check_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
-      - name: Skip production deployments
-        id: gate
+      - name: Extract preview URL from check_run output
+        id: extract
         env:
-          PR_URL: ${{ github.event.deployment_status.environment_url }}
+          SUMMARY: ${{ github.event.check_run.output.summary }}
         run: |
-          PR_URL_NORM="${PR_URL%/}"
-          PROD_URL_NORM="${PRODUCTION_URL%/}"
-          if [ "$PR_URL_NORM" = "$PROD_URL_NORM" ]; then
-            echo "Production deployment, skipping."
+          # PRODUCTION_URL 形如 https://suiyin-v4.pages.dev → host = suiyin-v4.pages.dev
+          HOST="${PRODUCTION_URL#https://}"
+          HOST="${HOST%/}"
+
+          # 提取 commit-specific Preview URL（8 位 hex hash 子域名），
+          # 排除 Branch Preview URL（带连字符的 branch slug 子域名）。
+          PR_URL=$(printf '%s' "$SUMMARY" \
+            | grep -oE "https://[0-9a-f]{8}\.${HOST}" \
+            | head -1 || true)
+
+          if [ -z "$PR_URL" ]; then
+            echo "::warning::Failed to extract preview URL; check_run output may have changed format"
+            echo "::group::summary"
+            printf '%s\n' "$SUMMARY"
+            echo "::endgroup::"
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      - name: Find PR number from commit
+          echo "Preview URL: $PR_URL"
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Find PR number from check_run sha
         id: pr
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.extract.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.check_run.head_sha }}
         run: |
-          PR=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.deployment.sha }}/pulls" \
+          PR=$(gh api "repos/${{ github.repository }}/commits/${SHA}/pulls" \
             --jq '.[0].number // empty')
           if [ -z "$PR" ]; then
-            echo "No open PR for sha ${{ github.event.deployment.sha }}; skipping."
+            echo "No open PR for sha $SHA; skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "Found PR #$PR"
@@ -53,16 +75,16 @@ jobs:
           fi
 
       - name: Checkout PR head
-        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        if: steps.extract.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ github.event.check_run.head_sha }}
 
       - name: Generate comparison table
-        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        if: steps.extract.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_URL: ${{ github.event.deployment_status.environment_url }}
+          PR_URL: ${{ steps.extract.outputs.pr_url }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           PR_URL_NORM="${PR_URL%/}"
@@ -103,7 +125,7 @@ jobs:
           cat comment.md
 
       - name: Post or update PR comment
-        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        if: steps.extract.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
