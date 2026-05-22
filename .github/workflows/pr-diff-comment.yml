@@ -1,0 +1,123 @@
+name: PR Documentation Diff Comparison
+
+# 在 Cloudflare Pages 给每个 PR 部署完 preview 后触发，
+# 在 PR 上贴一张「文件清单 + main / PR 双链接」对比表，
+# 业务专家点链接开两个 tab 自己肉眼对照。
+
+on:
+  deployment_status:
+
+permissions:
+  pull-requests: write
+  contents: read
+
+env:
+  PRODUCTION_URL: https://suiyin-v4.pages.dev
+  DOCS_DIR: docs/sdd
+  MARKER: pr-diff-comparison-bot
+
+jobs:
+  comment:
+    if: github.event.deployment_status.state == 'success' && github.event.deployment_status.environment_url != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip production deployments
+        id: gate
+        env:
+          PR_URL: ${{ github.event.deployment_status.environment_url }}
+        run: |
+          PR_URL_NORM="${PR_URL%/}"
+          PROD_URL_NORM="${PRODUCTION_URL%/}"
+          if [ "$PR_URL_NORM" = "$PROD_URL_NORM" ]; then
+            echo "Production deployment, skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Find PR number from commit
+        id: pr
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.deployment.sha }}/pulls" \
+            --jq '.[0].number // empty')
+          if [ -z "$PR" ]; then
+            echo "No open PR for sha ${{ github.event.deployment.sha }}; skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found PR #$PR"
+            echo "number=$PR" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout PR head
+        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - name: Generate comparison table
+        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.deployment_status.environment_url }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          PR_URL_NORM="${PR_URL%/}"
+          PROD_URL_NORM="${PRODUCTION_URL%/}"
+
+          # PR 改动的 docs/ 下 .md 文件清单
+          CHANGED=$(gh pr diff "$PR_NUMBER" --name-only \
+            | grep -E "^${DOCS_DIR}/.*\.md\$" || true)
+
+          {
+            echo "<!-- ${MARKER} -->"
+            echo "## 📄 文档 PR Review 对比表"
+            echo ""
+            echo "> 点 \`main\` / \`PR\` 链接，浏览器开两个 tab 肉眼对照看。改动文件标 🔄。"
+            echo ""
+            echo "| 文件 | 状态 | main 版 | PR 版 |"
+            echo "|---|:---:|---|---|"
+
+            # 列 PR head 上 docs/ 下所有 .md
+            find "$DOCS_DIR" -type f -name '*.md' | sort | while read -r f; do
+              rel="${f#${DOCS_DIR}/}"
+              url_path="${rel%.md}/"
+
+              if echo "$CHANGED" | grep -qFx "$f"; then
+                status="🔄"
+              else
+                status=""
+              fi
+
+              echo "| \`${rel}\` | ${status} | [main](${PROD_URL_NORM}/${url_path}) | [PR](${PR_URL_NORM}/${url_path}) |"
+            done
+
+            echo ""
+            echo "<sub>由 \`.github/workflows/pr-diff-comment.yml\` 自动生成；每次 Cloudflare preview 部署成功时刷新。</sub>"
+          } > comment.md
+
+          echo "===== generated comment ====="
+          cat comment.md
+
+      - name: Post or update PR comment
+        if: steps.gate.outputs.skip != 'true' && steps.pr.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          EXISTING_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq "[.[] | select(.body | contains(\"${MARKER}\"))] | .[0].id // empty")
+
+          if [ -n "$EXISTING_ID" ]; then
+            echo "Updating existing comment $EXISTING_ID"
+            jq -nc --arg body "$(cat comment.md)" '{body: $body}' \
+              | gh api --method PATCH \
+                  "repos/${{ github.repository }}/issues/comments/${EXISTING_ID}" \
+                  --input -
+          else
+            echo "Posting new comment"
+            gh pr comment "$PR_NUMBER" --body-file comment.md
+          fi
