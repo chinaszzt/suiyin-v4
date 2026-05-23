@@ -79,7 +79,22 @@ def _resolve_claude_cmd(claude_cmd: list[str] | None, task_id: str) -> list[str]
             task_id=task_id,
             tool="claude",
         )
-    return [path, "--print", "--output-format", "stream-json"]
+    # Bug 1 fix (v0.1.3): --permission-mode bypassPermissions
+    #   C2 是 autonomous 设计, AI 在 worktree 隔离内全自动 (worktree 边界即安全边界).
+    #   不加这个 flag 时 Write/Edit/Bash 全被拒, AI 无法做实际工作 → SESSION_CRASHED.
+    # Bug 2 fix (v0.1.3): --verbose
+    #   Claude CLI 强制要求 `--print + --output-format stream-json` 必须配 --verbose,
+    #   不加这个 flag 时 session 启动即报错 "stream-json requires --verbose".
+    # (Bug 1+2 由 2026-05-24 阶段 2.C dogfood spike 发现)
+    return [
+        path,
+        "--print",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--permission-mode",
+        "bypassPermissions",
+    ]
 
 
 # JSON in markdown code block:  ```json\n{...}\n```  (or no language tag)

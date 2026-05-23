@@ -27,7 +27,9 @@ dev = [
 ]
 
 [project.scripts]
-suiyin-flow = "suiyin_flow.c4_verify.cli:main"
+# v0.1.3: entry point 改用 unified dispatcher (路由 verify / task 子命令).
+# 旧版本只挂 c4_verify.cli 导致 `suiyin-flow task ...` 报 invalid choice.
+suiyin-flow = "suiyin_flow.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/suiyin_flow"]
