@@ -11,9 +11,13 @@ from pydantic import BaseModel, Field
 
 # 跟 docs/sdd/components/c2-task-executor.md 顶部 Version 同步
 # v0.1.2 (2026-05-24): session.py _maybe_parse_final_output 支持 Claude 真实 stream-json
-# 多 event 形态 (result.result + assistant text content + code block JSON 抽取).
+# v0.1.3 (2026-05-24): P0 spike triage 4 bug bundle:
+#   1. session.py 默认 cmd 加 --permission-mode bypassPermissions (AI 工具被拒)
+#   2. session.py 默认 cmd 加 --verbose (stream-json + --print 强制要求)
+#   3. pyproject.toml entry point 改 suiyin_flow.cli:main + 新增 unified dispatcher
+#   4. cli.py:_compute_diff_stats origin/<base> 失败时 fallback 本地 <base>
 # PATCH bump (非 schema 变更, 仅 impl 健壮).
-SCHEMA_VERSION: str = "v0.1.2"
+SCHEMA_VERSION: str = "v0.1.3"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema

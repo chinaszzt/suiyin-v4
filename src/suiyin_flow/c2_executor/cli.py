@@ -197,8 +197,8 @@ def _finalize_success(
     )
 
 
-def _compute_diff_stats(wt_path: Path, base_branch: str) -> DiffStats | None:
-    """git diff --shortstat <base> 解析 files/insertions/deletions."""
+def _git_shortstat(wt_path: Path, base_ref: str) -> str | None:
+    """跑 `git diff --shortstat <base_ref>...HEAD`, 返回 stdout 或 None (失败)."""
     try:
         result = subprocess.run(
             [
@@ -207,7 +207,7 @@ def _compute_diff_stats(wt_path: Path, base_branch: str) -> DiffStats | None:
                 str(wt_path),
                 "diff",
                 "--shortstat",
-                f"origin/{base_branch}...HEAD",
+                f"{base_ref}...HEAD",
             ],
             capture_output=True,
             text=True,
@@ -219,10 +219,28 @@ def _compute_diff_stats(wt_path: Path, base_branch: str) -> DiffStats | None:
         return None
     if result.returncode != 0:
         return None
+    return result.stdout
+
+
+def _compute_diff_stats(wt_path: Path, base_branch: str) -> DiffStats | None:
+    """git diff --shortstat <base> 解析 files/insertions/deletions.
+
+    v0.1.3 Bug 4 fix (P0 spike 2026-05-24 dogfood): 旧版只试 `origin/<base>...HEAD`,
+    若 base_branch 未 push 到 remote (例 dogfood 用 claude/dogfood-adr-0002 本地分支)
+    则 silent None → TaskOutput.diff_stats=null 即使 success.
+    修后 fallback: 先试 `origin/<base>`, 失败再试本地 `<base>`.
+    """
+    # 优先 1: origin/<base> (业务项目 push remote 常见情形)
+    text = _git_shortstat(wt_path, f"origin/{base_branch}")
+    # 优先 2: 本地 base (无 remote 时兜底)
+    if text is None:
+        text = _git_shortstat(wt_path, base_branch)
+    if text is None:
+        return None
+
     # output e.g. " 3 files changed, 42 insertions(+), 7 deletions(-)"
     import re
 
-    text = result.stdout
     files = ins = dels = 0
     m = re.search(r"(\d+) files? changed", text)
     if m:
