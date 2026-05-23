@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>并排对比 main vs PR | 碎银 v4</title>
+  <meta name="robots" content="noindex">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; overflow: hidden;
+                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    .topbar { height: 44px; background: #0f172a; color: #f1f5f9;
+              display: flex; align-items: center; padding: 0 16px; gap: 14px; }
+    .topbar .title { font-weight: 700; font-size: 14px; }
+    .topbar .page { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                    font-size: 13px; color: #cbd5e1; }
+    .topbar .spacer { flex: 1; }
+    .topbar a { color: #93c5fd; text-decoration: none; font-size: 13px; }
+    .topbar a:hover { text-decoration: underline; }
+
+    .split { display: flex; height: calc(100% - 44px); }
+    .pane { flex: 1; display: flex; flex-direction: column;
+            border-left: 1px solid #cbd5e1; min-width: 0; }
+    .pane:first-child { border-left: 0; }
+
+    .label { height: 30px; display: flex; align-items: center;
+             padding: 0 12px; font-size: 12px; font-weight: 600;
+             border-bottom: 1px solid #cbd5e1; letter-spacing: 0.02em; }
+    .label.main { background: #dbeafe; color: #1e3a8a; }
+    .label.pr   { background: #fef3c7; color: #92400e; }
+    .label .url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                  font-weight: 500; margin-left: 8px; color: #475569;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    iframe { flex: 1; border: 0; width: 100%; background: #fff; }
+
+    .error { padding: 24px; color: #b91c1c; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <span class="title">⇆ 并排对比</span>
+    <span class="page" id="page-name">(loading)</span>
+    <span class="spacer"></span>
+    <a href="#" id="back">← 回 PR preview</a>
+  </div>
+  <div class="split">
+    <div class="pane">
+      <div class="label main">main 版<span class="url" id="left-url"></span></div>
+      <iframe id="left" title="main version"></iframe>
+    </div>
+    <div class="pane">
+      <div class="label pr">PR 版<span class="url" id="right-url"></span></div>
+      <iframe id="right" title="PR version"></iframe>
+    </div>
+  </div>
+  <script>
+    (function () {
+      // main 站点 URL — 与 hooks/pr_banner.py 的 MAIN_URL 保持一致
+      var MAIN_URL = "https://suiyin-v4.pages.dev";
+
+      var params = new URLSearchParams(window.location.search);
+      var raw = params.get("page") || "";
+      // 清掉前后多余的斜杠
+      var page = raw.replace(/^\/+|\/+$/g, "");
+
+      var pagePath = page ? ("/" + page + "/") : "/";
+      var displayName = page || "(首页)";
+
+      var leftUrl = MAIN_URL + pagePath;
+      var rightUrl = pagePath;
+
+      document.getElementById("page-name").textContent = displayName;
+      document.getElementById("left").src = leftUrl;
+      document.getElementById("right").src = rightUrl;
+      document.getElementById("left-url").textContent = leftUrl;
+      document.getElementById("right-url").textContent = rightUrl;
+      document.getElementById("back").href = pagePath;
+    })();
+  </script>
+</body>
+</html>
