@@ -1,0 +1,110 @@
+"""C2 worktree management — git worktree add/remove wrappers.
+
+I1 invariant: worktree 命名严格 `worktrees/<task_id>`.
+I2 invariant: AI session 在 worktree 内启动, 严禁在主仓库工作树跑.
+跨平台: pathlib.Path + subprocess shell=False.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+from suiyin_flow.c2_executor.schema import TaskExecutorError
+
+
+def worktree_path_for(repo_root: Path, task_id: str) -> Path:
+    """返回 task 对应的 worktree 绝对路径 (I1 invariant)."""
+    return (repo_root / "worktrees" / task_id).resolve()
+
+
+def worktree_branch_name(task_id: str) -> str:
+    """对应分支名: task/<task_id>."""
+    return f"task/{task_id}"
+
+
+def _get_worktree_branch(wt_path: Path) -> str | None:
+    """读 worktree 当前分支; 失败返回 None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(wt_path), "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            shell=False,
+        )
+        return result.stdout.strip() or None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def ensure_worktree(
+    repo_root: Path,
+    task_id: str,
+    base_branch: str = "main",
+) -> Path:
+    """创建或复用 task 对应的 worktree (I1).
+
+    - 不存在 → 从 base_branch 起新 worktree + 新分支 `task/<task_id>`
+    - 已存在 + 分支匹配 → 复用 (返回路径)
+    - 已存在 + 分支不匹配 → raise WORKTREE_CONFLICT (不覆盖)
+    """
+    wt_path = worktree_path_for(repo_root, task_id)
+    expected_branch = worktree_branch_name(task_id)
+
+    if wt_path.exists():
+        actual = _get_worktree_branch(wt_path)
+        if actual == expected_branch:
+            return wt_path
+        raise TaskExecutorError(
+            "WORKTREE_CONFLICT",
+            f"worktree {wt_path} exists with branch {actual!r}, expected {expected_branch!r}",
+            task_id=task_id,
+            existing_branch=actual,
+            expected_branch=expected_branch,
+        )
+
+    # 创建 worktrees/ 父目录 (如果业务项目首次跑 task)
+    wt_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "worktree",
+            "add",
+            "-b",
+            expected_branch,
+            str(wt_path),
+            base_branch,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        shell=False,
+    )
+    return wt_path
+
+
+def remove_worktree(repo_root: Path, task_id: str, *, force: bool = False) -> None:
+    """删除 worktree (P0 不自动删, 给 cleanup 阶段或人工调用).
+
+    幂等: 不存在则 noop.
+    """
+    wt_path = worktree_path_for(repo_root, task_id)
+    if not wt_path.exists():
+        return
+    args = ["git", "-C", str(repo_root), "worktree", "remove"]
+    if force:
+        args.append("--force")
+    args.append(str(wt_path))
+    subprocess.run(
+        args,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        shell=False,
+    )
