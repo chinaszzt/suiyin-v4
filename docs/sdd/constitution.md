@@ -183,6 +183,33 @@ v4 工具的输出（v5 等业务项目的 SDD 产物）必须**独立于 v4 自
 
 **Test**: v5 init 后 `cd v5 && rm -rf <v4 路径>`，业务项目自身命令仍可跑（除了 update）。
 
+### NC-4: 隔离 worktree 是自动化执行的安全边界（NON-NEGOTIABLE）
+
+所有 v4 自动化执行类组件（C2 Task Executor / C3 Multi-Implementation Arbiter / C5 AI Reviewer / 未来 imperative 组件）必须在隔离的 git worktree 内运行，**严禁直接对主仓 working tree 写入**。
+
+**Rationale**: C2 等组件用 `--permission-mode bypassPermissions` 给 AI 全权 Write/Edit/Bash 工具访问。这套授权模型**只有 AI 隔离在 worktree 内才安全** — 一旦 AI 能动主仓 working tree，整个安全模型崩塌（写 git history / 切 branches / 改 settings）。引入 ADR-0003。
+
+**Test**:
+- C2 spec §3.1 I1/I2 已强制 worktree 路径命名 `worktrees/<task_id>` + AI session 必须在 worktree 内
+- 未来 C3/C5/etc 组件 spec 必须延续这个 invariant
+- 任何引入"主仓 working tree 写入"代码的 PR → C5 finding `severity: critical` → block，**不可 override**
+
+### NC-5: 跨平台支持（NON-NEGOTIABLE）
+
+v4 工具链（CLI / runner / installer / 任何 imperative 组件）必须在 **macOS / Linux / Windows** 三个 platform 都能跑。
+
+**Rationale**: 业务项目可能跑各种 dev box（macOS / Linux / Windows 含 WSL）。v4 工具绑死 POSIX-only 等于丢这部分市场。跨平台代码成本不高（pathlib / psutil / shell=False / utf-8 explicit / shutil.which fallback），设计期付小成本 vs 长期重构代价大。引入 ADR-0003。
+
+**Test**:
+- 路径处理：`pathlib.Path`，**不**手拼 `/` 或 `os.sep`
+- 进程管理：`psutil.Process.kill()`（跨平台），**不**用 `os.kill(SIGKILL)`（Windows 没 SIGKILL）
+- subprocess：`shell=False` + `list[str]` args（避免 Windows shell 语义差异）
+- 文件读写：显式 `encoding="utf-8"`（避免 Windows 默认 cp936/cp1252）
+- 工具探测：`shutil.which` + venv binary fallback（PR #22 修过 venv PATH bug）
+- 任何 POSIX-only 调用必须有 Windows fallback → 否则 C5 finding `severity: high` → block
+- **P0 阶段**：macOS + Linux 必跑通；Windows ≥ smoke（手测一次）
+- **P1+ 阶段**：Windows CI matrix 必须（升级到 runtime enforcement）
+
 ### PC-1: 最简实现优先（Preference）
 
 设计新组件时必须先问"最简实现是什么"。**禁止默认重型 SaaS**。
@@ -300,7 +327,7 @@ constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC�
 
 ## 6b. Open Questions
 
-- **Q-C-1**: 完整 NON-NEGOTIABLE 集合 — P0 spike 后定 v1.0（当前 NC-1/2/3 是 NON-NEGOTIABLE）
+- **Q-C-1**: 完整 NON-NEGOTIABLE 集合 — 已拍 v1.0: 见 ADR-0003（NC-1..NC-5 + PC-1..PC-3）
 - **Q-C-2**: v4 自身技术栈（CLI 用什么语言：Python / Shell / Bun / ...）— 已拍: 见 ADR-0002 (Python 3.11+)
 - **Q-C-3**: ADR template 详细格式 — 第一个 ADR 写完后定型
 - **Q-C-4**: NC-3 (业务项目独立性) 的具体 test 实现 — P0 spike 验证
@@ -325,9 +352,10 @@ constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC�
 | v0.1.0 | 2026-05-18 | 初版（含 5 铁律复述，**层次混淆**）|
 | v0.2.0 | 2026-05-18 | **重大重构**：去 SDD 通用内容、加 v4 项目独有约束（NC-1/2/3 + PC-1/2/3）；明确 extends methodology.md；保留 PR #6 引入的 role-profile 边界章节 |
 | v0.2.1 | 2026-05-24 | PATCH: 关闭 Q-C-2 open question (v4 技术栈 = Python 3.11+, 见 ADR-0002) |
+| v0.2.2 | 2026-05-24 | **MINOR**: NC v1.0 — 加 NC-4 (worktree 隔离安全边界) + NC-5 (跨平台支持); 关 Q-C-1 (NC-1..NC-5 + PC-1..PC-3); 见 ADR-0003 |
 
 ---
 
-**Version**: v0.2.1
+**Version**: v0.2.2
 **Last Updated**: 2026-05-24
-**Status**: 暂定，待 P0 spike 跑过后升 v1.0
+**Status**: NC v1.0 完整（5 NC + 3 PC），待 Q-C-3/Q-C-4 解决后整体稳态
