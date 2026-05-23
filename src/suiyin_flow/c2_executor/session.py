@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import threading
@@ -81,10 +82,75 @@ def _resolve_claude_cmd(claude_cmd: list[str] | None, task_id: str) -> list[str]
     return [path, "--print", "--output-format", "stream-json"]
 
 
-def _maybe_parse_final_output(line: str) -> dict[str, Any] | None:
-    """检测一行是否是实现者的最终 JSON 输出.
+# JSON in markdown code block:  ```json\n{...}\n```  (or no language tag)
+_CODE_BLOCK_PATTERN = re.compile(r"```(?:json)?\s*\n?(\{.*?\})\s*\n?```", re.DOTALL)
 
-    C2 §4 Prompt 要求实现者 session 最后一行输出:
+# Inline JSON object (fallback for "just JSON in text"). Use greedy + outermost braces.
+_INLINE_JSON_PATTERN = re.compile(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", re.DOTALL)
+
+
+def _is_implementer_final(data: Any) -> bool:
+    """Final JSON 特征: dict 含 task_id 且 含 verify_cmd_exit_code."""
+    return (
+        isinstance(data, dict)
+        and "task_id" in data
+        and "verify_cmd_exit_code" in data
+    )
+
+
+def _extract_json_from_text(text: str) -> dict[str, Any] | None:
+    """从 assistant 文本里抽 implementer final JSON.
+
+    支持几种形态:
+    1. 整个 text 就是 JSON
+    2. JSON 在 ```json``` 或 ``` ``` code block 内
+    3. JSON 散在 text 中 (fallback, 用 inline pattern)
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    # 1. Whole text is JSON
+    if stripped.startswith("{") and stripped.endswith("}"):
+        try:
+            data: Any = json.loads(stripped)
+            if _is_implementer_final(data):
+                # json.loads 返回 Any, _is_implementer_final 已校验 dict 形态
+                return data  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            pass
+
+    # 2. Code block JSON (优先, 因为 prompt template 就教 AI 用 ``` 包)
+    for match in _CODE_BLOCK_PATTERN.finditer(text):
+        try:
+            data = json.loads(match.group(1))
+            if _is_implementer_final(data):
+                return data  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            continue
+
+    # 3. Inline JSON (fallback, 偶尔 AI 不用 code block)
+    for match in _INLINE_JSON_PATTERN.finditer(text):
+        try:
+            data = json.loads(match.group(0))
+            if _is_implementer_final(data):
+                return data  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            continue
+
+    return None
+
+
+def _maybe_parse_final_output(line: str) -> dict[str, Any] | None:
+    """检测一行 stream-json event 是否含实现者最终 JSON.
+
+    Claude `--print --output-format stream-json` 输出多种 event type:
+    - system / rate_limit_event: ignore
+    - assistant: message.content[].text 可能含 final JSON
+    - result (subtype=success): result 字段是最后 assistant text (优先级最高)
+    - Legacy/mock: 整 line 直接是 final JSON
+
+    C2 §4 Prompt 要求实现者 session 最后输出:
         {"task_id": ..., "files_changed": [...], "verify_cmd_exit_code": int, "commit_sha": ...}
     """
     stripped = line.strip()
@@ -96,9 +162,31 @@ def _maybe_parse_final_output(line: str) -> dict[str, Any] | None:
         return None
     if not isinstance(event, dict):
         return None
-    # 实现者 final JSON 特征: 含 task_id 且 含 verify_cmd_exit_code
-    if "task_id" in event and "verify_cmd_exit_code" in event:
+
+    # 优先 1: 整 line 直接是 final JSON (legacy / mock path)
+    if _is_implementer_final(event):
         return event
+
+    # 优先 2: result event (subtype=success) 的 result 字段
+    if event.get("type") == "result" and event.get("subtype") == "success":
+        result_text = event.get("result", "")
+        if isinstance(result_text, str):
+            extracted = _extract_json_from_text(result_text)
+            if extracted is not None:
+                return extracted
+
+    # 优先 3: assistant message content text
+    if event.get("type") == "assistant":
+        message = event.get("message", {})
+        if isinstance(message, dict):
+            for content in message.get("content", []):
+                if isinstance(content, dict) and content.get("type") == "text":
+                    text = content.get("text", "")
+                    if isinstance(text, str):
+                        extracted = _extract_json_from_text(text)
+                        if extracted is not None:
+                            return extracted
+
     return None
 
 
