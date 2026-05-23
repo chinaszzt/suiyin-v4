@@ -280,18 +280,44 @@ P0 MVP 先实现 Python + Dart（v4 自身 + v5 业务）。其他语言 P1+ 按
 
 ### 跨平台兼容性（macOS / Linux / Windows）
 
-C4 contract 自身是 Python 包装 + shell 命令调度，跨平台约束同 C2 §7：
+**这是 constitution NC-5（跨平台支持）的具体实现**。C4 contract 自身是 Python 包装 + shell 命令调度，跨平台约束同 C2 §7：
 
 | 项 | 规则 |
 |---|---|
 | 路径处理 | `pathlib.Path`；verify_report.json 中所有 path 字段标"绝对路径" |
 | subprocess | `shell=False` + `list[str]` 调 `pytest` / `flutter` / `eslint` 等 runner |
 | lefthook | lefthook 本身跨平台 OK，但 `run:` 后的 shell 命令要写跨平台版本（避免 bash-only 语法如 `[[ ]]` / heredoc） |
-| 工具探测 | `shutil.which('pytest')` / `shutil.which('flutter')`，找不到报 `TOOLCHAIN_NOT_FOUND` |
+| 工具探测 | `shutil.which('pytest')` / `shutil.which('flutter')` + **venv binary fallback**（见下方"Venv portability"节）|
 | 文件编码 | 读取 reporter JSON 输出强制 `encoding='utf-8'`，避免 Windows 默认 cp936 / cp1252 |
 | 测试 reporter 调用 | Windows 上 `flutter` / `pytest` 是 `.bat` shim，subprocess 必须用 `shell=False` 但允许 `executable=shutil.which('flutter.bat')` 兜底 |
 
 **P0 阶段**：macOS + Linux 必跑通；Windows spike 时手测一次确认无致命问题，Windows CI 进 P1+。
+
+### Venv portability — `require_tool` fallback（PR #22 实证）
+
+`shutil.which('ruff')` 在 dev 没 activate venv 时找不到工具（subprocess 默认 PATH 不含 venv binary），导致 `suiyin-flow verify run` 在 `.venv/bin/suiyin-flow` 直接调用时报 `TOOLCHAIN_NOT_FOUND`。
+
+**Fallback 链**:
+
+```python
+def require_tool(name: str) -> str:
+    # 1. PATH 优先 (尊重业务项目环境)
+    path = shutil.which(name)
+    if path:
+        return path
+    # 2. Fallback: 当前 Python 解释器的 bin/Scripts 目录
+    #    (subprocess 默认 PATH 不含 venv binary 时兜底)
+    bin_dir = Path(sys.executable).parent
+    for candidate in [bin_dir / name, bin_dir / f"{name}.exe", bin_dir / f"{name}.bat"]:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    raise VerifyContractError("TOOLCHAIN_NOT_FOUND", ...)
+```
+
+**关键**:
+- `Path(sys.executable).parent` 跨平台映射到 venv `bin/` (macOS/Linux) 或 `Scripts/` (Windows)
+- Windows 还要加 `.exe` / `.bat` 后缀 (因为 Windows 没"无后缀可执行")
+- 找不到时 error 含 `searched_path` + `searched_venv_bin` 帮 dev debug
 
 ### 模块拆分建议
 
@@ -322,6 +348,7 @@ suiyin_flow/
 
 - **NC-1**（零 SaaS）：P0 选 (a) 本地 lefthook ✅
 - **NC-2**（spec-kit Layer 1 backbone）：C4 跑在 spec-kit 产出的 spec.md / plan.md 之上，不重造协商 ✅
+- **NC-5**（跨平台）：上方"跨平台兼容性" + "Venv portability" 两节直接 enforce ✅
 - **PC-1**（最简实现）：实现谱系明确从 (a) 起步，禁默认 SaaS ✅
 - **PC-2**（组件 vs 契约分离）：本 spec 明确标"行为契约"，imperative 子能力归各 level（P3+）✅
 
@@ -332,10 +359,11 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.1-draft
-**Last Updated**: 2026-05-20
-**Status**: draft — P0 阶段 L1+L2，P3 阶段补 L3/L4
+**Version**: v0.1.2-draft
+**Last Updated**: 2026-05-24
+**Status**: draft — P0 阶段 L1+L2 已实现 (PR #20+22)；P3 阶段补 L3/L4
 
 **Changelog**:
+- v0.1.2 (2026-05-24): **P1.1.2 反推** — §7 跨平台节加 NC-5 reference；§7 加 "Venv portability — require_tool fallback" 节（PR #22 实证）；§7 跟 constitution 关系加 NC-5
 - v0.1.1 (2026-05-20): §0 实现谱系简化为"(a) 唯一首选，其他业务项目自决"；§2.1 Input 加 optional `task_id`；§2.2 verify_report 加 optional `task_id`；§7 加"跨平台兼容性"节
 - v0.1.0 (2026-05-20): 初稿

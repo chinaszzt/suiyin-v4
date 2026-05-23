@@ -214,7 +214,7 @@ properties:
 ### 3.1 Invariants
 
 - **I1**: 每个 task 对应**唯一** worktree `worktrees/<task_id>`。同 task_id 复跑必须先清理或复用旧 worktree（按 `--clean` flag）。
-- **I2**: AI session 在 worktree 内启动，**严禁在主仓库工作树跑**。
+- **I2**: AI session 在 worktree 内启动，**严禁在主仓库工作树跑**。**这是 constitution NC-4（隔离 worktree 是自动化执行的安全边界）的具体实现** — `--permission-mode bypassPermissions` 模型的安全边界即 worktree 边界。
 - **I3**: `verify_cmd` 在 worktree 内绿才 push；非绿不 push、不开 PR。
 - **I4**: 每次 attempt 都跑独立 session（fresh context），不继承上一轮 stdout/stderr，但**继承代码变更**（同 worktree）—— 让 AI 在已有半成品上继续。
 - **I5**: `criticality=high` 直接报 `HIGH_CRITICALITY_REJECT`，调度责任在 C3，不在 C2。
@@ -230,6 +230,7 @@ properties:
 - 跑 `verify_cmd` 期间可能调用业务项目 toolchain（dart / pnpm / pytest / ...）
 - 写 `verify_report.json`（C4 输出，C2 透传路径，不解析内容）
 - 写 session log 到 `worktrees/<task_id>/.suiyin/sessions/attempt-{N}.log`
+- 计算 `diff_stats` 时跑 `git diff --shortstat <base_ref>...HEAD`：**fallback 链** = 先试 `origin/<base_branch>`，origin 缺失则 fallback 到本地 `<base_branch>`（dogfood 场景常见 base_branch 未 push 到 remote；P0 spike 经验，见 PR #25）
 - task 完成后 worktree **保留**（C6 merge 后由 cleanup 阶段或人工删，C2 不删）
 
 ### 3.3 Failure Modes
@@ -324,15 +325,77 @@ verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 
 ### 技术栈
 
-- **Python 3.11+**（Q-C-2 已拍）
+- **Python 3.11+**（Q-C-2 已拍，见 ADR-0002）
 - 子进程管理：`subprocess` + `psutil`（kill 整棵进程树）
 - worktree 操作：直接 `git worktree add / remove` shell 命令
-- session 调用：`claude` CLI headless 模式（待 P0 spike 验证）
+- session 调用：`claude` CLI headless 模式 — **P0 spike 已验证可行**，见下方 "Session 调用模式" 节
 - PR 创建：`gh pr create`（gh CLI 已有 → NC-1 零 SaaS 兼容：无 gh 时降级本地分支）
+
+### Session 调用模式（P0 spike 拍板，2026-05-24 dogfood 验证）
+
+C2 必须用以下完整 claude CLI 命令启动 headless session，**任何 flag 缺失会导致整套机制不工作**：
+
+```bash
+claude --print --output-format stream-json --verbose \
+  --permission-mode bypassPermissions
+```
+
+**每个 flag 都是必需 (P0 spike 各自发现)**:
+
+| Flag | 为什么必需 | 缺失后果 |
+|---|---|---|
+| `--print` | non-interactive (从 stdin 接 prompt + stdout 出结果) | session 起 TUI 卡住 |
+| `--output-format stream-json` | 流式 NDJSON 输出 (每 event 一行) | 不能结构化解析 |
+| `--verbose` | Claude CLI 强制要求 stream-json + --print 必须配 | 启动即报 "stream-json requires --verbose" |
+| `--permission-mode bypassPermissions` | 授 AI 全权 Write/Edit/Bash 工具 | Write/Edit/Bash 全被拒, session 无法做实际工作 |
+
+**`bypassPermissions` 的合法性**: 跟 NC-4（worktree 隔离即安全边界）配套 — AI 工具任意操作仅限隔离 worktree 内, 主仓不受影响. **没了 NC-4 这条 NC, bypassPermissions 等于安全洞 — 两者不可拆**.
+
+#### stream-json event 解析（PR #23 实证）
+
+`stream-json` 输出多种 event 类型 (system / rate_limit_event / assistant / result), AI 的最终答复**不**在 top-level JSON, 而是封在 nested text content。Parser 优先级：
+
+1. **`result` event 的 `.result` 字段** (subtype=success 时, 是 final assistant text 聚合) — **最常见**
+2. **`assistant` event 的 `.message.content[].text`** (单 message 也可能含 final JSON)
+3. **Top-level JSON** (legacy / mock 路径, 保兼容)
+
+各级 text 内的 JSON 抽取规则：
+- 整 text 是 JSON
+- ```` ```json``` ```` 或 ```` ``` ``` ```` code block 内 (prompt template 推荐 AI 用这个)
+- inline 散落 JSON (兜底)
+
+**判定为 final JSON 的特征**: dict 含 `task_id` 且含 `verify_cmd_exit_code`。
+
+### Unified CLI（PR #25 实证）
+
+C2 的 CLI 入口**必须**通过 v4 顶层 unified dispatcher (`suiyin_flow.cli:main`) 而非直接挂 `c2_executor.cli`。
+
+**为什么**: v4 一个 binary `suiyin-flow` 既需要 `verify`（C4）又需要 `task`（C2）。直接挂任一会让另一个不可达 (P0 spike 实例：PR #25 之前 `suiyin-flow task ...` 报 "invalid choice: 'task' (choose from verify)")。
+
+**Dispatcher 设计**:
+
+```python
+# src/suiyin_flow/cli.py
+def main(argv):
+    cmd = argv[0]
+    if cmd == "verify":
+        return c4_verify.cli.main(argv)
+    if cmd == "task":
+        return c2_executor.cli.main(argv)
+    # ... help / unknown handling
+```
+
+`pyproject.toml`:
+```toml
+[project.scripts]
+suiyin-flow = "suiyin_flow.cli:main"
+```
+
+**未来扩展**: C3 / C5 / C8 等组件加入时, 各自加 subcommand 路由（`suiyin-flow arbiter` / `suiyin-flow review` / `suiyin-flow deploy`）。
 
 ### 跨平台兼容性（macOS / Linux / Windows）
 
-v4 主跑 macOS + Linux，但 Python impl 必须兼容 Windows（业务项目可能跑 Windows dev box）。**约束**：
+**这是 constitution NC-5（跨平台支持）的具体实现**。v4 主跑 macOS + Linux，但 Python impl 必须兼容 Windows（业务项目可能跑 Windows dev box）。**约束**：
 
 | 项 | 规则 | 反面例子 |
 |---|---|---|
@@ -376,14 +439,17 @@ suiyin_flow/
 
 - **NC-1**（零 SaaS）：gh CLI 可选；无 gh 降级本地分支 ✅
 - **NC-3**（业务项目独立）：worktree 在业务项目 `<repo_root>/worktrees/` 下，不在 v4 仓 ✅
+- **NC-4**（worktree 隔离即安全边界）：§3.1 I1/I2 + Session 调用模式节直接 enforce ✅
+- **NC-5**（跨平台）：上方"跨平台兼容性"节 + Session 调用模式跨 macOS/Linux/Windows 验过 ✅
 - **PC-1**（最简实现）：CLI 优先而非 SDK；retry 上限硬性 ≤ 3 ✅
 
 ---
 
-**Version**: v0.1.1-draft
-**Last Updated**: 2026-05-20
-**Status**: draft — 待 P0 spike 验证 Q2-2 / Q2-3 后升 v0.2
+**Version**: v0.1.2-draft
+**Last Updated**: 2026-05-24
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；待 P1.2 (C5+C6) 后整体稳态
 
 **Changelog**:
+- v0.1.2 (2026-05-24): **P1.1.2 反推** — §3.1 I2 加 NC-4 reference；§3.2 加 diff_stats fallback 说明；§7 加 "Session 调用模式" 节（4 个必需 flag + stream-json 解析优先级，PR #21+23+25 实证）；§7 加 "Unified CLI" 节（PR #25 实证）；§7 跨平台节加 NC-5 reference；§7 跟 constitution 关系加 NC-4 / NC-5
 - v0.1.1 (2026-05-20): §1 Purpose 加"含闭环 verify"；§2.2 Output schema 强化（conditionality + path 绝对/相对标注 + failed fallback + 2 examples）；新增 `pr_created` 字段消歧；§7 加"跨平台兼容性"节
 - v0.1.0 (2026-05-20): 初稿
