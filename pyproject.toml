@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "suiyin-flow"
+version = "0.1.0"
+description = "碎银 v4 SDD 工具链 — C4 Verify Contract + C2 Task Executor 实现"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "碎银 v4" },
+]
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2.5",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-json-report>=1.5",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+# CLI 入口由 cli.py 提供（task #6 落地）
+# [project.scripts]
+# suiyin-flow = "suiyin_flow.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/suiyin_flow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-ra --strict-markers"
+markers = [
+    "ac: 标记 AC test，命名约定 test_AC_N_... (Fork G)",
+]
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+ignore = [
+    # v4 PC-3 中文优先: docstring / 字符串里允许全角中文标点 (，；：等)
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B"]  # 测试里允许 assert 之类
+
+[tool.mypy]
+files = ["src", "tests"]
+strict = true
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+
+# psutil 自带 type stubs (无需 ignore_missing_imports)；如未来用其他无 stub 的库再加 overrides
