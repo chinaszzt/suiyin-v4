@@ -19,7 +19,7 @@
 
 ```yaml
 type: object
-required: [pr_ref, spec_ref, plan_ref, constitution_ref, criticality, repo_root]
+required: [pr_ref, spec_ref, plan_ref, constitution_ref, task_id, criticality, repo_root]
 properties:
   pr_ref:
     type: string
@@ -42,7 +42,11 @@ properties:
   task_id:
     type: string
     pattern: '^T-\d{3,}$'
-    description: optional；C2 闭环调用时透传，让 finding 能回链 task
+    description: |
+      **required (v0.1.1)**：所有 PR 必须来自 task（含 hotfix / Initiative），
+      C5 强制要求 task_id 关联回 origin task。让 finding 可回链 task、跨 attempt
+      audit、verify_report 关联。设计上 C5 不审"非 task PR"（这种情况应当先
+      把任务 task 化, 而非走 C5 ad-hoc review）。
   criticality:
     enum: [low, medium, high]
     description: |
@@ -69,10 +73,15 @@ type: object
 required: [verdict, findings, reviewed_at, session_id, contract_version]
 properties:
   verdict:
-    enum: [approve, request_changes, block]
+    enum: [approve, block]
     description: |
-      always；按 invariants I3-I5 由 findings severity 推导：
-      含 high/critical → block；含 medium → request_changes；only low → approve
+      always；按 invariants I3-I5 由 finding **category** 决定 (v0.1.1 改"按 category"
+      替代旧"按 severity"): block 集合 (硬契约违反) = nc_violation / security /
+      spec_drift / ac_uncovered；其他 (complexity / pc_violation / cross_platform /
+      reusable_knowledge_not_captured) → approve + finding 留 audit trail。
+
+      去掉 `request_changes` (v0.1.1)：v4 D-autonomous 流派 "人只干 spec/plan/deploy"，
+      没人介入 PR review 中间档。verdict 二元化与 C6 Gate Contract 简化一致。
   findings:
     type: array
     description: |
@@ -159,9 +168,16 @@ properties:
 
 - **I1**: C5 session 独立, fresh context, 不继承 C2 implementer 的任何 log / state / stdout。隔离边界：仅读 spec / plan / constitution / PR diff / verify_report.json，禁止读 `.suiyin/sessions/attempt-*.log`。**这是 C5 区别于 C2 self-review 的核心价值**——避免被 implementer 视角污染。
 - **I2**: 每条 finding 四字段齐 (`severity` / `category` / `location` / `suggested_fix`)。缺任一字段 → finding 无效，review 整体视为 schema violation。
-- **I3**: 含 severity=`high` 或 `critical` 的 finding → `verdict=block`（C5 自己**不可降级**，降级权在 C6 Gate Contract 配合人工 `human:block` 标签）。
-- **I4**: 含 severity=`medium` 但无 high/critical → `verdict=request_changes`。
-- **I5**: 只有 severity=`low` 或 findings 为空 → `verdict=approve`。
+- **I3** (v0.1.1 重写): verdict **按 finding category 决定**, 不按 severity:
+  - **block 集合** (硬契约违反, 不可 override): `nc_violation` / `security` /
+    `spec_drift` / `ac_uncovered`
+  - **approve + finding audit** (软违规): `complexity` / `pc_violation` /
+    `cross_platform` / `reusable_knowledge_not_captured`
+- **I4** (v0.1.1 重写): findings 为空 → `verdict=approve`。
+- **I5** (v0.1.1 重写): finding 含 block-set category 任一 (regardless of severity)
+  → `verdict=block`。**block recovery 由 §7 "Block Recovery" 节定义** —
+  P1.2 阶段 R1 (auto-label `human:block` + 等人介入), P1.3+ R2 (C2 retry with
+  feedback), P3+ R3 (Codex 仲裁)。
 - **I6**: `reusable_knowledge_not_captured` finding 即使 severity=`low` 也必须出现在 output（C12 Knowledge Capture 持续触发, 不阻断 merge 但持续提示沉淀, 见 discussion-notes.md §十）。
 - **I7**: C5 跑在隔离 worktree 或临时 dir，**不**直接动主仓 working tree（**NC-4 worktree 隔离即安全边界** 的具体实现 — claude CLI `--permission-mode bypassPermissions` 的安全边界即 review 临时 dir 边界）。
 - **I8**: 同一 PR 二次 review（attempt > 1）必须用全新 session_id；不允许复用上次 session 状态（避免缓存污染）。
@@ -225,14 +241,16 @@ properties:
    - **spec_drift**: PR diff 是否引入 spec 未声明的能力 / 漏实现 spec 声明的能力
    - **reusable_knowledge_not_captured** (C12): spike 学到的 invariant 是否回流到 spec / constitution
 5. 产生 findings 列表（每条 4 字段齐）
-6. 按 invariant I3-I5 决 verdict (high/critical → block；medium → request_changes；only low / empty → approve)
+6. 按 invariant I3-I5 决 verdict (v0.1.1: **按 category 决定** — block 集合
+   {nc_violation, security, spec_drift, ac_uncovered} 任一出现 → block;
+   其他 / 空 → approve + audit)
 7. 输出符合 §2.2 schema 的 JSON
 
 ## Output (session 最后一行必须输出 ```json``` code block)
 
 ```json
 {
-  "verdict": "approve | request_changes | block",
+  "verdict": "approve | block",
   "findings": [
     {
       "severity": "low | medium | high | critical",
@@ -254,7 +272,7 @@ properties:
 - **严禁读 implementer session log** (I1) — `.suiyin/sessions/*` 不在 review scope
 - **严禁直接动主仓** (I7, NC-4) — review 临时 dir 是 bypassPermissions 的安全边界
 - findings 必须 4 字段齐 (I2)，缺字段整 review 视为 schema violation
-- verdict 严格按 I3-I5 由 severity 推导，**不可降级**
+- verdict 严格按 I3-I5 **由 finding category 决定** (v0.1.1, 不按 severity), **不可降级**
 - `reusable_knowledge_not_captured` finding 即使 low 也要列出 (I6, C12)
 - 失败时输出符合 §2.3 error schema 的 JSON 而非自然语言
 ````
@@ -263,9 +281,9 @@ properties:
 
 > C5 自身的 AC（不是 T-002 dogfood 的 AC-201..208）。每条必须能写出 test 验证。
 
-- **AC-1**: 给定 valid input（spec/plan/constitution + PR diff 都可访问 + verify_report.json 可选），返回 `verdict ∈ {approve, request_changes, block}` 且 `findings` 满足 §2.2 schema（4 字段齐）
-- **AC-2**: 给定 findings 含 1 条 `severity=high`，verdict 必为 `block`（I3 强制，不可降级）
-- **AC-3**: 给定 findings 全 `severity=low`（或空），verdict 必为 `approve`（I5）
+- **AC-1**: 给定 valid input (含 required `task_id`)，返回 `verdict ∈ {approve, block}` 且 `findings` 满足 §2.2 schema（4 字段齐）
+- **AC-2** (v0.1.1 重写): 给定 findings 含 1 条 `category=nc_violation` (任意 severity)，verdict 必为 `block`（I5 按 category，不可降级）
+- **AC-3** (v0.1.1 重写): 给定 findings 全为 block 集合之外的 category (e.g. `complexity` / `pc_violation`)，verdict 必为 `approve`（I3，approve + finding audit）
 - **AC-4**: 给定 spec.md 不存在路径，立即返回 error code `SPEC_NOT_FOUND`，不启动 session
 - **AC-5**: review session 跑超 `session_timeout_seconds`，返回 `TIMEOUT` 且进程被 `kill -9`
 - **AC-6**: C5 session 启动后**不读**任何 `.suiyin/sessions/attempt-*.log` 文件（I1 隔离，可通过 audit log 验证）
@@ -283,6 +301,8 @@ properties:
 - **Q5-2**: `complexity` finding 在 C11 未落地阶段是否完全降级为 jscpd 语法级查重？还是禁用 complexity 类直到 C11 就位？当前倾向降级以保持组件可用。
 - **Q5-3**: review 失败（SESSION_CRASHED 重试用尽）时，C6 Gate Contract 应视为 `block` 还是触发人工介入？默认倾向 block + 标记 `c5-failed` 标签等人复审。
 - **Q5-4**: `verify_report_path` 缺失时，C5 是否仍输出 `ac_uncovered` 类 finding？候选：可降级输出（基于 PR diff 中 test 文件名 prefix 解析），但置信度低。
+- **Q5-5** (v0.1.1): **Block Recovery R2 设计** — C5 block 后, C2 自动 retry with C5 findings as feedback prompt (P1.3 阶段加 C2 v0.2 retry-with-feedback 子能力)。候选: findings 列表 → 新增 prompt section "上次 review 发现的问题" → C2 再 attempt → 仍 block 后退到 R1 (human:block 标签)。retry budget 待定 (≤2?)。见 §7 "Block Recovery" 节。
+- **Q5-6** (v0.1.1): **Block Recovery R3 设计** — Codex 仲裁 (Claude + Codex 双 reviewer 取交集), 跟 Q5 N=2 仲裁可整合。需要 Codex CLI 集成基础设施 (P3+ todo)。
 
 ## 7. Implementation Notes
 
@@ -317,6 +337,33 @@ def main(argv):
 ### 跨平台兼容性（macOS / Linux / Windows）
 
 **这是 constitution NC-5 的具体实现**。规则同 C2 §7 跨平台节（`pathlib.Path` / `psutil.Process.kill()` / `shell=False` / `shutil.which` + venv binary fallback / `encoding='utf-8'` 等），不重复。
+
+### Block Recovery（v0.1.1 新增）
+
+C5 verdict 二元化后 (没 `request_changes` 缓冲), `verdict=block` = PR 不 merge。
+v4 D-autonomous 流派 "人只干 spec/plan/deploy" → block 后必须有自动 recovery，
+否则 task 死锁等人审。
+
+**3 个 recovery 阶段** (按 P1.2 → P1.3 → P3+ 渐进落地):
+
+| 阶段 | 路线 | 说明 |
+|---|---|---|
+| **R1** (P1.2) | C5 block → 自动给 PR 加 `human:block` 标签 → 用户介入 fix | 最简兜底, 短期可用. v4 当前阶段 acceptable |
+| **R2** (P1.3) | C5 block → C2 retry with findings as feedback prompt (max 2 次) → 仍 block 退 R1 | 真 SDD 闭环, 见 §6 Q5-5; toolchain.md C2 v0.2 加 retry-with-feedback 子能力 |
+| **R3** (P3+) | 加 Codex 仲裁 (双 reviewer 取交集) → 减小 single-reviewer false positive | 见 §6 Q5-6 + Q5 (N=2 仲裁) |
+
+**当前 P1.2 阶段**: 实现 R1。C5 输出 verdict=block 时 caller (C6 Gate Contract 或
+直接是 CLI) 必须:
+1. 通过 `gh pr edit <pr> --add-label "human:block"` 标 PR
+2. 在 PR comment 中 inline finding 列表 (`gh pr comment`)
+3. 不重试 (R2 P1.3 加)
+
+**未来 P1.3 R2 设计预览** (Q5-5):
+- C2 v0.2 加 `--review-feedback` flag 接收 C5 findings JSON
+- prompt 注入新 section "## 上次 review 发现的问题" 含 findings
+- C2 重 attempt with this feedback
+- Retry budget: ≤2 with feedback (跟原 max_retries 解耦)
+- 仍 block → fall through R1
 
 ### Finding Category 设计要点
 
@@ -368,9 +415,17 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.0-draft
+**Version**: v0.1.1-draft
 **Last Updated**: 2026-05-24
-**Status**: draft — P1.2 起步 spec, 待 spike 验证 Q5 (N=2 仲裁) 后转 v0.2
+**Status**: draft — P1.2 起步 spec, 待 spike 验证 Q5 / Q5-5 (R2 retry-with-feedback) 后转 v0.2
 
 **Changelog**:
+- v0.1.1 (2026-05-24): **PR #29 review 反馈修订** (user 审 v0.1.0 后):
+  - §2.1 `task_id` 进 required (所有 PR 必走 task, 含 hotfix / Initiative)
+  - §2.2 verdict enum 简化 `{approve, request_changes, block}` → `{approve, block}` (v4 D-autonomous "人只干 spec/plan/deploy" → 没 request_changes 缓冲)
+  - §3.1 I3/I4/I5 重写: verdict **按 category** 决定 (block 集合 = nc_violation/security/spec_drift/ac_uncovered；其他 → approve + audit), 替代旧"按 severity"
+  - §4 prompt + Output JSON 同步去 request_changes
+  - §5 AC-2/AC-3 同步重写 (按 category 验)
+  - §6 加 Q5-5 (R2 C2 retry-with-feedback) + Q5-6 (R3 Codex 仲裁)
+  - §7 加 "Block Recovery" 节: R1 (P1.2 human:block 标签) / R2 (P1.3 retry-with-feedback) / R3 (P3+ Codex) 渐进路线
 - v0.1.0 (2026-05-24): 初稿 (T-002 dogfood 产出，dogfood/T-002/spec.md AC-201..AC-208 驱动)
