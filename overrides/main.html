@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{#
+  PR preview banner — 仅在 hooks/pr_banner.py 探测到 PR 时显示。
+  - 改动文件页：突出「⇆ 并排对比 main」入口
+  - 未改动文件页：折叠改动文件清单（业务专家可一键跳过去）
+  - main / 本地 build：config.extra.pr_info 不存在，整段不渲染
+#}
+{% block announce %}
+  {% if config.extra.pr_info %}
+    {% set pr = config.extra.pr_info %}
+    {% set page_path = page.url.rstrip('/') if page else '' %}
+    {% set is_changed = page_path in pr.changed_paths %}
+
+    {% if is_changed %}
+      <strong>🔄 本页是 PR #{{ pr.number }} 的改动文件</strong>
+      &middot;
+      <a href="/_compare/?page={{ page_path }}" target="_blank" rel="noopener" style="font-weight: 700;">
+        ⇆ 并排对比 main
+      </a>
+      &middot;
+      <a href="{{ pr.pr_url }}" target="_blank" rel="noopener">PR #{{ pr.number }}</a>
+    {% else %}
+      📄 <a href="{{ pr.pr_url }}" target="_blank" rel="noopener">PR #{{ pr.number }}</a> preview
+      &middot;
+      改动文件：
+      {% for p in pr.changed_paths %}
+        <a href="/{{ p }}/">{{ p.split('/')[-1] }}</a>{% if not loop.last %} &middot; {% endif %}
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+{% endblock %}

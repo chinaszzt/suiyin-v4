@@ -10,6 +10,7 @@ site_dir: site
 
 theme:
   name: material
+  custom_dir: overrides
   language: zh
   palette:
     - media: "(prefers-color-scheme: light)"
@@ -81,6 +82,9 @@ plugins:
       lang:
         - zh
         - en
+
+hooks:
+  - hooks/pr_banner.py
 
 extra:
   social:
