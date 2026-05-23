@@ -95,7 +95,10 @@ class L1Report(BaseModel):
     checks: list[L1Check] = Field(default_factory=list)
 
 
-class TestResult(BaseModel):
+class TestOutcome(BaseModel):
+    # pytest opt-out: Pydantic model 不是 test class, 阻止 pytest 试图收集.
+    __test__ = False
+
     test_name: str
     ac_prefix: str = Field(
         default="",
@@ -115,7 +118,7 @@ class L2Summary(BaseModel):
 
 class L2Report(BaseModel):
     status: LevelStatus
-    test_results: list[TestResult] = Field(default_factory=list)
+    test_results: list[TestOutcome] = Field(default_factory=list)
     summary: L2Summary = Field(default_factory=L2Summary)
 
 

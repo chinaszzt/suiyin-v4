@@ -16,7 +16,7 @@ from suiyin_flow.c4_verify.contract import (
     MultiAcViolation,
     OverallVerdict,
     Target,
-    TestResult,
+    TestOutcome,
     VerifyReport,
 )
 from suiyin_flow.c4_verify.parser import extract_ac_prefixes
@@ -24,7 +24,7 @@ from suiyin_flow.c4_verify.parser import extract_ac_prefixes
 
 def compute_ac_summary(
     requested: list[str],
-    test_results: list[TestResult],
+    test_results: list[TestOutcome],
 ) -> AcSummary:
     """基于 L2 test results 算 ac_summary.
 

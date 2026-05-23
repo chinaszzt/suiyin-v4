@@ -25,9 +25,8 @@ dev = [
     "mypy>=1.10",
 ]
 
-# CLI 入口由 cli.py 提供（task #6 落地）
-# [project.scripts]
-# suiyin-flow = "suiyin_flow.cli:main"
+[project.scripts]
+suiyin-flow = "suiyin_flow.c4_verify.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/suiyin_flow"]
