@@ -51,6 +51,9 @@ nav:
   - AI 角色 4 档: role-profiles.md
   - C 模块 Spec 模板: component-spec-template.md
   - 讨论记录: discussion-notes.md
+  - 组件 Specs:
+      - C2 — Task Executor: components/c2-task-executor.md
+      - C4 — Verify Contract: components/c4-verify-contract.md
   - ADRs:
       - 模板: adrs/0000-adr-template.md
       - 0001 — Constitution v0.1→v0.2 分层修正: adrs/0001-constitution-v0.1-to-v0.2-layering-fix.md

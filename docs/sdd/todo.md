@@ -7,7 +7,7 @@
 
 ---
 
-## 〇、当前状态（截至 2026-05-19）
+## 〇、当前状态（截至 2026-05-20）
 
 ### v4 工具链已具备的能力
 
@@ -23,6 +23,8 @@
 | 14 个 `/sy-*` slash commands | `skills/` | ✅ |
 | Constitution bootstrap 特例（auto-commit + push） | `runtime/extensions.yml` | ✅ |
 | Git 类命令 allowlist | `runtime/claude-settings.json` | ✅ |
+| **C2 Task Executor spec** | `components/c2-task-executor.md` v0.1.1 | ✅ (P1.1 阶段 1，user 审 → v0.1.1 修订) |
+| **C4 Verify Contract spec** | `components/c4-verify-contract.md` v0.1.1 | ✅ (P1.1 阶段 1，user 审 → v0.1.1 修订) |
 
 ### v5 dogfood 第一次验证
 
@@ -49,15 +51,25 @@ User 改 v0.2 时去掉了 5 铁律和量化指标（属于 SDD 通用 / 业务 
 
 **下游校验**：plan-template.md 的 Constitution Check 章节用抽象引用，不绑旧 Principle I-V 名字 → 不断；speckit.manifest.json hash 不更新（manifest 无消费者，保留 spec-kit 0.8.10 上游指纹意义）。
 
-### P0.2 第一个 ADR
+### P0.2 第一个 ADR ✅ (2026-05-20)
 
 User v0.2 提交属于"修改 constitution 的重大变更"，按 governance 应该有 ADR。
 
-- [ ] 创建 `docs/sdd/adrs/` 目录
-- [ ] 写 ADR-001：constitution v0.1 → v0.2 层次混淆修正（追溯文档）
-- [ ] 创建 `adr-template.md` 模板
+- [x] 创建 `docs/sdd/adrs/` 目录
+- [x] 写 ADR-0001：constitution v0.1 → v0.2 层次混淆修正（追溯文档）
+- [x] 创建 `0000-adr-template.md` 模板（MADR 风格 8 章节）
 
-预估：1-2 小时
+实际：commit d932078
+
+### P0.3 ADR-0002：v4 技术栈 = Python（Q-C-2 拍板）
+
+P1.1 阶段 1 时拍 Q-C-2 = Python（C2 §0 / C4 §7 已记录）。按 governance §8.1，关闭 constitution Open Question 属于 substantive 变更，应有 ADR。
+
+- [ ] 写 ADR-0002：v4 工具链 CLI = Python 3.11+（理由 + 候选对比 shell / Bun / Go）
+- [ ] 更新 `constitution.md` §6b Q-C-2 状态为 "已拍：见 ADR-0002"，bump v0.2.0 → v0.2.1 (PATCH，关 Q 不改 NC)
+- [ ] PR 走人审（constitution 不允许 AI 自动 merge）
+
+预估：1 小时
 
 ---
 
@@ -67,17 +79,59 @@ User v0.2 提交属于"修改 constitution 的重大变更"，按 governance 应
 
 ### P1.1 P0 MVP — 跑通"AI 写一个 task + 测试通过"最小闭环
 
-- [ ] **C2 Task Executor** — 单 task 从 spec 到 PR 自动实现
-  - 子任务：写 component spec (`components/c2-task-executor.md`)
-  - 子任务：worktree 创建 + Claude Code headless session
-  - 子任务：prompt 模板 + task context 注入
-  - 子任务：失败重试 (≤3) + timeout
-  - 见 `toolchain.md` C2 节，未决 Q2
-- [ ] **C4 Verify Contract**（仅 L1 + L2）
-  - 子任务：写 contract spec (`components/c4-verify-contract.md`)
-  - 子任务：lefthook 配置 lint + tests
-  - 子任务：verify_report.json schema
-  - 见 `toolchain.md` C4 节，未决 Q4
+**阶段 1：写 spec** ✅ (2026-05-20)
+
+- [x] **C2 Task Executor spec** — `components/c2-task-executor.md` (v0.1.0-draft)
+  - Q2-1 已拍：单 session > 2h 强制 kill
+  - Q-C-2 已拍：技术栈 = Python
+  - 暴露 Q2-2/3/4/5（CLI vs SDK / retry 策略 / push 降级 / gitignore）
+- [x] **C4 Verify Contract spec** — `components/c4-verify-contract.md` (v0.1.0-draft)
+  - Q4-1 已拍：AC↔test 命名约定 (Fork G)
+  - I2 / I7 写入：1 test 名只能 1 AC prefix；AC 重命名 protocol
+  - 实现谱系明确：(a) 本地 lefthook (P0) → (d) 混合 (P1+)
+  - L3/L4/L5 留 schema 槽位但 P0 不实现（请求时报 LEVEL_NOT_IMPLEMENTED）
+
+**阶段 2：实现**（P0 MVP，~3-5 天 dogfood + 1-2 周打磨）
+
+- [ ] **C2 Task Executor impl**
+  - 子任务：Python CLI 入口 `suiyin-flow task run` + Pydantic schema（C2 §2）
+  - 子任务：worktree.py（git worktree add/remove 包装）
+  - 子任务：session.py（Claude Code headless 调用 + `kill -9` 整树超时）
+  - 子任务：prompt.py（C2 §4 模板填充）
+  - 子任务：retry.py（VERIFY_FAILED/SESSION_CRASHED 重试 ≤3；TIMEOUT 重试 1）
+  - 子任务：gh CLI 可选降级（无 gh → 返回本地分支名 + `pr_created: false`）
+  - 子任务：跑通 C2 §5 AC-1..AC-9（pytest，test 命名 `test_AC_N_...`）
+  - **P0 spike 待验证**：Q2-2 (CLI 还是 SDK) / Q2-3 (retry 策略)
+- [ ] **C4 Verify Contract impl** (L1 + L2)
+  - 子任务：Python CLI 入口 `suiyin-flow verify run` + Pydantic schema（C4 §2.2）
+  - 子任务：toolchain 探测（package.json / pyproject.toml / pubspec.yaml）
+  - 子任务：lefthook.yml 模板（P0 仅 Python + Dart 两套）
+  - 子任务：pytest JSON reporter 适配 + Dart `flutter test --reporter json` 适配
+  - 子任务：test name → AC prefix 解析 + multi_ac_violation 检测
+  - 子任务：verify_report.json 落盘 + ac_summary 计算
+  - 子任务：跑通 C4 §5 AC-1..AC-8
+- [ ] **Dogfood task**：用 C2 + C4 实现 C5 AI Reviewer spec（自举验证）
+
+#### 阶段 2 验证 protocol（dogfood 时执行）
+
+P1.1 阶段 2 验证矩阵存在 bootstrap 缺位：C5 (独立 reviewer) / C6 (gate) 都未实现，AC 自检 +
+人 final review 是仅有兜底。明确两条增强 protocol：
+
+- [ ] **A. spec 冻结 + 逐 AC 审计表**
+  - 阶段 2 PR 禁动 `components/c2-*.md` / `components/c4-*.md` spec（spec 已在阶段 1 PR
+    人审过，实现期作为 source of truth 冻结）
+  - 实现 + test 完成后，PR description 强制附逐 AC 审计表：
+
+    | AC | spec 原文（摘） | test 函数 | test 实际验的行为 | 实现位置 |
+
+  - 人 review 时按表 scan "spec ↔ test 实际对齐性"，半小时事
+- [ ] **C. dogfood 选"产物可读"task**
+  - 阶段 2 实现完后，用 C2 跑一个**文档类** task（产出人能直接判质量）
+  - 候选：用 C2 实现 P0.3 ADR-0002（v4 技术栈 Python 拍板），人读 ADR 看是否合理
+  - 不选"写代码"的 dogfood（产出太抽象，无法快速判质量）
+- [ ] **B. C5 v0.1 简陋版（已决定 skip）**
+  - 决策：不在 P1.1 提前做 C5，避免给 P1.2 设计透支锚定
+  - 阶段 2 接受"AC 中间段自检"风险，靠 A + C + 人 final review 兜底
 
 预估：3-5 天 dogfood，1-2 周打磨
 
@@ -171,6 +225,12 @@ User v0.2 提交属于"修改 constitution 的重大变更"，按 governance 应
   - 当前只有 `sy-constitution`，未来加 `sy-domain-glossary`（团队立基）
 - [ ] **季度复杂度盘点 trigger 机制**（Fork M 是 TODO stub）
 - [ ] **C11 missed reuse 原因分析记录格式**（Fork R）
+- [ ] **C12 Knowledge Capture Prompt**（2026-05-20 识别，post-MVP follow-up）
+  - 起因：P1.1 阶段 1 审 spec 时发现"非 post-merge 反思时刻"沉淀 gap（例：跨平台兼容性 reusable 约束默默活在 C2/C4 §7 没升级）
+  - 性质：prompt / ritual / lint 规则，不是图谱
+  - 设计：触发时刻 + 沉淀目标层 mapping protocol + C5 finding category `reusable_knowledge_not_captured`
+  - 必须前的依赖：P1.2 C5 Reviewer 设计前回头讨论（C5 finding enum 需要这条时拍）
+  - 详见 `discussion-notes.md` §十、`diagrams.md` 图 11 C12 dashed placeholder
 
 ---
 
@@ -231,6 +291,6 @@ v4 是 SDD 工具链开发项目本身（不是业务项目，业务在 suiyin-v
 
 ---
 
-**Version**: v0.1.0
-**Last Updated**: 2026-05-19
+**Version**: v0.1.1
+**Last Updated**: 2026-05-20
 **Status**: Living document — 完成 TODO 项时打勾，新增需求加进对应 P 级

@@ -486,6 +486,64 @@ constitution 先于 spec 是 SDD 标准顺序，但 constitution v0.1 应该是*
 
 ---
 
-**Version**: 0.3.0-WIP
-**Last Updated**: 2026-05-18
-**Status**: review 第一轮完成；待开 constitution.md v0.1 + 第一个 spec dogfood
+---
+
+## 十、C12 Knowledge Capture Prompt（post-MVP follow-up，2026-05-20）
+
+### 起因
+
+P1.1 阶段 1 审 spec 时 user 提出："**一个知识图谱，完成项目时评估是否写入？plan 阶段读取，就很好了？**"
+
+这本质是 v4 已有 C10 + C11 + domain-glossary 的设计动机 user 独立想到。但他的提法暴露**一个真 gap**。
+
+### v4 现有的项目知识分层（已设计）
+
+| 层 | 载体 | 触发 |
+|---|---|---|
+| 代码层 | C11 函数 registry + embedding | post-merge |
+| spec 层 | C10 Spec Overlap Detector | plan 阶段 + post-merge |
+| 概念层 | `docs/sdd/domain-glossary.md` | 人主写 + AI 辅助 |
+| 决策层 | `adrs/NNNN-*.md` | 决策时人写 |
+| 约束层 | constitution NC/PC | governance §8 ADR |
+| 流派层 | methodology.md | 团队对齐 |
+
+### Gap：非 post-merge 时刻的知识沉淀
+
+C10/C11 都是 **post-merge trigger**。但很多 reusable 知识在**审 spec / debug / 设计反思**时显形——当前**没机制**让 AI/人停一下问"这是项目知识吗，沉淀去哪一层"。
+
+**具体例子（PR #11 审 spec 时发生）**：user 提"Windows/macOS 兼容性要注意"——这是个 reusable 约束（不只 C2/C4，未来所有 v4 工具组件都该考虑）。理论上应升级为 constitution PC-4 或写进 toolchain.md AI 提案审查清单。但当前默默只活在 C2 §7 + C4 §7 两份 spec 里，下个组件 spec 写的人/AI 不一定看到。
+
+### Trigger 全枚举
+
+| Trigger | v4 现有 | 缺什么 |
+|---|---|---|
+| post-merge | C10 / C11 sweep | ✅ |
+| spec amendment | ADR governance | ✅ |
+| constitution amendment | ADR + 人审 | ✅ |
+| **审 spec 发现 reusable 约束** | ❌ | **gap** |
+| **debug 后复盘**（Bug Type B/C） | methodology §2 提了但流程未细化 | **gap** |
+| **设计讨论显形隐性假设** | ❌ | **gap** |
+
+### 候选设计：C12 Knowledge Capture Prompt
+
+**性质**：不是图谱，是个 **prompt / ritual / lint 规则**。在反思时刻让 AI / 人主动问"是否沉淀，沉淀到哪一层"。
+
+**最轻实现（PC-1 最简实现优先）**：
+- 文档：`docs/sdd/knowledge-capture-protocol.md` 列触发时刻 + 沉淀目标层 mapping
+- prompt 注入：`/sy-clarify` `/sy-analyze` 等加一句"若本轮发现 reusable 知识，请提示沉淀"
+- C5 AI Reviewer finding category：`reusable_knowledge_not_captured`
+
+### 决策（2026-05-20）
+
+**先不做，集中精力出 P1.1 MVP**。但要"放好位置 + 相关信息"作为 known follow-up：
+- 本节记录（discussion-notes.md §十）
+- `diagrams.md` 图 11 加 C12 dashed placeholder（"post-MVP"）
+- `todo.md` 加 P3 follow-up
+
+待 P1.2 (C5 Reviewer) 设计前回头讨论——C5 finding category 需要这条 enum 时才必须拍。
+
+---
+
+**Version**: 0.3.1-WIP
+**Last Updated**: 2026-05-20
+**Status**: review 第一轮完成；待开 constitution.md v0.1 + 第一个 spec dogfood；C12 作为 post-MVP follow-up 记录在 §十
