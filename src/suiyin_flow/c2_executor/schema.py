@@ -10,7 +10,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 # 跟 docs/sdd/components/c2-task-executor.md 顶部 Version 同步
-SCHEMA_VERSION: str = "v0.1.1"
+# v0.1.2 (2026-05-24): session.py _maybe_parse_final_output 支持 Claude 真实 stream-json
+# 多 event 形态 (result.result + assistant text content + code block JSON 抽取).
+# PATCH bump (非 schema 变更, 仅 impl 健壮).
+SCHEMA_VERSION: str = "v0.1.2"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
