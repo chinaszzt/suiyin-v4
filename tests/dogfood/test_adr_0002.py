@@ -26,24 +26,31 @@ def test_AC_101_adr_0002_exists_with_template_structure() -> None:
 
 
 def test_AC_102_constitution_bumped_to_v0_2_1() -> None:
+    """AC-102 timeline-stable 版: 验"v0.2.1 这个 release 发生过", 不验"current = v0.2.1".
+
+    PR #27 把 constitution 升到 v0.2.2 后, 原来 assert "**Version**: v0.2.1" 失败.
+    Dogfood test 是历史 audit, 不应阻塞后续 constitution bump. 改写为 version history
+    + Q-C-2 状态 (这些是历史事实, 不会被后续 bump 抹掉).
+    """
     constitution_path = REPO_ROOT / "docs" / "sdd" / "constitution.md"
     assert constitution_path.exists(), f"missing constitution: {constitution_path}"
 
     content = constitution_path.read_text(encoding="utf-8")
 
-    # 顶部 metadata Version 升 v0.2.1
-    assert "**Version**: v0.2.1" in content, "constitution 顶部 metadata 必须 bump 到 v0.2.1"
-
-    # §6b Q-C-2 关闭，引用 ADR-0002
+    # §6b Q-C-2 关闭，引用 ADR-0002 (timeline-stable: 一旦关就不会再 reopen)
     q_c_2_lines = [
         line for line in content.splitlines() if "Q-C-2" in line and "ADR-0002" in line
     ]
     assert q_c_2_lines, "§6b Q-C-2 行必须更新为引用 ADR-0002"
     assert any("已拍" in line for line in q_c_2_lines), "§6b Q-C-2 行必须标 '已拍'"
 
-    # §9 Version History 表加 v0.2.1 行 (2026-05-24)
+    # §9 Version History 表加 v0.2.1 行 (2026-05-24) — historical record, 永远在
     version_table_lines = [
         line for line in content.splitlines()
         if line.startswith("| v0.2.1") and "2026-05-24" in line
     ]
     assert version_table_lines, "§9 Version History 表必须含 v0.2.1 / 2026-05-24 行"
+
+    # 不再 assert 顶部 metadata version (会被 v0.2.2 等后续 bump 失效).
+    # Dogfood AC 的语义是 "v0.2.1 bump 发生过", 由 version history 表证, 而非
+    # current metadata snapshot.
