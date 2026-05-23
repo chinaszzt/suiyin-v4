@@ -23,6 +23,7 @@ dev = [
     "pytest-json-report>=1.5",
     "ruff>=0.5",
     "mypy>=1.10",
+    "types-psutil",  # mypy stubs for psutil (C2 session.py 用 psutil.Process.kill)
 ]
 
 [project.scripts]
@@ -64,4 +65,4 @@ python_version = "3.11"
 warn_unused_configs = true
 warn_redundant_casts = true
 
-# psutil 自带 type stubs (无需 ignore_missing_imports)；如未来用其他无 stub 的库再加 overrides
+# types-psutil 提供 psutil stubs；如未来其他库无 stub 再加 [[tool.mypy.overrides]]
