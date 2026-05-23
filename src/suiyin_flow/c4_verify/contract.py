@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 
 # 跟 docs/sdd/components/c4-verify-contract.md 顶部 Version 同步.
 # Breaking change → MAJOR bump (I4 invariant).
-CONTRACT_VERSION: str = "v0.1.1"
+# v0.1.2 (2026-05-24): require_tool 加 venv fallback (P0 spike 修, 非 schema 变更, PATCH bump).
+CONTRACT_VERSION: str = "v0.1.2"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema

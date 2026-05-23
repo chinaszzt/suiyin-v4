@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -22,16 +24,40 @@ STDOUT_TAIL_MAX = 4000
 DEFAULT_TIMEOUT_SECONDS = 600.0
 
 
+def _venv_bin_candidates(name: str) -> list[Path]:
+    """当前 Python 解释器的 bin/Scripts 目录下的工具候选路径 (跨平台)."""
+    bin_dir = Path(sys.executable).parent
+    candidates = [bin_dir / name]
+    if os.name == "nt":  # Windows
+        candidates.extend([bin_dir / f"{name}.exe", bin_dir / f"{name}.bat"])
+    return candidates
+
+
 def require_tool(name: str) -> str:
-    """探测工具二进制绝对路径; 找不到 raise TOOLCHAIN_NOT_FOUND."""
+    """探测工具二进制绝对路径; 找不到 raise TOOLCHAIN_NOT_FOUND.
+
+    查找顺序 (P0 spike 发现的 venv portability bug 修复):
+    1. PATH 上找 (shutil.which, 尊重业务项目环境)
+    2. Fallback 到当前 Python 解释器的 bin/Scripts 目录 (venv 没 activate
+       时仍能找到 ruff/mypy/pytest)
+    """
+    # 1. PATH 优先
     path = shutil.which(name)
-    if not path:
-        raise VerifyContractError(
-            "TOOLCHAIN_NOT_FOUND",
-            f"Tool not found on PATH: {name}",
-            tool=name,
-        )
-    return path
+    if path:
+        return path
+
+    # 2. Venv fallback (跟 suiyin-flow 装在一起的工具)
+    for candidate in _venv_bin_candidates(name):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+
+    raise VerifyContractError(
+        "TOOLCHAIN_NOT_FOUND",
+        f"Tool not found on PATH or in {Path(sys.executable).parent}: {name}",
+        tool=name,
+        searched_path=os.environ.get("PATH", ""),
+        searched_venv_bin=str(Path(sys.executable).parent),
+    )
 
 
 def run_subprocess(
