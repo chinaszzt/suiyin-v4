@@ -234,3 +234,11 @@ v4 是 SDD 工具链开发项目本身（不是业务项目，业务在 suiyin-v
 **Version**: v0.1.0
 **Last Updated**: 2026-05-19
 **Status**: Living document — 完成 TODO 项时打勾，新增需求加进对应 P 级
+
+---
+
+> **[测试 marker — 本 PR 不合并]**
+>
+> 这一段验证 split-view PR preview 在「修改文件」场景下的表现：
+> 业务专家浏览到本页时，顶部应出现 banner「🔄 本页是 PR #XX 的改动文件 · ⇆ 并排对比 main」，
+> 点击进入 split view 应能看到左侧 main 版（**无此段**）、右侧 PR 版（**含此段**）。
