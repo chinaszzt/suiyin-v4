@@ -16,3 +16,7 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+# suiyin-flow 运行时产物 (verify_report.json / session logs / worktrees/)
+.suiyin/
+/worktrees/
