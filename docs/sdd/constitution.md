@@ -301,7 +301,7 @@ constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC�
 ## 6b. Open Questions
 
 - **Q-C-1**: 完整 NON-NEGOTIABLE 集合 — P0 spike 后定 v1.0（当前 NC-1/2/3 是 NON-NEGOTIABLE）
-- **Q-C-2**: v4 自身技术栈（CLI 用什么语言：Python / Shell / Bun / ...）— 待 C2/C4 实现时定
+- **Q-C-2**: v4 自身技术栈（CLI 用什么语言：Python / Shell / Bun / ...）— 已拍: 见 ADR-0002 (Python 3.11+)
 - **Q-C-3**: ADR template 详细格式 — 第一个 ADR 写完后定型
 - **Q-C-4**: NC-3 (业务项目独立性) 的具体 test 实现 — P0 spike 验证
 
@@ -324,9 +324,10 @@ constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC�
 |---|---|---|
 | v0.1.0 | 2026-05-18 | 初版（含 5 铁律复述，**层次混淆**）|
 | v0.2.0 | 2026-05-18 | **重大重构**：去 SDD 通用内容、加 v4 项目独有约束（NC-1/2/3 + PC-1/2/3）；明确 extends methodology.md；保留 PR #6 引入的 role-profile 边界章节 |
+| v0.2.1 | 2026-05-24 | PATCH: 关闭 Q-C-2 open question (v4 技术栈 = Python 3.11+, 见 ADR-0002) |
 
 ---
 
-**Version**: v0.2.0
-**Last Updated**: 2026-05-18
+**Version**: v0.2.1
+**Last Updated**: 2026-05-24
 **Status**: 暂定，待 P0 spike 跑过后升 v1.0
