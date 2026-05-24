@@ -48,8 +48,10 @@ flowchart TD
     I --> J[Verify Engine C4]
     J -->|fail, retry ≤3| I
     J -->|all pass| K[AI Reviewer C5]
-    K -->|block| I
     K -->|approve| L[Merge Gate C6]
+    K -->|block, R1 P1.2| BR[Block Recovery<br/>+ human:block label<br/>+ comment findings]
+    BR -.->|R2 P1.3 retry-with-feedback| I
+    BR -->|R1 wait for human unlock| L
     L -->|merged to main| M{phase 内所有 task done?}
     M -->|no, next task| I
     M -->|yes| N{所有 phase done?}
@@ -73,6 +75,18 @@ flowchart TD
 
 3 种异常都需要人介入——这跟 L1.D-business profile 一致：执行阶段 AI 自闭环，**异常时人才出来**。
 
+### Block Recovery（D-autonomous 流派硬约束）
+
+从 C5 spec v0.1.1 mini-dogfood "Insight C" 提升（本文档 v0.1.2，2026-05-24）：**C5 verdict 二元化后（仅 `{approve, block}`，去 `request_changes` 缓冲），block 必须配自动 recovery 路径**，否则 task 卡死等人审 — 违背 D-autonomous "人只干 spec/plan/deploy" 流派。来源 [C5 spec §7](components/c5-ai-reviewer.md)。
+
+| 阶段 | 落地 | 路线 | C6 行为 |
+|---|---|---|---|
+| **R1** | P1.2（当前） | C5 block → 自动加 `human:block` 标签 + comment findings → 等人介入 fix | C6 `held + reason=REVIEW_NOT_APPROVE`，触发 R1 副作用，**不重跑 C2/C4/C5** |
+| **R2** | P1.3 | C5 block → C2 retry-with-feedback（max 2 次）→ 仍 block 退 R1 | C6 增加 retry 分支，把 findings 注入 C2 prompt 后重发 |
+| **R3** | P3+ | + Codex 仲裁（Claude + Codex 双 reviewer 取交集）→ 减少 single-reviewer false positive | C6 接 N=2 verdict，分歧时调仲裁 |
+
+**当前 P1.2 阶段强制**: 任何 `verdict=block` → C6 必触发 R1（标签 + comment），不允许静默 hold。详见 [C6 spec §3.1 I7](components/c6-gate-contract.md)。
+
 ### 边的判定规则（spec 阶段要钉死的）
 
 下表的"触发 signal"列是后续 spec 阶段的关键设计决策：
@@ -82,7 +96,7 @@ flowchart TD
 | spec ↔ clarify 反复 | Clarify | Specify | clarify 输出含 unresolved questions |
 | plan → spec（回头） | Plan | Specify | plan 阶段 AI 发现"实现 X 必需的意图 spec 没说"|
 | verify fail → retry | Verify | Task Executor | verify_report.checks 含 fail |
-| review block → retry | AI Reviewer | Task Executor | verdict == "block" 或 "request_changes" |
+| review block → Block Recovery | AI Reviewer | Block Recovery（节内） | `verdict == "block"`（v0.1.1: 已二元化无 `request_changes`）；P1.2=R1 标签+comment；P1.3=R2 retry-with-feedback；P3+=R3 Codex 仲裁。详 Block Recovery 节 |
 | spec drift exception | 任何节点 | Specify (via issue) | AI 实现/审查中发现 spec 自相矛盾 / 有歧义 |
 | cross-spec exception | 任何节点 | 人介入 | diff 影响的文件被其他 spec 引用 |
 | retry exhausted | retry loop | 人介入 | 计数器 ≥3 |
@@ -189,6 +203,10 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 | Q4 | AC ↔ test 映射强制方式 | C4 |
 | Q5 | AI Reviewer 单次还是 N=2 分歧仲裁 | C5 |
 | Q6 | Merge Gate 升级通知渠道 | C6 |
+| Q6-2 | NOT_FF_MERGEABLE 时 rebase 由谁触发（C6 内嵌 / C7 重排 / 人） | C6 / C7 |
+| Q6-3 | `human:block` 标签被移除后是否自动 re-run gate | C6 |
+| Q6-4 | 多次 hold 同一 PR 时 comment 策略（thread vs 新 comment） | C6 |
+| Q6-5 | gate 评估触发时机（显式 CLI / pre-push hook / GH Actions） | C6 / 工程化 |
 | Q7 | phase 内 task 卡住，已 merge 的回滚还是隔离 | C7 |
 | Q8 | Deploy Gate 风险 summary 格式 | C8 |
 | **Q9** | **drift / cross-spec exception 的 AI 自检 prompt 怎么写** | C2 / C4 / C5 |
@@ -210,5 +228,10 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 
 ---
 
-**Version**: 0.1.0-draft
-**Last Updated**: 2026-05-15
+**Version**: 0.1.2-draft
+**Last Updated**: 2026-05-24
+
+### Changelog
+
+- **v0.1.2** (2026-05-24): Insight C 提升 — §二 主流程图 C5 block 边重绘 (R1 P1.2 / R2 P1.3 dotted)；新增 "Block Recovery（D-autonomous 流派硬约束）" 小节；边判定表 "review block" 行从 "→ retry" 改为 "→ Block Recovery" 并去 `request_changes`；§六 加 Q6-2/Q6-3/Q6-4/Q6-5（C6 spec 派生）。版本号从 v0.1.0 直接跳 v0.1.2（含义变化 + 新增小节，per ADR-0001 SemVer）。
+- **v0.1.0** (2026-05-15): 初版
