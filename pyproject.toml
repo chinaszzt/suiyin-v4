@@ -59,6 +59,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B"]  # 测试里允许 assert 之类
+# Prompt 模板文件 — 模板内容含长行 (markdown / JSON example), E501 不强制
+"src/suiyin_flow/*_*/prompt.py" = ["E501"]
 
 [tool.mypy]
 files = ["src", "tests"]
