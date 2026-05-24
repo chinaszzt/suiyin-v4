@@ -151,6 +151,29 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 预估：1 周
 
+---
+
+## P1.2.5 — tasks.yaml → C2 adapter（窄义 MVP 真可用）
+
+**为什么**: C6 完成后窄义 MVP 闭环达成（C2→C4→C5→C6），但 task 来源仍是**人手写** `dogfood/T-NNN/{spec.md, plan.md}` + 手敲 `suiyin-flow task run` CLI args。用户不应该这样用。spec-kit Layer 1 `/sy-tasks` 已经能生成 `tasks.yaml`（Fork A 拍板 yaml 是 task 真相载体），但跟 C2 还没 wire。
+
+**做完后**: 用户能从 `/sy-specify → /sy-plan → /sy-tasks → 一行命令跑 batch` 全自动到 merge，无需手敲每个 task input。
+
+### 子任务
+
+- [ ] **读 spec-kit `/sy-tasks` 输出 schema** — 确认 tasks.yaml 当前结构（id / depends_on / context_seeds / verify_cmd / 等字段）
+- [ ] **写 `src/suiyin_flow/c2_executor/batch.py`** — yaml → TaskInput list 转换 + 顺序调度
+- [ ] **加 CLI subcommand `suiyin-flow task batch --tasks-yaml <path>`**
+  - 顺序跑（不并行，那是 P1.3 C1+C7）
+  - 每 task 完成 → 下一个; 中间 fail → 全停 + 报错（无 phase 回滚, P1.3 加）
+- [ ] **AC tests**: tasks.yaml 解析 / 顺序调度 / 中间 fail 行为 / dry-run mode (列出要跑的 task 不真跑)
+- [ ] **mini-dogfood**: 在 v4 自身或 v5 仓里写 1 个 spec + 跑 `/sy-tasks` → 生成 tasks.yaml → `suiyin-flow task batch` 跑通 2-3 个连续 task
+- [ ] **不 bump C2 spec major**: 只是新增 batch CLI subcommand, contract / behavior 不变
+
+预估：1-2 天
+
+**触发**: P1.2 阶段 3 (C6) merge 后立即启动
+
 ### P1.3 P2 — 并行加速 + R2
 
 - [ ] **R2: C2 retry-with-feedback** — C2 v0.2 加 `--review-feedback` flag, C5 block 后 C2 拿 findings 作为新 context 重 attempt (C5 §6 Q5-5 + §7 Block Recovery R2)
@@ -315,6 +338,6 @@ P1.1 P0 MVP + P1.2 阶段 1 spec + 阶段 2 C5 impl 都已 done。
 
 ---
 
-**Version**: v0.3.0
+**Version**: v0.3.1
 **Last Updated**: 2026-05-24
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 阶段 1/2 ✅。下一步: P0.5 NC-6 候选 OR P1.2 阶段 3 (C6 + Insight C promote) OR P1.3 R2 retry-with-feedback。
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 阶段 1/2 ✅。下一步: P1.2 阶段 3 (C6) → P1.2.5 (tasks.yaml adapter，**窄义 MVP 真可用**)。
