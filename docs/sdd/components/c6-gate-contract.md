@@ -275,7 +275,8 @@ R2（C2 retry-with-feedback）和 R3（Codex 仲裁）在 P1.3 / P3+ 阶段才�
 
 ### v4 自身 dogfood
 
-- **P1.2 mini-dogfood T-004**: 用 C6 对已 merged PR #30（C5 impl）做 mock pre-merge gate 评估 — 重跑 verify + review 落盘 fixture，再喂给 C6 验证 4 条规则评估正确。验证点：
+- **T-004（本 spec PR）**: C5 self-review C6 spec — 自举验证 spec 结构与 v0.1.1 contract 一致。
+- **P1.2 mini-dogfood T-005（impl PR 阶段）**: 用 C6 对已 merged PR #30（C5 impl）做 mock pre-merge gate 评估 — 重跑 verify + review 落盘 fixture，再喂给 C6 验证 4 条规则评估正确。验证点：
   - 4 条全 pass 时 gate_result=merged（dry_run）
   - 人为篡改 verify_report 让 overall=fail → gate_result=held, reason=VERIFY_NOT_PASS
   - 人为篡改 review_report 让 verdict=block → gate_result=held, reason=REVIEW_NOT_APPROVE, comment 渲染正确

@@ -120,7 +120,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ## P1.2 P1 — 自闭环 merge
 
-**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ⏳ (draft v0.1.0, spec PR pending)。剩 C6 impl + mini-dogfood T-004。
+**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ⏳ (draft v0.1.0, spec PR pending)。剩 C6 impl + mini-dogfood T-005。
 
 ### 阶段 1 — C5 spec ✅ (PR #29)
 
@@ -151,7 +151,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 边判定表 review block 行修正（去 request_changes，分阶段）
   - §六 加 Q6-2..Q6-5
 - [ ] **C6 impl** (按 P1.1 / C5 双 PR 模式) — 待 spec PR 通过
-- [ ] **mini-dogfood T-004**: 用 C6 对 PR #30 mock pre-merge gate 评估 4 条规则
+- [ ] **mini-dogfood T-005**: 用 C6 对 PR #30 mock pre-merge gate 评估 4 条规则（T-004 改作本 spec PR 编号，原 T-004 mini-dogfood 顺移 T-005）
 
 预估：1 周
 
@@ -236,10 +236,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - [ ] **季度复杂度盘点 trigger 机制**（Fork M）
 - [ ] **C11 missed reuse 原因分析记录格式**（Fork R）
 
-### C5 mini-dogfood T-003 sinks (待复现或机会触发再 promote)
+### C5 mini-dogfood sinks (待复现或机会触发再 promote)
 
-> 2026-05-24 C5 自审 PR #29 产 3 个 `reusable_knowledge_not_captured` finding (C12 I6 实证)。
+> 历次 C5 self-review 产出的 `reusable_knowledge_not_captured` finding（C12 I6 实证）汇总。
 > 单次发现，**等复现 pattern 或顺手机会再 promote**，避免 over-fit single occurrence.
+>
+> - 2026-05-24 T-003 (C5 自审 PR #29) → Insight A / B / C (Insight C 已 promote in PR #33)
+> - 2026-05-25 T-004 (C5 自审 PR #33) → Insight D (待 C8 spec 阶段触发)
 
 - [ ] **Insight A**: AC-102 timeline-stable 测试原则 → `methodology.md`
   - **当前**: `tests/dogfood/test_adr_0002.py:26-56` inline docstring
@@ -253,6 +256,11 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **promoted**: workflows.md v0.1.1 → v0.1.2 — §二 加 "Block Recovery（D-autonomous 流派硬约束）" 小节 + 主流程图重绘 + 边判定表修正
   - **触发**: 写 C6 spec 时顺手 (P1.2 阶段 3.1 合一 PR)
   - **C6 spec 引用**: §3.1 I7 (硬约束) + §7 "Block Recovery R1 协作约定"
+- [ ] **Insight D**: "Contract Gate Re-evaluation Economics" → `workflows.md` 或 `methodology.md`
+  - **当前**: C6 spec §3.3 关键设计点注释 "NOT_FF_MERGEABLE 不重跑 C2/C4/C5 — rebase 后代码 tree 不变, verify/review report 仍 valid"
+  - **触发**: 下次 C 模块 spec（特别是 C8 Deploy Contract — release tag preserves tree）出现"上游 artifact 仍 valid 不重新评估"类逻辑时 promote
+  - **建议位置**: workflows.md 加跨契约 invariant 节 / methodology.md 加 "Tree-Preserving Operations" 原则
+  - **来源**: C5 self-review of PR #33 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
 
 ### C2 / C5 已知 bug
 
