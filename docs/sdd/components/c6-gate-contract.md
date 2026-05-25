@@ -63,14 +63,17 @@ properties:
       not_human_blocked:  { type: boolean }
   reason:
     type: string
-    description: held 时必填，标 fail 的第一条规则；merged 时省略
-    enum: [VERIFY_NOT_PASS, REVIEW_NOT_APPROVE, NOT_FF_MERGEABLE, HUMAN_BLOCKED, null]
+    nullable: true
+    description: held 时必填，标 fail 的第一条规则；merged 时此字段不出现（omitted）
+    enum: [VERIFY_NOT_PASS, REVIEW_NOT_APPROVE, NOT_FF_MERGEABLE, HUMAN_BLOCKED]
   recovery_action:
     type: object
-    description: held 时触发的 side effect 记录
+    nullable: true
+    description: held 时触发的 side effect 记录；merged 或无需 recovery 时此字段不出现（omitted）
     properties:
       kind:
-        enum: [r1_label_and_comment, rebase_required, no_op, null]
+        type: string
+        enum: [r1_label_and_comment, rebase_required, no_op]
       label_added:    { type: boolean }
       comment_posted: { type: boolean }
       comment_url:    { type: string }

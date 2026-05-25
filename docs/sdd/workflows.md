@@ -51,7 +51,8 @@ flowchart TD
     K -->|approve| L[Merge Gate C6]
     K -->|block, R1 P1.2| BR[Block Recovery<br/>+ human:block label<br/>+ comment findings]
     BR -.->|R2 P1.3 retry-with-feedback| I
-    BR -->|R1 wait for human unlock| L
+    BR -.->|R1 manual: fix code + reverify| I
+    BR -.->|R1 manual: unlock + rerun gate| L
     L -->|merged to main| M{phase 内所有 task done?}
     M -->|no, next task| I
     M -->|yes| N{所有 phase done?}
