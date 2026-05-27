@@ -1,0 +1,10 @@
+{
+  "gate_result": "merged",
+  "rules": {
+    "verify_all_pass": true,
+    "review_approved": true,
+    "ff_mergeable": true,
+    "not_human_blocked": true
+  },
+  "timestamp": "2026-05-27T10:38:36.094426+00:00"
+}

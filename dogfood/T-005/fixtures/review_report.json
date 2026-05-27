@@ -1,0 +1,11 @@
+{
+  "verdict": "approve",
+  "findings": [],
+  "reviewed_at": "2026-05-25T20:00:00Z",
+  "session_id": "t005-fixture-baseline",
+  "task_id": "T-005",
+  "pr_ref": "30",
+  "contract_version": "v0.1.1",
+  "arbitration": null,
+  "_note": "T-005 minimal fixture. 真实 PR #30 自审历史: PR #30 未走 C5 self-review (T-003 是 PR #29 review). 这里用 approve+empty findings 作为 baseline; T-005 run.py 各场景拷贝后篡改字段验 C6 4 条规则."
+}

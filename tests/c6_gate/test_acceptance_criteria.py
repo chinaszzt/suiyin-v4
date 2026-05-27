@@ -24,6 +24,40 @@ from suiyin_flow.c6_gate.report import safe_pr_ref
 # -------------------------------------------------------------------
 
 
+def test_AC_1_all_pass_real_merge_advances_main(
+    fixture_repo: Path,
+    verify_report_pass: Path,
+    review_report_approve: Path,
+    mock_gh_on_path: Path,
+) -> None:
+    """AC-1: 4 条全 pass + dry_run=false → merged, main HEAD 前进, merged_sha 必填.
+
+    跟 AC-9 部分重叠，但 AC-9 焦点是 'ff-only enforce + 无 gh pr merge'，本 test
+    焦点是 AC-1 contract (4 全 pass → merged + merged_sha)。两个独立 test 让 C4
+    parser 按 `test_AC_<N>_` prefix 正确识别 AC 覆盖。
+    """
+    import subprocess
+
+    gi = GateInput(
+        pr_ref="feature",
+        verify_report_path=str(verify_report_pass),
+        review_report_path=str(review_report_approve),
+        repo_root=str(fixture_repo),
+        dry_run=False,
+    )
+    out = execute_gate(gi)
+    assert out.gate_result == "merged"
+    assert out.reason is None
+    assert out.recovery_action is None
+    assert out.merged_sha is not None  # AC-1: 非 dry_run merged_sha 必填
+    # main HEAD 真前进了
+    head = subprocess.run(
+        ["git", "-C", str(fixture_repo), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert head == out.merged_sha
+
+
 def test_AC_1b_all_pass_dry_run_no_side_effect(
     fixture_repo: Path,
     verify_report_pass: Path,

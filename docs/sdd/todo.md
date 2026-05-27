@@ -120,7 +120,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ## P1.2 P1 — 自闭环 merge
 
-**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33, C5 self-review round-3 approve)。剩 C6 impl + mini-dogfood T-005。
+**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33) + **阶段 3.2 C6 impl + T-005 dogfood** ⏳ (PR #34, C5 round-1 block → cascade fix → pending re-review)。窄义 MVP 闭环即将完成。
 
 ### 阶段 1 — C5 spec ✅ (PR #29)
 
@@ -154,8 +154,18 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 新增 "Block Recovery（D-autonomous 流派硬约束）" 小节
   - 边判定表 review block 行修正（去 request_changes，分阶段）
   - §六 加 Q6-2..Q6-5
-- [ ] **C6 impl** (按 P1.1 / C5 双 PR 模式) — 待 spec PR 通过
-- [ ] **mini-dogfood T-005**: 用 C6 对 PR #30 mock pre-merge gate 评估 4 条规则（T-004 改作本 spec PR 编号，原 T-004 mini-dogfood 顺移 T-005）
+- [x] **C6 impl** (PR #34, 6 modules + 16 AC tests, 93/93 tests + ruff + mypy 全过)
+  - `src/suiyin_flow/c6_gate/{cli,contract,rules,ff_check,actions,report}.py`
+  - unified CLI 加 `gate` subcommand
+  - C5 round-1 review: block (2 medium + 3 low findings) → cascade fix in same PR (spec §3.2 dry_run 落盘边界 cascade v0.1.1 → v0.1.2 + AC-1 test prefix + Q6-8 cross-platform sink)
+- [x] **mini-dogfood T-005**: 用 C6 跑 4 个 mock pre-merge gate 场景 + AC-407 safe_pr_ref unit verify (5/5 pass)
+  - 1-baseline (4 全 pass dry_run → merged)
+  - 2-verify-fail (overall_verdict=fail → held + VERIFY_NOT_PASS)
+  - 3-review-block (verdict=block → held + REVIEW_NOT_APPROVE)
+  - 4-not-ff-mergeable (diverged repo → held + NOT_FF_MERGEABLE)
+  - AC-407 safe_pr_ref direct unit verify (URL/branch/编号 转义 5 case)
+  - I8 precedence (AC-406) 降级到 unit test (本地无真 PR API 测 label，c6_gate AC-5 test 已实证)
+  - evidence: `dogfood/T-005/results/{1..4}-gate_report.json` + `README.md`
 
 预估：1 周
 
@@ -265,6 +275,12 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **触发**: 下次 C 模块 spec（特别是 C8 Deploy Contract — release tag preserves tree）出现"上游 artifact 仍 valid 不重新评估"类逻辑时 promote
   - **建议位置**: workflows.md 加跨契约 invariant 节 / methodology.md 加 "Tree-Preserving Operations" 原则
   - **来源**: C5 self-review of PR #33 round-2 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
+- [ ] **Insight F**: 跨平台 mock CLI test pattern (NC-5 hard constraint) → `tests/` shared util / `methodology.md` testing patterns 节
+  - **当前**: c6_gate/conftest.py mock_gh_on_path 用 Python shebang + chmod 0o755 — macOS / Linux OK，Windows 不识 shebang → AC tests Windows 跑不过
+  - **触发**: 下一个需要 mock CLI 的组件（C7 phase coordinator / C8 deploy 等都会要 mock git/gh/CD CLI）
+  - **建议位置**: 抽 shared fixture `mock_cli_on_path(name, script_body)` 用 `monkeypatch.setattr(subprocess, 'run', ...)` 拦截 subprocess 调用，跨平台零 fs 依赖
+  - **配对**: 跟 c6 §6 Q6-8 引用同一问题，形成 "cross-platform test infrastructure" 主题
+  - **来源**: C5 self-review of PR #34 round-1 (T-005 mini-dogfood 阶段, finding category=cross_platform low, session c1298417)
 - [ ] **Insight E**: "Contract Response Envelope — Error vs Output disjoint top-level shapes" → `methodology.md` 或 `component-spec-template.md`
   - **当前**: C6 spec §2.3 顶部 "与 Output Schema 互斥" 说明 + §2.2 omit-when-absent 约定（v0.1.1 round-3 引入）
   - **触发**: 下次 contract spec (C7 / C8) 出现 Error/Output 两形态时 promote 为通用 API 设计原则

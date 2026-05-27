@@ -1,0 +1,14 @@
+{
+  "gate_result": "held",
+  "rules": {
+    "verify_all_pass": true,
+    "review_approved": true,
+    "ff_mergeable": false,
+    "not_human_blocked": true
+  },
+  "reason": "NOT_FF_MERGEABLE",
+  "recovery_action": {
+    "kind": "no_op"
+  },
+  "timestamp": "2026-05-27T10:38:36.904135+00:00"
+}
