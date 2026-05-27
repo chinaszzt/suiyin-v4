@@ -120,7 +120,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ## P1.2 P1 — 自闭环 merge
 
-**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ⏳ (draft v0.1.0, spec PR pending)。剩 C6 impl + mini-dogfood T-005。
+**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33, C5 self-review round-3 approve)。剩 C6 impl + mini-dogfood T-005。
 
 ### 阶段 1 — C5 spec ✅ (PR #29)
 
@@ -139,7 +139,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ### 阶段 3 — C6 Gate Contract spec + impl
 
-- [x] **C6 spec** `components/c6-gate-contract.md` v0.1.1-draft（spec PR pending；round-3 max-effort review fixes 已落）
+- [x] **C6 spec** `components/c6-gate-contract.md` v0.1.1-draft（PR #33；C5 self-review round-1 block → round-2 approve+advisory → round-3 approve, 1 low knowledge finding → Insight E sinked）
   - gate 规则 4 条全 AND（字段名严格按 C4 §2.2 `overall_verdict` + C5 §2.2 `verdict`）
   - 失败处理: 拆 (a) Held cases (reason 枚举) / (b) Error cases (code 枚举) 两表
   - **I8 reason precedence** (HUMAN_BLOCKED > VERIFY > REVIEW > NOT_FF) + **I9 R1 atomicity** (label/comment 分级 partial_failure)
@@ -261,10 +261,15 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **触发**: 写 C6 spec 时顺手 (P1.2 阶段 3.1 合一 PR)
   - **C6 spec 引用**: §3.1 I7 (硬约束) + §7 "Block Recovery R1 协作约定"
 - [ ] **Insight D**: "Contract Gate Re-evaluation Economics" → `workflows.md` 或 `methodology.md`
-  - **当前**: C6 spec §3.3 关键设计点注释 "NOT_FF_MERGEABLE 不重跑 C2/C4/C5 — rebase 后代码 tree 不变, verify/review report 仍 valid"
+  - **当前**: C6 spec §3.3 关键设计点注释 "NOT_FF_MERGEABLE 不重跑 C2/C4/C5 — rebase 后代码 tree 不变, verify/review report 仍 valid"（v0.1.1 round-3 加了 conflict-resolution 必须重投的 caveat + P1.3 `pr_head_sha` 加固预案）
   - **触发**: 下次 C 模块 spec（特别是 C8 Deploy Contract — release tag preserves tree）出现"上游 artifact 仍 valid 不重新评估"类逻辑时 promote
   - **建议位置**: workflows.md 加跨契约 invariant 节 / methodology.md 加 "Tree-Preserving Operations" 原则
-  - **来源**: C5 self-review of PR #33 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
+  - **来源**: C5 self-review of PR #33 round-2 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
+- [ ] **Insight E**: "Contract Response Envelope — Error vs Output disjoint top-level shapes" → `methodology.md` 或 `component-spec-template.md`
+  - **当前**: C6 spec §2.3 顶部 "与 Output Schema 互斥" 说明 + §2.2 omit-when-absent 约定（v0.1.1 round-3 引入）
+  - **触发**: 下次 contract spec (C7 / C8) 出现 Error/Output 两形态时 promote 为通用 API 设计原则
+  - **配对**: 跟 c6 §6 Q6-6（omit-when-absent vs nullable）形成 "response-shape" 主题，避免 spec drift
+  - **来源**: C5 self-review of PR #33 round-3 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low, session 261e3fa7)
 
 ### C2 / C5 已知 bug
 
