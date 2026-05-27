@@ -14,7 +14,6 @@ Output:
 
 from __future__ import annotations
 
-import copy
 import json
 import subprocess
 import sys
@@ -27,11 +26,8 @@ WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = WORKTREE_ROOT / "dogfood" / "T-005" / "fixtures"
 RESULTS_DIR = WORKTREE_ROOT / "dogfood" / "T-005" / "results"
 
-# C6 CLI entry
-SUIYIN_FLOW_CMD = [
-    str(WORKTREE_ROOT / ".venv" / "bin" / "python"),
-    "-m", "suiyin_flow.cli",
-]
+# C6 CLI entry — 用 sys.executable 跨平台 (Windows .venv\\Scripts\\python.exe / POSIX .venv/bin/python)
+SUIYIN_FLOW_CMD = [sys.executable, "-m", "suiyin_flow.cli"]
 
 # PR #30 = C5 impl merged commit. T-005 用这个作 dogfood target.
 PR_REF_URL = "https://github.com/chinaszzt/suiyin-v4/pull/30"

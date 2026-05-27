@@ -16,13 +16,26 @@ from suiyin_flow.c6_gate.contract import GateContractError
 
 
 def _require_tool(name: str) -> str:
-    """shutil.which + 异常包装 (NC-5 跨平台 — 跟 C5 同模式)."""
+    """shutil.which + 异常包装 (NC-5 跨平台 — 跟 C5 同模式).
+
+    Error code 按 tool 分类 (§3.3 b):
+      - git 不在 PATH → GIT_ERROR (跟 actions.py 同步)
+      - gh 不在 PATH → GH_ERROR
+      - 其他 → MISSING_INPUT (退化默认)
+    """
     path = shutil.which(name)
     if not path:
+        if name == "git":
+            code = "GIT_ERROR"
+        elif name == "gh":
+            code = "GH_ERROR"
+        else:
+            code = "MISSING_INPUT"
         raise GateContractError(
-            "MISSING_INPUT",
+            code,  # type: ignore[arg-type]
             f"required CLI tool not found on PATH: {name}",
             details={"tool": name},
+            retryable=(code != "MISSING_INPUT"),  # GIT/GH_ERROR retryable
         )
     return path
 
