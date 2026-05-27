@@ -15,10 +15,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 # 跟 docs/sdd/components/c6-gate-contract.md 顶部 Version 同步.
-# v0.1.2 (2026-05-25, PR #34 cascade): §3.2 dry_run 落盘边界 clarify (audit trail
-# 优先), latest 副本文档化. invariant 无变化, 是 spec 措辞修正 → PATCH bump.
+# v0.1.3 (2026-05-27, PR #35 dogfood Bug 1): §3.2 Merge to main 收敛为单一路径
+# (push <sha>:main + update-ref refs/heads/main), 删 checkout-based 选项 (NC-4
+# worktree 不兼容). impl actions.py 跟随 refs-direct 重写. PATCH bump (路径
+# 收敛, invariant 仍 ff-only main history).
+# v0.1.2 (2026-05-25, PR #34 cascade): §3.2 dry_run 落盘边界 clarify.
 # v0.1.1 (2026-05-25): round-3 max-effort review — omit-when-absent / I8 / I9 / etc.
-CONTRACT_VERSION: str = "v0.1.2"
+CONTRACT_VERSION: str = "v0.1.3"
 
 # -------------------------------------------------------------------
 # Enums (§2.2 / §2.3)

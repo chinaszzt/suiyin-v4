@@ -169,6 +169,26 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 预估：1 周
 
+### C6 已知 bug（P1.2.5 PR #35 dogfooding 时露出）
+
+> v4 自己开始跑窄义 MVP 闭环（C2→C4→C5→C6 自动 merge）时暴露的 3 个 C6 impl bug，全部影响 v4 自身 PR 的自动 merge 路径。**已全部修好**，evidence 在 PR #36 (本 PR)。
+
+- [x] **Bug 1 (硬阻断) `ff_merge_to_main` 在 worktree 内 fail** ✅ (PR #36)
+  - 现象: 子 worktree 跑 gate 时 `git checkout main` 报 `fatal: 'main' is already used by worktree at ...` → 自动 merge 整条路径 fail
+  - 根因: `actions.py:48` 的 checkout-based 实现跟 NC-4 worktree 硬约束直接冲突
+  - 修法: refs-direct ff push (`git push <sha>:base` + `git update-ref refs/heads/<base>`)，零 checkout
+  - C6 spec v0.1.2 → v0.1.3：§3.2 + I5 收敛单一 merge 路径，删 checkout-based 选项
+  - AC test: `test_AC_11_worktree_ff_merge_no_checkout_main` (父 worktree 占 main + 子 worktree 跑 merge)
+- [x] **Bug 2 (中) `resolve_pr_sha` 对 gh 抖动零容错** ✅ (PR #36)
+  - 现象: 本机代理下 `gh pr view --json headRefOid` 4/5 概率 EOF；失败 → fallback `git rev-parse "35"` (PR 编号当 ref 找不到) → 报 `MISSING_INPUT could not resolve pr_ref to SHA for merge`
+  - 根因: `ff_check.py:103 resolve_pr_sha` + `has_human_block_label` 的 gh path 都无 retry
+  - 修法: `_gh_with_retry` 3 次指数退避 (1s/2s/4s)；用完仍失败时 stderr 提示 "如果 pr_ref 是 PR 编号请改成本地 branch 名"
+  - AC tests: `test_AC_12_*` 系列 (resolve + has_human_block 双路径 retry 恢复 + 退避耗尽 fallback)
+- [x] **Bug 3 (低) gh pr merge 默认非 ff (workaround 副作用)** ✅ (Bug 1+2 修好后自动消失)
+  - 现象: PR #35 临时用 `gh pr merge 35 --merge` workaround → merge commit `a691d0b`，跟 #33/#34 ff-only 风格不一致
+  - 根因: Bug 1 阻断 C6 自动路径 → 退化到手动 `gh pr merge` → 产 merge commit
+  - 修法: Bug 1+2 修好后，C6 自动走 ff-only 路径，Bug 3 自动消失。**未来加固候选** (留 Q): C6 spec §3.1 加 "main linear-history invariant" — `git log main --first-parent --merges` 应为空。本 PR 不做。
+
 ---
 
 ## P1.2.5 — tasks.yaml → C2 adapter（窄义 MVP 真可用）

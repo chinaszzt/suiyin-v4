@@ -485,3 +485,147 @@ def test_AC_10_safe_pr_ref_branch_name() -> None:
     assert safe_pr_ref("#33") == "33"
     assert safe_pr_ref("33") == "33"
     assert safe_pr_ref("https://github.com/o/r/pull/9999") == "pull-9999"
+
+
+# -------------------------------------------------------------------
+# AC-11 — Bug 1: refs-direct ff merge worktree-safe (NC-4 硬约束)
+# -------------------------------------------------------------------
+
+
+def test_AC_11_worktree_ff_merge_no_checkout_main(
+    fixture_repo_worktree: tuple[Path, Path],
+    verify_report_pass: Path,
+    review_report_approve: Path,
+    mock_gh_on_path: Path,
+) -> None:
+    """AC-11 (Bug 1): 子 worktree 跑 gate, 父 worktree 已 checkout main → 仍能 merge.
+
+    旧 impl 在子 worktree 调 `git checkout main` 会 fail:
+        fatal: 'main' is already used by worktree at '<parent>'
+    新 refs-direct impl (push <sha>:base + update-ref) 应零阻力跑通。
+    Bug 1 直接影响 v4 自身所有 PR 的自动 merge — NC-4 硬约束。
+    """
+    import subprocess
+
+    parent, child = fixture_repo_worktree
+
+    gi = GateInput(
+        pr_ref="feature",  # local branch — gh path 跳过, 走 git rev-parse
+        verify_report_path=str(verify_report_pass),
+        review_report_path=str(review_report_approve),
+        repo_root=str(child),
+        dry_run=False,
+    )
+    out = execute_gate(gi)
+    assert out.gate_result == "merged"
+    assert out.merged_sha is not None
+
+    # merged_sha == feature 的 HEAD SHA (ff merge 定义: 不创新 commit)
+    feature_sha = subprocess.run(
+        ["git", "-C", str(child), "rev-parse", "feature"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert out.merged_sha == feature_sha
+
+    # 验证 origin/main 真前进 (从父 worktree 视角)
+    parent_origin_main = subprocess.run(
+        ["git", "-C", str(parent), "rev-parse", "origin/main"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert parent_origin_main == feature_sha
+
+    # 验证本地 refs/heads/main 也前进了 (update-ref 步)
+    local_main = subprocess.run(
+        ["git", "-C", str(child), "rev-parse", "refs/heads/main"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert local_main == feature_sha
+
+    # 没意外走 gh pr merge 等绕道
+    log = mock_gh_on_path.read_text(encoding="utf-8")
+    assert "pr merge" not in log
+
+
+# -------------------------------------------------------------------
+# AC-12 — Bug 2: gh 抖动重试 (3 次指数退避, EOF 后恢复)
+# -------------------------------------------------------------------
+
+
+def test_AC_12_gh_retry_resolve_pr_sha_recovers_after_eof(
+    fixture_repo: Path,
+    feature_sha: str,
+    mock_gh_on_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-12 (Bug 2): `gh pr view --json headRefOid` 头 2 次 EOF 失败, 第 3 次成功
+    → resolve_pr_sha 拿到 SHA。
+    """
+    from suiyin_flow.c6_gate.ff_check import resolve_pr_sha
+
+    monkeypatch.setenv("C6_MOCK_GH_SHA", feature_sha)
+    monkeypatch.setenv("C6_MOCK_GH_FAIL_RESOLVE_N", "2")
+
+    sha = resolve_pr_sha(pr_ref="33", repo_root=fixture_repo)
+    assert sha == feature_sha
+
+    log = mock_gh_on_path.read_text(encoding="utf-8")
+    view_calls = [ln for ln in log.splitlines() if "pr view 33 --json headRefOid" in ln]
+    assert len(view_calls) == 3, f"expected 3 retry attempts, got {view_calls}"
+
+
+def test_AC_12b_gh_retry_resolve_exhausted_falls_back_to_rev_parse(
+    fixture_repo: Path,
+    feature_sha: str,
+    mock_gh_on_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-12b (Bug 2): 用 branch name pr_ref 不走 gh; 验证 fallback 路径不退化。"""
+    from suiyin_flow.c6_gate.ff_check import resolve_pr_sha
+
+    # pr_ref="feature" 不像 PR id → gh 不被调用 (no retry needed)
+    sha = resolve_pr_sha(pr_ref="feature", repo_root=fixture_repo)
+    assert sha == feature_sha
+
+    log = mock_gh_on_path.read_text(encoding="utf-8")
+    assert "pr view feature" not in log
+
+
+def test_AC_12c_gh_retry_has_human_block_recovers(
+    fixture_repo: Path,
+    feature_sha: str,
+    mock_gh_on_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-12c (Bug 2): has_human_block_label 同样的 retry 路径 — 头 2 次 EOF 后成功."""
+    from suiyin_flow.c6_gate.ff_check import has_human_block_label
+
+    monkeypatch.setenv("C6_MOCK_GH_LABELS", "human:block\nbug")
+    monkeypatch.setenv("C6_MOCK_GH_FAIL_LABELS_N", "2")
+
+    blocked = has_human_block_label(pr_ref="33", repo_root=fixture_repo)
+    assert blocked is True
+
+    log = mock_gh_on_path.read_text(encoding="utf-8")
+    label_calls = [ln for ln in log.splitlines() if "pr view 33 --json labels" in ln]
+    assert len(label_calls) == 3
+
+
+def test_AC_12d_gh_retry_exhausted_returns_false_for_labels(
+    fixture_repo: Path,
+    mock_gh_on_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AC-12d (Bug 2): has_human_block_label 3 次 retry 全失败 → 保守返回 False
+    (not blocked), 让 4 条规则照常评估; 下次 gate run 会重新检。
+    """
+    from suiyin_flow.c6_gate.ff_check import has_human_block_label
+
+    monkeypatch.setenv("C6_MOCK_GH_LABELS", "human:block")
+    monkeypatch.setenv("C6_MOCK_GH_FAIL_LABELS_N", "99")  # 永久失败
+
+    blocked = has_human_block_label(pr_ref="33", repo_root=fixture_repo)
+    assert blocked is False
+
+    log = mock_gh_on_path.read_text(encoding="utf-8")
+    label_calls = [ln for ln in log.splitlines() if "pr view 33 --json labels" in ln]
+    assert len(label_calls) == 3  # 用完 retry 后才认输

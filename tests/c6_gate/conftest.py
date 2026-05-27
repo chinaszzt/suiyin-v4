@@ -65,6 +65,44 @@ def fixture_repo(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def fixture_repo_worktree(tmp_path: Path) -> tuple[Path, Path]:
+    """Bug 1 fixture: 主仓 checkout main + 子 worktree checkout feature.
+
+    复现 Bug 1 场景：父 worktree 一直占着 main，子 worktree 跑 ff_merge_to_main
+    时旧 impl `git checkout main` 会 fail。新 refs-direct impl 不 checkout，
+    应成功。
+
+    Returns: (parent_repo, child_worktree)
+    """
+    bare = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "main", str(bare)],
+        check=True, capture_output=True, text=True,
+    )
+
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    _git(parent, "init", "-b", "main")
+    _git(parent, "config", "user.email", "t@t.local")
+    _git(parent, "config", "user.name", "t")
+    _git(parent, "config", "commit.gpgsign", "false")
+    _git(parent, "remote", "add", "origin", str(bare))
+    (parent / "README.md").write_text("# init\n", encoding="utf-8")
+    _git(parent, "add", ".")
+    _git(parent, "commit", "-m", "init main")
+    _git(parent, "push", "-u", "origin", "main")
+
+    # 子 worktree on feature — 父 worktree 仍 checkout main (Bug 1 复现条件)
+    child = tmp_path / "child-worktree"
+    _git(parent, "worktree", "add", "-b", "feature", str(child))
+    (child / "feature.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    _git(child, "add", ".")
+    _git(child, "commit", "-m", "feat")
+
+    return (parent, child)
+
+
+@pytest.fixture
 def fixture_repo_diverged(tmp_path: Path) -> Path:
     """跟 fixture_repo 类似但 main 也 advance 了 → feature 不是 ff 可达."""
     bare = tmp_path / "origin.git"
@@ -217,6 +255,10 @@ def mock_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
       C6_MOCK_GH_LABELS    — labels (newline-separated)
       C6_MOCK_GH_LABEL_FAIL — 设了就 label add 返回 1
       C6_MOCK_GH_COMMENT_FAIL — 设了就 comment 返回 1
+      C6_MOCK_GH_FAIL_RESOLVE_N — fail 前 N 次 `pr view --json headRefOid` 调用
+                                  (Bug 2 retry 测试用), 计数文件 C6_MOCK_GH_RESOLVE_COUNTER
+      C6_MOCK_GH_FAIL_LABELS_N  — fail 前 N 次 `pr view --json labels` 调用
+                                  (Bug 2 retry 测试用), 计数文件 C6_MOCK_GH_LABELS_COUNTER
       C6_MOCK_GH_LOG       — 调用 log 文件路径
     """
     bin_dir = tmp_path / "mock_bin"
@@ -231,13 +273,42 @@ def mock_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         if log_path:
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(" ".join(args) + "\\n")
+
+        def _consume_fail_counter(env_n, counter_env):
+            \"\"\"Returns True if this call should fail (and increments counter).\"\"\"
+            n_str = os.environ.get(env_n, "")
+            counter = os.environ.get(counter_env, "")
+            if not n_str or not counter:
+                return False
+            try:
+                n = int(n_str)
+            except ValueError:
+                return False
+            cur = 0
+            if os.path.exists(counter):
+                try:
+                    cur = int(open(counter).read().strip() or "0")
+                except ValueError:
+                    cur = 0
+            if cur < n:
+                with open(counter, "w") as f:
+                    f.write(str(cur + 1))
+                return True
+            return False
+
         # gh pr view <id> --json <field> -q <expr>
         if len(args) >= 5 and args[0] == "pr" and args[1] == "view":
             json_field = args[4] if args[3] == "--json" else ""
             if json_field == "headRefOid":
+                if _consume_fail_counter("C6_MOCK_GH_FAIL_RESOLVE_N", "C6_MOCK_GH_RESOLVE_COUNTER"):
+                    print('Post "https://api.github.com/graphql": EOF', file=sys.stderr)
+                    sys.exit(1)
                 print(os.environ.get("C6_MOCK_GH_SHA", "deadbeef"))
                 sys.exit(0)
             if json_field == "labels":
+                if _consume_fail_counter("C6_MOCK_GH_FAIL_LABELS_N", "C6_MOCK_GH_LABELS_COUNTER"):
+                    print('Post "https://api.github.com/graphql": EOF', file=sys.stderr)
+                    sys.exit(1)
                 labels = os.environ.get("C6_MOCK_GH_LABELS", "")
                 if labels:
                     print(labels)
@@ -268,6 +339,11 @@ def mock_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     log_file = tmp_path / "gh.log"
     log_file.write_text("", encoding="utf-8")
     monkeypatch.setenv("C6_MOCK_GH_LOG", str(log_file))
+    # Bug 2 retry 计数文件路径 — 每个 mock fixture instance 独立
+    monkeypatch.setenv("C6_MOCK_GH_RESOLVE_COUNTER", str(tmp_path / "_resolve_counter.txt"))
+    monkeypatch.setenv("C6_MOCK_GH_LABELS_COUNTER", str(tmp_path / "_labels_counter.txt"))
+    # Bug 2 retry: 跑测试时不要真 sleep（指数退避 7s 会拖慢测试套件）
+    monkeypatch.setenv("C6_GH_RETRY_NO_SLEEP", "1")
     return log_file
 
 

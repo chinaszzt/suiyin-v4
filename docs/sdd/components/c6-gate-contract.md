@@ -122,7 +122,7 @@ properties:
 - **I2 Hold Default**: 任何一条规则 false → 必 `held`，**绝不 force-merge / 绕过任何一条**。
 - **I3 Reasoned Hold**: `held` 时 output 必含 `reason`（按 I8 precedence 选中）+ `rules` 4 字段完整 breakdown，便于 debug。
 - **I4 Hold ≠ Permanent Block**: `held` 是当时状态评估，不持久化；条件改善后（rebase / 解锁 / 重 verify / 重 review）下次 gate run 可重新评估。
-- **I5 ff-only Main History**: merge 操作 = 本地 `git fetch origin && git merge --ff-only <pr_sha> && git push origin main` 或等价的 `git push origin <pr_sha>:main`（ff-only push）。**main 永远线性**，禁止 merge-commit / squash 在此契约外触发（squash if any 由上游 PR review 时完成，不归 C6 管）。**`gh pr merge` 子命令不能用** — 它的 `--merge / --squash / --rebase` 均不产 ff-only main，没有 `--ff-only` 等价 flag。
+- **I5 ff-only Main History**: merge 操作 = `git fetch origin && git push origin <pr_sha>:main`（ff-only push，远端拒非 ff 会失败）+ `git update-ref refs/heads/main <pr_sha>`（本地 ref 同步）。**main 永远线性**，禁止 merge-commit / squash 在此契约外触发（squash if any 由上游 PR review 时完成，不归 C6 管）。**`gh pr merge` 子命令不能用** — 它的 `--merge / --squash / --rebase` 均不产 ff-only main，没有 `--ff-only` 等价 flag。**`git checkout main && git merge --ff-only` 形式也不能用** — NC-4 worktree 模式下子 worktree 不能 checkout 主 worktree 占着的 main（v0.1.3 patch, PR #35 dogfood）。
 - **I6 Determinism**: 同样 input（同 pr_ref + 同 verify_report + 同 review_report + 同 main HEAD）→ 同样的 `gate_result + reason + rules`（即 §2.2 必填核心字段）。`timestamp` 例外（每次新生成），`merged_sha` 例外（merge 时 git 决定，幂等性靠 ff-only 保证而非 deterministic value）。
 - **I7 Block Recovery R1（D-autonomous 硬约束）**: 当 `reason == REVIEW_NOT_APPROVE` 时，必尝试 R1 副作用（加 `human:block` 标签 + comment review findings），由 I9 atomicity 定义"必尝试"的精确边界；**不允许静默 hold（即不允许 `reason=REVIEW_NOT_APPROVE` 同时 `recovery_action.kind != r1_label_and_comment`）**。这是 v4 D-autonomous profile "执行阶段 AI 自闭环、异常时人才出来" 的兜底（详见 `workflows.md` Block Recovery 节）。
 - **I8 Reason Precedence**: 多条规则同时 false 时，`reason` 按**固定优先级**单选：
@@ -140,7 +140,7 @@ properties:
 
 ### 3.2 Side Effects
 
-- **Merge to main**（gate_result == merged + dry_run == false）: 本地 `git fetch origin main && git merge --ff-only <pr_sha>` 然后 `git push origin main`；或等价的单步 `git push origin <pr_sha>:main`（ff-only push，远端拒非 ff 会失败）。**不用 `gh pr merge`**（见 I5）。merge 后可选 `gh pr close <ref> --delete-branch` 收尾（也是 ff-only 后状态）。
+- **Merge to main**（gate_result == merged + dry_run == false）: **必须用单步 ff-push 形式** —— `git fetch origin main` → `git push origin <pr_sha>:main`（ff-only push，远端拒非 ff 会失败）→ `git update-ref refs/heads/main <pr_sha>`（本地 ref 同步前进）。**`git checkout main && git merge --ff-only` 形式禁用** —— v0.1.2 把它列为 "或等价" 选项是错的：NC-4 worktree 模式下子 worktree 不能 checkout 已被父 worktree 占着的 main（fatal: 'main' is already used by worktree at ...）→ 自动 merge 整条路径 fail（PR #35 dogfood Bug 1 实证）。v0.1.3 patch 收敛为单一路径。**不用 `gh pr merge`**（见 I5）。merge 后可选 `gh pr close <ref> --delete-branch` 收尾（也是 ff-only 后状态）。
 - **Label add**（reason == REVIEW_NOT_APPROVE + dry_run == false）: `gh pr edit <ref> --add-label "human:block"`。已存在标签视作成功（I9 idempotent）。
 - **Comment finding**（reason == REVIEW_NOT_APPROVE + dry_run == false + label 已成功）: `gh pr comment <ref> --body "<formatted findings>"` — inline C5 findings 用 §2.2 finding schema 字段（**`severity / category / location / suggested_fix` 四字段**，**严禁** 引用不存在的 `summary` 字段，见 C5 §2.2 finding required 列表）。
 - **Gate report 落盘**: `<repo_root>/.suiyin/gates/<safe_pr_ref>-<ts>.json`（versioned 时间戳化）+ `<repo_root>/.suiyin/gates/latest-<safe_pr_ref>.json`（最新副本覆盖式写入，便于 dogfood / debug 直接读最新；跟 C5 review_report `latest.json` 同模式，跨平台不用 symlink）。**落盘是 audit trail 而非 side-effect**（详 dry_run 边界节）。
@@ -363,12 +363,13 @@ R2（C2 retry-with-feedback）和 R3（Codex 仲裁）在 P1.3 / P3+ 阶段才�
 
 ---
 
-**Version**: v0.1.2-draft
-**Last Updated**: 2026-05-25
-**Status**: draft（PR #34 impl-期间 C5 round-1 cascade fix — 见下方 Changelog）
+**Version**: v0.1.3-draft
+**Last Updated**: 2026-05-27
+**Status**: draft（PR #35 dogfood 暴露 worktree+NC-4 不兼容 → v0.1.3 patch 收敛单一 merge 路径，见下方 Changelog）
 
 ### Changelog
 
+- **v0.1.3** (2026-05-27, P1.2.5 PR #35 dogfood Bug 1 fix): §3.2 Merge to main 收敛为**单一路径** `git push <sha>:main + git update-ref refs/heads/main` — 删 "或等价" 的 `git checkout main && git merge --ff-only` 选项。原因：NC-4 worktree 模式下子 worktree 不能 checkout 父 worktree 占着的 main，自动 merge 整条路径 fail（v4 自身所有 PR 都受阻）。I5 invariant 同步措辞。impl actions.py ff_merge_to_main 跟随重写为 refs-direct（zero checkout）。**PATCH bump** per ADR-0001 SemVer（措辞 + 路径收敛，invariant 含义不变 — 仍是 ff-only main history）。Bug 2 (gh 抖动重试) 是 impl-side 工程化加固，无 spec 表达需求，不入 changelog。
 - **v0.1.2** (2026-05-25, PR #34 cascade): impl 期间 C5 self-review 暴露 §3.2 vs AC-10 内部矛盾（dry_run 是否落盘）+ latest 副本未文档化。**拍板 audit trail 优先** — 落盘永远执行（dry_run 也落），仅对外可观察副作用 (merge/label/comment) 跳过；新增 "dry_run 副作用边界" 节明确边界 + latest 副本文档化。AC-10 措辞不变（本来就对的，§3.2 跟上）。**PATCH bump** per ADR-0001 SemVer (措辞修正 + clarify，无 invariant 变化)。
 - **v0.1.1** (2026-05-25): C5 self-review round-3 max-effort recall 反馈，15 项修订：
   - §2.2 schema: 引入 omit-when-absent 约定（去 `nullable: true`）；删 `recovery_action.kind.rebase_required` 死值；加 `partial_failure` 字段；明确 `gate_result` / `code` enum 加 `type: string`

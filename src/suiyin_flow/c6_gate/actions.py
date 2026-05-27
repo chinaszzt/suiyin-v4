@@ -31,27 +31,37 @@ def ff_merge_to_main(
     base: str = "main",
     remote: str = "origin",
 ) -> str:
-    """本地 `git fetch + merge --ff-only + push` — I5 ff-only Main History.
+    """Refs-direct ff push to `<remote>/<base>` — I5 ff-only Main History.
+
+    NC-4 worktree 硬约束下，子 worktree 不能 `git checkout main`（父 worktree
+    占着 main）。这里走 `git push <sha>:<base>` + `git update-ref refs/heads/<base>`
+    直更 ref，零 checkout，worktree-safe。
+
+    流程：
+      1. `git fetch <remote> <base>` — race-condition 防御
+         （ff_check 评估时也 fetch 过；幂等）
+      2. `git push <remote> <pr_sha>:<base>` — ff-only push（remote 默认拒非 ff）
+      3. `git update-ref refs/heads/<base> <pr_sha>` — 本地 base ref 同步前进
+         （update-ref 不动 working tree；若 base 在其他 worktree checkout 着，
+         该 worktree 的 working tree 变 stale，`git pull` ff 拉齐）
 
     Returns:
-        merged_sha — push 成功后 main 的新 HEAD sha。
+        merged_sha == pr_sha（ff merge 定义下 base 新 HEAD == pr_sha）。
 
     Raises:
         GateContractError GIT_ERROR — git 命令失败 (retryable)
-        GateContractError PERMISSION_DENIED — push 被远程拒
+        GateContractError PERMISSION_DENIED — push 被远程拒 (branch protection)
     """
     git = shutil.which("git")
     if not git:
         raise GateContractError("GIT_ERROR", "git CLI not found on PATH", retryable=False)
 
-    # 1. checkout main + fetch
-    _git(git, ["checkout", base], repo_root, "checkout main")
-    _git(git, ["fetch", remote, base], repo_root, "fetch origin main")
-    _git(git, ["merge", "--ff-only", pr_sha], repo_root, f"merge --ff-only {pr_sha[:7]}")
+    # 1. fetch base — race-condition 防御
+    _git(git, ["fetch", remote, base], repo_root, f"fetch {remote} {base}")
 
-    # 2. push ff-only (远程拒非 ff → PERMISSION_DENIED)
+    # 2. ff-only push (远程拒非 ff → PERMISSION_DENIED / GIT_ERROR)
     push_res = subprocess.run(
-        [git, "push", remote, base],
+        [git, "push", remote, f"{pr_sha}:{base}"],
         cwd=repo_root,
         capture_output=True,
         text=True,
@@ -75,9 +85,16 @@ def ff_merge_to_main(
             retryable=True,
         )
 
-    # 3. 返回 main 新 HEAD sha
-    head = _git(git, ["rev-parse", "HEAD"], repo_root, "rev-parse HEAD")
-    return head.strip()
+    # 3. 本地 refs/heads/<base> 同步前进。worktree-safe — update-ref 不动 working tree。
+    _git(
+        git,
+        ["update-ref", f"refs/heads/{base}", pr_sha],
+        repo_root,
+        f"update-ref refs/heads/{base}",
+    )
+
+    # 4. ff merge 定义下 merged_sha == pr_sha
+    return pr_sha
 
 
 def execute_r1_recovery(
