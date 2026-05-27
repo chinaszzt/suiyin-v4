@@ -120,7 +120,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ## P1.2 P1 — 自闭环 merge
 
-**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33) + **阶段 3.2 C6 impl + T-005 dogfood** ⏳ (PR #34, C5 round-1 block → cascade fix → pending re-review)。窄义 MVP 闭环即将完成。
+**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33) + **阶段 3.2 C6 impl + T-005 dogfood** ✅ (PR #34, C5 round-1 block → round-2 block → round-3 approve, 2 low advisories sinked as Insight F/G)。**窄义 MVP 闭环达成** (C2→C4→C5→C6)。下一步 P1.2.5 tasks.yaml → C2 adapter。
 
 ### 阶段 1 — C5 spec ✅ (PR #29)
 
@@ -275,6 +275,12 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **触发**: 下次 C 模块 spec（特别是 C8 Deploy Contract — release tag preserves tree）出现"上游 artifact 仍 valid 不重新评估"类逻辑时 promote
   - **建议位置**: workflows.md 加跨契约 invariant 节 / methodology.md 加 "Tree-Preserving Operations" 原则
   - **来源**: C5 self-review of PR #33 round-2 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
+- [ ] **Insight G**: 组件测试用真 git fixture 模式 → `tests/fixtures/git_fixture.py` shared util
+  - **当前**: c6_gate/conftest.py `fixture_repo` / `fixture_repo_diverged` (~30 行 × 2) + dogfood/T-005/run.py `setup_baseline_repo` / `setup_diverged_repo` 各写一份 (重复)
+  - **触发**: C7 Phase Coordinator / C8 Deploy 组件测试也会要 baseline / diverged repo + bare origin remote
+  - **建议位置**: 抽 `tests/fixtures/git_fixture.py` 提供 `make_baseline_repo(tmp_path)` / `make_diverged_repo(tmp_path)`，conftest + dogfood 共用
+  - **配对**: 跟 Insight F mock CLI 共组 "cross-platform test infrastructure" 主题，C7/C8 spec 阶段一起统一
+  - **来源**: C5 self-review of PR #34 round-3 (session 84fb2bff, finding category=reusable_knowledge_not_captured low)
 - [ ] **Insight F**: 跨平台 mock CLI test pattern (NC-5 hard constraint) → `tests/` shared util / `methodology.md` testing patterns 节
   - **当前**: c6_gate/conftest.py mock_gh_on_path 用 Python shebang + chmod 0o755 — macOS / Linux OK，Windows 不识 shebang → AC tests Windows 跑不过
   - **触发**: 下一个需要 mock CLI 的组件（C7 phase coordinator / C8 deploy 等都会要 mock git/gh/CD CLI）
