@@ -348,7 +348,7 @@ v4 D-autonomous 流派 "人只干 spec/plan/deploy" → block 后必须有自动
 
 | 阶段 | 路线 | 说明 |
 |---|---|---|
-| **R1** (P1.2) | C5 block → 自动给 PR 加 `human:block` 标签 → 用户介入 fix | 最简兜底, 短期可用. v4 当前阶段 acceptable |
+| **R1** (P1.2) | C5 block → C6 自动给 PR 加 `human:block` 标签 **+ comment findings inline** → 用户介入 fix | 最简兜底, 短期可用. v4 当前阶段 acceptable. 详 [c6 §3.1 I7+I9](c6-gate-contract.md) atomicity 边界 |
 | **R2** (P1.3) | C5 block → C2 retry with findings as feedback prompt (max 2 次) → 仍 block 退 R1 | 真 SDD 闭环, 见 §6 Q5-5; toolchain.md C2 v0.2 加 retry-with-feedback 子能力 |
 | **R3** (P3+) | 加 Codex 仲裁 (双 reviewer 取交集) → 减小 single-reviewer false positive | 见 §6 Q5-6 + Q5 (N=2 仲裁) |
 

@@ -120,7 +120,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ## P1.2 P1 — 自闭环 merge
 
-**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅。剩 C6。
+**阶段 1 spec** ✅ + **阶段 2 C5 impl** ✅ + **阶段 3.1 C6 spec** ✅ (v0.1.1, PR #33, C5 self-review round-3 approve)。剩 C6 impl + mini-dogfood T-005。
 
 ### 阶段 1 — C5 spec ✅ (PR #29)
 
@@ -137,17 +137,25 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - 12 AC tests passed (含 mock claude pipeline)
 - **mini-dogfood T-003**: C5 自审 PR #29 → approve + 3 `reusable_knowledge_not_captured` finding (C12 I6 实证)
 
-### 阶段 3 — C6 Gate Contract spec + impl（待启动）
+### 阶段 3 — C6 Gate Contract spec + impl
 
-> **推荐下一步**：写 C6 spec 时**顺手 promote** mini-dogfood insight C (Block Recovery invariant → workflows.md), 一举两得。
-
-- [ ] **C6 spec** `components/c6-gate-contract.md`
-  - gate 规则 4 条 (`verify.all.pass && review.verdict == approve && pr.ff_mergeable && !pr.has_label("human:block")`)
-  - 失败处理 (rebase / hold / 标签 escalate)
-  - 实现谱系: (a) git pre-push hook 最轻 / (d) 混合（默认 a）
-  - 见 `toolchain.md` C6 节，未决 Q6
-- [ ] **C6 impl** (按 P1.1 / C5 双 PR 模式)
-- [ ] **Block Recovery invariant promote 到 workflows.md** (mini-dogfood insight C)
+- [x] **C6 spec** `components/c6-gate-contract.md` v0.1.1-draft（PR #33；C5 self-review round-1 block → round-2 approve+advisory → round-3 approve, 1 low knowledge finding → Insight E sinked）
+  - gate 规则 4 条全 AND（字段名严格按 C4 §2.2 `overall_verdict` + C5 §2.2 `verdict`）
+  - 失败处理: 拆 (a) Held cases (reason 枚举) / (b) Error cases (code 枚举) 两表
+  - **I8 reason precedence** (HUMAN_BLOCKED > VERIFY > REVIEW > NOT_FF) + **I9 R1 atomicity** (label/comment 分级 partial_failure)
+  - Schema 改 omit-when-absent (去 `nullable: true`)；recovery_action.kind 删死值 `rebase_required`
+  - 实现谱系: P1.2 落地 (a) **standalone CLI** `suiyin-flow gate run`（**不挂 pre-push** — Q6-7 决议）
+  - §3.2 merge 不用 `gh pr merge`，用本地 `git merge --ff-only` + push 或 `git push <sha>:main` ff-only
+  - §3.2 pr_ref → safe_pr_ref 转义规则（NC-5 跨平台文件名安全）
+  - §3.3 NOT_FF_MERGEABLE 复用 verify/review 仅限 rebase 干净；conflict resolution 必须重投
+  - §6 新增 Q6-2/Q6-3/Q6-4/Q6-5/Q6-6/Q6-7；**关 Q6 + cascade toolchain.md**
+- [x] **Block Recovery invariant promote 到 workflows.md** v0.1.1 → v0.1.2 (Insight C ✅)
+  - §二 主流程图 C5 block 边重绘（R1 P1.2 / R2 P1.3 dotted）
+  - 新增 "Block Recovery（D-autonomous 流派硬约束）" 小节
+  - 边判定表 review block 行修正（去 request_changes，分阶段）
+  - §六 加 Q6-2..Q6-5
+- [ ] **C6 impl** (按 P1.1 / C5 双 PR 模式) — 待 spec PR 通过
+- [ ] **mini-dogfood T-005**: 用 C6 对 PR #30 mock pre-merge gate 评估 4 条规则（T-004 改作本 spec PR 编号，原 T-004 mini-dogfood 顺移 T-005）
 
 预估：1 周
 
@@ -232,10 +240,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - [ ] **季度复杂度盘点 trigger 机制**（Fork M）
 - [ ] **C11 missed reuse 原因分析记录格式**（Fork R）
 
-### C5 mini-dogfood T-003 sinks (待复现或机会触发再 promote)
+### C5 mini-dogfood sinks (待复现或机会触发再 promote)
 
-> 2026-05-24 C5 自审 PR #29 产 3 个 `reusable_knowledge_not_captured` finding (C12 I6 实证)。
+> 历次 C5 self-review 产出的 `reusable_knowledge_not_captured` finding（C12 I6 实证）汇总。
 > 单次发现，**等复现 pattern 或顺手机会再 promote**，避免 over-fit single occurrence.
+>
+> - 2026-05-24 T-003 (C5 自审 PR #29) → Insight A / B / C (Insight C 已 promote in PR #33)
+> - 2026-05-25 T-004 (C5 自审 PR #33) → Insight D (待 C8 spec 阶段触发)
 
 - [ ] **Insight A**: AC-102 timeline-stable 测试原则 → `methodology.md`
   - **当前**: `tests/dogfood/test_adr_0002.py:26-56` inline docstring
@@ -245,10 +256,20 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **当前**: `tests/dogfood/test_c5_spec.py:23-46` inline regex + 注释
   - **触发**: 下次写 spec section parser 时
   - **建议位置**: component-spec-template.md 顶部"AC 测试编写注意" 节 / 或 C4 spec parser 文档
-- [ ] **Insight C**: Block Recovery invariant ("verdict 二元化后必须配自动 recovery") → `workflows.md` 或 `constitution.md`
-  - **当前**: 仅 C5 spec §7 + §6 Q5-5/Q5-6 描述
-  - **触发**: **写 C6 spec 时顺手** (自然 reference 点) — 见 P1.2 阶段 3 子任务
-  - **建议位置**: workflows.md 状态机 / 或 constitution.md D-autonomous profile 的隐含要求
+- [x] **Insight C**: Block Recovery invariant ("verdict 二元化后必须配自动 recovery") → `workflows.md` ✅ 2026-05-24
+  - **promoted**: workflows.md v0.1.1 → v0.1.2 — §二 加 "Block Recovery（D-autonomous 流派硬约束）" 小节 + 主流程图重绘 + 边判定表修正
+  - **触发**: 写 C6 spec 时顺手 (P1.2 阶段 3.1 合一 PR)
+  - **C6 spec 引用**: §3.1 I7 (硬约束) + §7 "Block Recovery R1 协作约定"
+- [ ] **Insight D**: "Contract Gate Re-evaluation Economics" → `workflows.md` 或 `methodology.md`
+  - **当前**: C6 spec §3.3 关键设计点注释 "NOT_FF_MERGEABLE 不重跑 C2/C4/C5 — rebase 后代码 tree 不变, verify/review report 仍 valid"（v0.1.1 round-3 加了 conflict-resolution 必须重投的 caveat + P1.3 `pr_head_sha` 加固预案）
+  - **触发**: 下次 C 模块 spec（特别是 C8 Deploy Contract — release tag preserves tree）出现"上游 artifact 仍 valid 不重新评估"类逻辑时 promote
+  - **建议位置**: workflows.md 加跨契约 invariant 节 / methodology.md 加 "Tree-Preserving Operations" 原则
+  - **来源**: C5 self-review of PR #33 round-2 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low)
+- [ ] **Insight E**: "Contract Response Envelope — Error vs Output disjoint top-level shapes" → `methodology.md` 或 `component-spec-template.md`
+  - **当前**: C6 spec §2.3 顶部 "与 Output Schema 互斥" 说明 + §2.2 omit-when-absent 约定（v0.1.1 round-3 引入）
+  - **触发**: 下次 contract spec (C7 / C8) 出现 Error/Output 两形态时 promote 为通用 API 设计原则
+  - **配对**: 跟 c6 §6 Q6-6（omit-when-absent vs nullable）形成 "response-shape" 主题，避免 spec drift
+  - **来源**: C5 self-review of PR #33 round-3 (T-004 mini-dogfood, finding category=reusable_knowledge_not_captured low, session 261e3fa7)
 
 ### C2 / C5 已知 bug
 
