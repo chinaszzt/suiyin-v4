@@ -1,252 +1,158 @@
 ---
-
-description: "Task list template for feature implementation"
+description: "v4 tasks.yaml template — Fork A: yaml is the truth source, not tasks.md"
+output_filename: tasks.yaml
 ---
 
-# Tasks: [FEATURE NAME]
+# v4 Task List Template (Fork A: tasks.yaml)
 
-**Input**: Design documents from `/specs/[###-feature-name]/`
-
-**Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
-
-**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
-
-**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
-
-## Format: `[ID] [P?] [Story] Description`
-
-- **[P]**: Can run in parallel (different files, no dependencies)
-- **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
-- Include exact file paths in descriptions
-
-## Path Conventions
-
-- **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
-- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
-- Paths shown below assume single project - adjust based on plan.md structure
-
-<!--
-  ============================================================================
-  IMPORTANT: The tasks below are SAMPLE TASKS for illustration purposes only.
-
-  The /sy-tasks command MUST replace these with actual tasks based on:
-  - User stories from spec.md (with their priorities P1, P2, P3...)
-  - Feature requirements from plan.md
-  - Entities from data-model.md
-  - Endpoints from contracts/
-
-  Tasks MUST be organized by user story so each story can be:
-  - Implemented independently
-  - Tested independently
-  - Delivered as an MVP increment
-
-  DO NOT keep these sample tasks in the generated tasks.md file.
-  ============================================================================
--->
-
-## Phase 1: Setup (Shared Infrastructure)
-
-**Purpose**: Project initialization and basic structure
-
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+> **v4 IMPORTANT**: 这个文件是 spec-kit `/sy-tasks` 借用的 template，**但 v4 已 Fork A 拍板**：
+> task 真相载体 = `tasks.yaml`（不是默认的 `tasks.md`）。
+>
+> 模型读完这份模板后，**必须**在 `FEATURE_DIR/tasks.yaml` 写出符合下述 schema 的 yaml 文件，
+> 而不是 markdown checklist。C2 Task Executor 的 batch adapter (`suiyin-flow task batch`)
+> 直接消费这个 yaml；md 仅在 P2+ 由 render 工具二次生成给人看。
 
 ---
 
-## Phase 2: Foundational (Blocking Prerequisites)
+## 输出文件
 
-**Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
-
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete
-
-Examples of foundational tasks (adjust based on your project):
-
-- [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement authentication/authorization framework
-- [ ] T006 [P] Setup API routing and middleware structure
-- [ ] T007 Create base models/entities that all stories depend on
-- [ ] T008 Configure error handling and logging infrastructure
-- [ ] T009 Setup environment configuration management
-
-**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+- **路径**：`FEATURE_DIR/tasks.yaml`（FEATURE_DIR 来自 setup-tasks.sh 的 `FEATURE_DIR`）
+- **格式**：YAML 1.2，UTF-8
 
 ---
 
-## Phase 3: User Story 1 - [Title] (Priority: P1) 🎯 MVP
+## Schema (v0.1.0)
 
-**Goal**: [Brief description of what this story delivers]
+```yaml
+schema_version: v0.1.0
+feature_name: 001-feature-slug          # spec-kit feature 目录名 (string, optional)
+tasks:                                  # list[BatchTaskEntry], 必须 ≥ 1
+  - task_id: T-001                      # 全 repo 唯一; pattern ^T-\d{3,}$
+    spec_ref: specs/001-feature/spec.md # spec.md 路径 (相对 repo_root)
+    plan_ref: specs/001-feature/plan.md # plan.md 路径
+    constitution_ref: docs/sdd/constitution.md  # optional; 默认即此值
+    verify_cmd: "pytest tests/foo -q"   # C4 L1+L2 跑通的命令
+    context_seeds:                      # list[str], 注入给 AI 的必读文件 (相对 repo_root)
+      - src/foo/__init__.py
+    ac_list:                            # list[str], 本 task 对应的 AC 编号
+      - AC-1
+      - AC-2
+    criticality: medium                 # low | medium | high; high 会被 C2 拒绝 (走 C3)
+    depends_on: []                      # list[task_id], P1.2.5 只做"被依赖必须在前"顺序断言
+    max_retries: 3                      # optional, 0..3, 默认 3
+    session_timeout_seconds: 7200       # optional, > 0, 默认 7200 (2h)
+    base_branch: main                   # optional, 默认 "main"
+```
 
-**Independent Test**: [How to verify this story works on its own]
+### 字段语义
 
-### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `schema_version` | ✅ | 当前固定 `v0.1.0`；C2 解析时会校验；bump 见 [batch.py](../../src/suiyin_flow/c2_executor/batch.py) BATCH_SCHEMA_VERSION |
+| `feature_name` | ❌ | metadata 用；不影响 C2 行为 |
+| `task_id` | ✅ | 唯一；写 yaml 时按执行顺序排列（depends_on 关系必须在前） |
+| `spec_ref` / `plan_ref` | ✅ | C2 验证存在性（不存在 → SPEC_NOT_FOUND） |
+| `verify_cmd` | ✅ | 单 task 完成判定；C4 §1+§2 范畴 |
+| `context_seeds` | ✅ | AI 必读文件清单；空数组合法 |
+| `ac_list` | ❌ | 默认空；Fork D 自然语言 AC 编号 |
+| `criticality` | ❌ | 默认 `medium`；`high` 必须由 C3 Arbiter 调度（C2 拒接） |
+| `depends_on` | ❌ | 默认空数组；P1.2.5 只校验顺序，不做拓扑/并行（留 P1.3 C1） |
 
-> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
+### Schema-level 校验（C2 batch adapter 落地）
 
-- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
-
-### Implementation for User Story 1
-
-- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
-- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
-- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
-- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
-
-**Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
-
----
-
-## Phase 4: User Story 2 - [Title] (Priority: P2)
-
-**Goal**: [Brief description of what this story delivers]
-
-**Independent Test**: [How to verify this story works on its own]
-
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
-
-- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
-
-### Implementation for User Story 2
-
-- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
-- [ ] T021 [US2] Implement [Service] in src/services/[service].py
-- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
-
-**Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
+- `task_id` 在 `tasks[]` 内**不可重复**
+- `depends_on` 中每个 ID 必须**早于**本 task 出现，否则报 `BATCH_ORDER_VIOLATION`
+- `depends_on` 不可包含**自身**
 
 ---
 
-## Phase 5: User Story 3 - [Title] (Priority: P3)
+## 执行顺序
 
-**Goal**: [Brief description of what this story delivers]
+`suiyin-flow task batch --tasks-yaml <path>` 按 `tasks[]` 的**列表顺序**串行跑：
 
-**Independent Test**: [How to verify this story works on its own]
+1. 顺序遍历 → 调 C2 `execute_task`
+2. 中间 task fail → 立即停 + 剩余 task 标 `skipped`（无 phase 回滚，P1.3 C7 加）
+3. `--dry-run` → 仅解析 + 列 task，不真起 session
 
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
-
-- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
-- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
-
-### Implementation for User Story 3
-
-- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
-- [ ] T027 [US3] Implement [Service] in src/services/[service].py
-- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
-
-**Checkpoint**: All user stories should now be independently functional
+> **不做拓扑排序 / 并行 / phase 调度**：P1.2.5 故意收窄 scope，把"依赖图驱动调度"留给 P1.3 C1 Planning Engine。yaml 里允许写 `depends_on` 是为了未来 C1 接 manifest 时不用迁移格式。
 
 ---
 
-[Add more user story phases as needed, following the same pattern]
+## Task 生成原则（给 sy-tasks model 的指引）
+
+1. **从 spec.md 抽 AC**：把 AC 按依赖关系分组，每组对应一个 task
+2. **任务粒度**：单 task ≈ "AI 一次 session 能改完 + verify 能跑过" 的范围（一般 1-3 个文件 + 测试）
+3. **顺序**：spec setup / foundational / 各 user story / polish；同 story 内 model 先于 service 先于 endpoint
+4. **`context_seeds` 必填**：每个 task 至少列 1 个文件（spec.md 之外的真相源）
+5. **`verify_cmd`**：尽量精确到本 task 受影响的测试目录或 marker，避免每次跑全量
+6. **`criticality`**：默认 `medium`；只有触碰 NON-NEGOTIABLE 原则（认证 / 支付 / 数据迁移 / 跨 module 重构）才打 `high`，那种 task 会被 C2 拒接转去 C3 Arbiter
 
 ---
 
-## Phase N: Polish & Cross-Cutting Concerns
+## 完整示例（小型 feature, 3 个 task 串行）
 
-**Purpose**: Improvements that affect multiple user stories
+```yaml
+schema_version: v0.1.0
+feature_name: 002-add-no-color-flag
 
-- [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
-- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
-- [ ] TXXX Security hardening
-- [ ] TXXX Run quickstart.md validation
+tasks:
+  - task_id: T-101
+    spec_ref: specs/002-add-no-color-flag/spec.md
+    plan_ref: specs/002-add-no-color-flag/plan.md
+    verify_cmd: "pytest tests/c4_verify/test_report.py -q"
+    context_seeds:
+      - src/suiyin_flow/c4_verify/report.py
+    ac_list: [AC-1]
+    criticality: medium
 
----
+  - task_id: T-102
+    spec_ref: specs/002-add-no-color-flag/spec.md
+    plan_ref: specs/002-add-no-color-flag/plan.md
+    verify_cmd: "pytest tests/c4_verify/test_report.py -q"
+    context_seeds:
+      - src/suiyin_flow/c4_verify/cli.py
+      - src/suiyin_flow/c4_verify/report.py
+    ac_list: [AC-2]
+    criticality: medium
+    depends_on: [T-101]
 
-## Dependencies & Execution Order
-
-### Phase Dependencies
-
-- **Setup (Phase 1)**: No dependencies - can start immediately
-- **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
-- **User Stories (Phase 3+)**: All depend on Foundational phase completion
-  - User stories can then proceed in parallel (if staffed)
-  - Or sequentially in priority order (P1 → P2 → P3)
-- **Polish (Final Phase)**: Depends on all desired user stories being complete
-
-### User Story Dependencies
-
-- **User Story 1 (P1)**: Can start after Foundational (Phase 2) - No dependencies on other stories
-- **User Story 2 (P2)**: Can start after Foundational (Phase 2) - May integrate with US1 but should be independently testable
-- **User Story 3 (P3)**: Can start after Foundational (Phase 2) - May integrate with US1/US2 but should be independently testable
-
-### Within Each User Story
-
-- Tests (if included) MUST be written and FAIL before implementation
-- Models before services
-- Services before endpoints
-- Core implementation before integration
-- Story complete before moving to next priority
-
-### Parallel Opportunities
-
-- All Setup tasks marked [P] can run in parallel
-- All Foundational tasks marked [P] can run in parallel (within Phase 2)
-- Once Foundational phase completes, all user stories can start in parallel (if team capacity allows)
-- All tests for a user story marked [P] can run in parallel
-- Models within a story marked [P] can run in parallel
-- Different user stories can be worked on in parallel by different team members
-
----
-
-## Parallel Example: User Story 1
-
-```bash
-# Launch all tests for User Story 1 together (if tests requested):
-Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
-Task: "Integration test for [user journey] in tests/integration/test_[name].py"
-
-# Launch all models for User Story 1 together:
-Task: "Create [Entity1] model in src/models/[entity1].py"
-Task: "Create [Entity2] model in src/models/[entity2].py"
+  - task_id: T-103
+    spec_ref: specs/002-add-no-color-flag/spec.md
+    plan_ref: specs/002-add-no-color-flag/plan.md
+    verify_cmd: "pytest tests/c4_verify -q"
+    context_seeds:
+      - src/suiyin_flow/c4_verify/cli.py
+    ac_list: [AC-3]
+    criticality: medium
+    depends_on: [T-102]
 ```
 
 ---
 
-## Implementation Strategy
+## 跑这份 yaml
 
-### MVP First (User Story 1 Only)
+```bash
+# Dry-run: 解析 + 列 task, 不真起 session
+suiyin-flow task batch \
+  --tasks-yaml specs/002-add-no-color-flag/tasks.yaml \
+  --repo-root "$(pwd)" \
+  --dry-run
 
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational (CRITICAL - blocks all stories)
-3. Complete Phase 3: User Story 1
-4. **STOP and VALIDATE**: Test User Story 1 independently
-5. Deploy/demo if ready
+# 真跑
+suiyin-flow task batch \
+  --tasks-yaml specs/002-add-no-color-flag/tasks.yaml \
+  --repo-root "$(pwd)"
+```
 
-### Incremental Delivery
-
-1. Complete Setup + Foundational → Foundation ready
-2. Add User Story 1 → Test independently → Deploy/Demo (MVP!)
-3. Add User Story 2 → Test independently → Deploy/Demo
-4. Add User Story 3 → Test independently → Deploy/Demo
-5. Each story adds value without breaking previous stories
-
-### Parallel Team Strategy
-
-With multiple developers:
-
-1. Team completes Setup + Foundational together
-2. Once Foundational is done:
-   - Developer A: User Story 1
-   - Developer B: User Story 2
-   - Developer C: User Story 3
-3. Stories complete and integrate independently
+输出 `BatchOutput` JSON（含 per-task 结果 + 整体 status）。
 
 ---
 
-## Notes
+## 跟 P1.3+ 的演进关系
 
-- [P] tasks = different files, no dependencies
-- [Story] label maps task to specific user story for traceability
-- Each user story should be independently completable and testable
-- Verify tests fail before implementing
-- Commit after each task or logical group
-- Stop at any checkpoint to validate story independently
-- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+- **P1.3 C1 Planning Engine** 会在 yaml 上**增加** `execution_plan: [{phase, parallel: [task_ids]}]` 字段，
+  然后 C7 Phase Coordinator 按 phase 调度。**schema 不变，只是新增字段**。
+- **R2** C2 retry-with-feedback：每 task 自动加 review feedback 作 context 重试。
+- **P1.4** C3 双 AI 实现 + 仲裁：`criticality: high` task 会被 C3 接走。
+
+所以**今天写的 tasks.yaml 一直是 task 真相载体**，不用迁移。

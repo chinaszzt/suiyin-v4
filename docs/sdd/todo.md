@@ -179,18 +179,35 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ### 子任务
 
-- [ ] **读 spec-kit `/sy-tasks` 输出 schema** — 确认 tasks.yaml 当前结构（id / depends_on / context_seeds / verify_cmd / 等字段）
-- [ ] **写 `src/suiyin_flow/c2_executor/batch.py`** — yaml → TaskInput list 转换 + 顺序调度
-- [ ] **加 CLI subcommand `suiyin-flow task batch --tasks-yaml <path>`**
+- [x] **读 spec-kit `/sy-tasks` 输出 schema** — 反向发现 spec-kit upstream 默认输出 `tasks.md` (md checklist)；v4 Fork A 决议改输出 `tasks.yaml`，需自定义 schema（见下条 batch.py）
+- [x] **写 `src/suiyin_flow/c2_executor/batch.py`** — BatchManifest schema v0.1.0 + load_tasks_yaml + run_batch（顺序串行 + fail-stop + dry-run）+ BatchAdapterError
+- [x] **加 CLI subcommand `suiyin-flow task batch --tasks-yaml <path>`**
   - 顺序跑（不并行，那是 P1.3 C1+C7）
-  - 每 task 完成 → 下一个; 中间 fail → 全停 + 报错（无 phase 回滚, P1.3 加）
-- [ ] **AC tests**: tasks.yaml 解析 / 顺序调度 / 中间 fail 行为 / dry-run mode (列出要跑的 task 不真跑)
-- [ ] **mini-dogfood**: 在 v4 自身或 v5 仓里写 1 个 spec + 跑 `/sy-tasks` → 生成 tasks.yaml → `suiyin-flow task batch` 跑通 2-3 个连续 task
-- [ ] **不 bump C2 spec major**: 只是新增 batch CLI subcommand, contract / behavior 不变
+  - 每 task 完成 → 下一个; 中间 fail → 全停 + 后续 skipped（无 phase 回滚, P1.3 加）
+  - exit 0 = all_success / dry_run, 1 = partial_failed, 2 = INVALID_MANIFEST / MANIFEST_NOT_FOUND / REPO_ROOT_NOT_FOUND
+- [x] **AC tests** (15 个, `tests/c2_executor/test_batch.py`): tasks.yaml 解析 / 缺字段 / 反序 depends_on / 顺序调度 / 中间 fail 行为 / dry-run mode / CLI smoke
+- [x] **改造 `/sy-tasks` 输出格式 md → yaml**: `runtime/templates/tasks-template.md` 内容改为 yaml schema 指引 (resolver 仍按 `.md` 后缀查找)，`skills/sy-tasks/SKILL.md` 顶部加 v4 OVERRIDE 节，强制输出 `tasks.yaml`
+- [x] **mini-dogfood T-006**: `dogfood/T-006/` (spec + 3 fixtures + run.py)；3 场景全 pass — happy dry-run / 缺 verify_cmd → INVALID_MANIFEST / depends_on 反序 → BATCH_ORDER_VIOLATION。**注意**：未跑真 Claude session（那要 2h × N + 真闭环留给下一 session 真用 `/sy-tasks` 验证）
+- [x] **不 bump C2 spec major**: 只是新增 batch CLI subcommand, contract / behavior 不变 (C2 SCHEMA_VERSION 仍 v0.1.3)
 
-预估：1-2 天
+预估：1-2 天 → 实际 0.5 天 ✅
 
-**触发**: P1.2 阶段 3 (C6) merge 后立即启动
+**触发**: P1.2 阶段 3 (C6) merge 后立即启动 — ✅ 完成于 PR #35 (本 PR)
+
+### 落地形态
+
+- **新依赖**: `pyyaml>=6.0` + `types-PyYAML` (dev)
+- **新模块**: `src/suiyin_flow/c2_executor/batch.py` (schema + loader + orchestrator)
+- **新 CLI**: `suiyin-flow task batch --tasks-yaml <path> --repo-root <p> [--dry-run]`
+- **改 skill**: `skills/sy-tasks/SKILL.md` 顶部 v4 OVERRIDE + `runtime/templates/tasks-template.md` 内容大改 (yaml schema 指引)
+- **新 dogfood**: `dogfood/T-006/` 3 场景 (happy / missing-field / order-violation)
+- **现有 9 个 C2 AC 不变**; 新增 15 个 batch AC (B1a-B6b)。总 108 tests passed
+
+### 下一步要做的事 (P1.3+ 触发点)
+
+- **R2 retry-with-feedback** (C2 v0.2): 整合 review_report 到 batch retry context — 真实使用后看是否要把 manifest 里加 `review_attempts` 字段
+- **C1 Planning Engine**: 在现有 tasks.yaml 上**增加** `execution_plan: [{phase, parallel: [task_ids]}]` 字段 — schema 不变, depends_on 已预留
+- **真闭环用户验证**: 用户在 v4 自身或 v5 仓跑一次 `/sy-specify → /sy-plan → /sy-tasks → suiyin-flow task batch → merge`, 验证 `/sy-tasks` 改造正确性 (本 PR 未真跑 /sy-tasks)
 
 ### P1.3 P2 — 并行加速 + R2
 

@@ -364,6 +364,27 @@ def _make_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-retries", type=int, default=3)
     run_p.add_argument("--timeout", dest="session_timeout_seconds", type=int, default=7200)
     run_p.add_argument("--base-branch", default="main")
+
+    # batch subcommand (P1.2.5): tasks.yaml → 顺序跑一批
+    batch_p = task_sub.add_parser(
+        "batch", help="按 tasks.yaml 顺序跑一批 task (P1.2.5)"
+    )
+    batch_p.add_argument(
+        "--tasks-yaml",
+        dest="tasks_yaml",
+        required=True,
+        help="tasks.yaml 路径 (一般是 .specify/specs/NNN-feature/tasks.yaml)",
+    )
+    batch_p.add_argument(
+        "--repo-root",
+        required=True,
+        help="业务项目根 (绝对路径); 注入给 manifest 内每个 task",
+    )
+    batch_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只解析 + 列 task, 不调 execute_task",
+    )
     return parser
 
 
@@ -371,10 +392,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = _make_parser()
     args = parser.parse_args(argv)
 
-    if args.command != "task" or args.task_command != "run":
+    if args.command != "task":
         parser.print_help()
         return 2
 
+    if args.task_command == "run":
+        return _cmd_task_run(args)
+    if args.task_command == "batch":
+        return _cmd_task_batch(args)
+
+    parser.print_help()
+    return 2
+
+
+def _cmd_task_run(args: argparse.Namespace) -> int:
     try:
         task_input = TaskInput(
             task_id=args.task_id,
@@ -401,6 +432,55 @@ def main(argv: list[str] | None = None) -> int:
         # 详细 error 也 dump 到 stdout 让 caller 解析
         print(e.error.model_dump_json(indent=2))
         return 2
+
+
+def _cmd_task_batch(args: argparse.Namespace) -> int:
+    # Lazy import 避免循环 (batch 也 import execute_task)
+    from suiyin_flow.c2_executor.batch import (
+        BatchAdapterError,
+        load_tasks_yaml,
+        run_batch,
+    )
+
+    repo_root = Path(args.repo_root).resolve()
+    if not repo_root.exists() or not repo_root.is_dir():
+        err = {
+            "code": "REPO_ROOT_NOT_FOUND",
+            "message": f"--repo-root not a directory: {repo_root}",
+        }
+        import json as _json
+        print(_json.dumps(err, ensure_ascii=False, indent=2), file=sys.stderr)
+        return 2
+
+    try:
+        manifest = load_tasks_yaml(Path(args.tasks_yaml))
+    except BatchAdapterError as e:
+        print(e.error.model_dump_json(indent=2), file=sys.stderr)
+        return 2
+
+    total = len(manifest.tasks)
+    print(
+        f"batch: {total} tasks from {args.tasks_yaml}"
+        + (" (dry-run)" if args.dry_run else ""),
+        file=sys.stderr,
+    )
+
+    output = run_batch(
+        manifest,
+        repo_root=str(repo_root),
+        dry_run=args.dry_run,
+    )
+
+    # Per-task progress (stderr, human-friendly)
+    for idx, result in enumerate(output.tasks, start=1):
+        print(f"[{idx}/{total}] {result.task_id}: {result.status}", file=sys.stderr)
+
+    # Final BatchOutput JSON to stdout
+    print(output.model_dump_json(indent=2))
+
+    if output.status == "dry_run" or output.status == "all_success":
+        return 0
+    return 1
 
 
 if __name__ == "__main__":
