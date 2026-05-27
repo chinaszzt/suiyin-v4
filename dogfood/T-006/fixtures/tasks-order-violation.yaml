@@ -1,0 +1,20 @@
+schema_version: v0.1.0
+feature_name: dogfood-T-006-order-violation
+tasks:
+  # T-401 反序 depend on T-402 — 应触发 BATCH_ORDER_VIOLATION
+  - task_id: T-401
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    verify_cmd: "true"
+    context_seeds: []
+    ac_list: []
+    criticality: medium
+    depends_on: [T-402]
+
+  - task_id: T-402
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    verify_cmd: "true"
+    context_seeds: []
+    ac_list: []
+    criticality: medium

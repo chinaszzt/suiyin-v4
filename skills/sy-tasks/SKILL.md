@@ -1,15 +1,54 @@
 ---
 name: "sy-tasks"
-description: "Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts."
+description: "Generate an actionable, dependency-ordered tasks.yaml for the feature based on available design artifacts."
 argument-hint: "Optional task generation constraints"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
-  author: "github-spec-kit"
+  author: "github-spec-kit (v4 forked)"
   source: "templates/commands/tasks.md"
 user-invocable: true
 disable-model-invocation: false
 ---
 
+## v4 OVERRIDE — tasks.yaml, not tasks.md  (Fork A)
+
+> **碎银 v4 已 Fork A 拍板：task 真相载体是 `tasks.yaml`，不是 spec-kit 默认的 `tasks.md`。**
+> 下面 spec-kit 借来的 6 步 Outline 里所有提到「tasks.md」「markdown checklist」「`- [ ] [TaskID] [P?] [Story?]`」的部分，**一律按下述 yaml schema 改写**。
+>
+> **输出契约**：
+> 1. **文件名**：`FEATURE_DIR/tasks.yaml`（不是 `tasks.md`）
+> 2. **顶层 schema**（v0.1.0）：
+>    ```yaml
+>    schema_version: v0.1.0
+>    feature_name: <feature 目录名>          # optional metadata
+>    tasks:                                   # list, ≥ 1, **按执行顺序排列**
+>      - task_id: T-001                       # ^T-\d{3,}$, 唯一
+>        spec_ref: specs/<feature>/spec.md    # 相对 repo_root
+>        plan_ref: specs/<feature>/plan.md
+>        constitution_ref: docs/sdd/constitution.md  # optional
+>        verify_cmd: "pytest tests/foo -q"    # C4 L1+L2 跑通的命令
+>        context_seeds: [src/foo/main.py]     # AI 必读文件清单
+>        ac_list: [AC-1]                      # spec.md 里的 AC 编号
+>        criticality: medium                  # low | medium | high
+>        depends_on: []                       # optional, P1.2.5 只校验顺序
+>        max_retries: 3                       # optional
+>        session_timeout_seconds: 7200        # optional
+>        base_branch: main                    # optional
+>    ```
+> 3. **schema 约束**（C2 batch 解析时强校验）：
+>    - `task_id` 在 `tasks[]` 内不可重复
+>    - `depends_on` 中每个 ID **必须早于本 task 出现**（违反 → `BATCH_ORDER_VIOLATION`）
+>    - `depends_on` 不可含自身
+> 4. **任务粒度**：单 task ≈ AI 一次 session 能改完 + verify 能跑过（一般 1-3 个文件 + 测试）
+> 5. **执行**：用户后续会跑 `suiyin-flow task batch --tasks-yaml <path> --repo-root <p>` 顺序跑完
+>
+> **不再生成的内容**：spec-kit 原 template 的 markdown checkbox 格式、`[P]` `[Story]` 标签、"Parallel Example" 节、"Implementation Strategy" 节 —— 这些信息**全部融入 yaml 字段语义**（顺序 = `tasks[]` 顺序；并行/phase 划分留给 P1.3 C1 Planning Engine）。
+>
+> **完整模板**：见 `runtime/templates/tasks-template.md`（虽然文件名是 `.md` 但内容是 yaml schema 指引；resolver 暂时按 `.md` 后缀查）。
+>
+> **Step 5 Report** 也按这个改：输出 `tasks.yaml` 路径 + task 数量 + 依赖关系摘要（不再报"Format validation: checklist 格式"）。
+
+---
 
 ## User Input
 

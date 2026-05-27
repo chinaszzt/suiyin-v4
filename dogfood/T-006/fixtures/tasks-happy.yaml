@@ -1,0 +1,32 @@
+schema_version: v0.1.0
+feature_name: dogfood-T-006-happy
+tasks:
+  - task_id: T-201
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    verify_cmd: "pytest tests/c2_executor/test_batch.py -q"
+    context_seeds:
+      - src/suiyin_flow/c2_executor/batch.py
+    ac_list: [AC-B1a]
+    criticality: medium
+
+  - task_id: T-202
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    verify_cmd: "pytest tests/c2_executor/test_batch.py -q"
+    context_seeds:
+      - src/suiyin_flow/c2_executor/batch.py
+      - src/suiyin_flow/c2_executor/cli.py
+    ac_list: [AC-B2]
+    criticality: medium
+    depends_on: [T-201]
+
+  - task_id: T-203
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    verify_cmd: "pytest tests/c2_executor -q"
+    context_seeds:
+      - src/suiyin_flow/c2_executor/cli.py
+    ac_list: [AC-B6]
+    criticality: medium
+    depends_on: [T-202]

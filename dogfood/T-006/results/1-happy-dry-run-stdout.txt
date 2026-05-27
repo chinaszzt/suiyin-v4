@@ -1,0 +1,26 @@
+{
+  "schema_version": "v0.1.0",
+  "feature_name": "dogfood-T-006-happy",
+  "status": "dry_run",
+  "tasks": [
+    {
+      "task_id": "T-201",
+      "status": "dry_run",
+      "output": null,
+      "error": null
+    },
+    {
+      "task_id": "T-202",
+      "status": "dry_run",
+      "output": null,
+      "error": null
+    },
+    {
+      "task_id": "T-203",
+      "status": "dry_run",
+      "output": null,
+      "error": null
+    }
+  ],
+  "stopped_at_task_id": null
+}

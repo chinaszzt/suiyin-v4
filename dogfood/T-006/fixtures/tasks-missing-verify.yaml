@@ -1,0 +1,10 @@
+schema_version: v0.1.0
+feature_name: dogfood-T-006-missing-verify
+tasks:
+  - task_id: T-301
+    spec_ref: dogfood/T-006/spec.md
+    plan_ref: dogfood/T-006/spec.md
+    # verify_cmd 故意缺失 — 应触发 INVALID_MANIFEST
+    context_seeds: []
+    ac_list: []
+    criticality: medium
