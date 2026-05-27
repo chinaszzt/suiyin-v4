@@ -240,11 +240,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | **性质** | **行为契约** — 所有职责都是配置 / 编排，**没有 imperative logic** |
 | **输入** | PR + C4 verify_report + C5 review verdict |
 | **输出** | merge / hold |
-| **契约规则** | `verify.all.pass && review.verdict == approve && pr.ff_mergeable && !pr.has_label("human:block")` |
-| **失败处理** | `ff_mergeable false` → rebase（不重做 C2/C4/C5），`human:block` → 等人解锁 |
-| **实现选项谱系** | (a) **git pre-push hook + 5 行 shell**（最轻，零 SaaS）／ (b) 通用 CI + 仓库规则 ／ (c) GitHub Branch Protection + Merge Queue（最完整）／ (d) 混合 |
-| **依赖** | git + （C4/C5 status）|
-| **未决 Q6** | 失败升级通知渠道（取决于实现选项） |
+| **契约规则** | `verify_report.overall_verdict == pass && review_report.verdict == approve && ff_mergeable(pr,main) && !pr.has_label("human:block")` — 4 条全 AND（精确字段名见 components/c6-gate-contract.md §3.1 I1） |
+| **失败处理** | `ff_mergeable false` → rebase（仅 rebase 干净时不重做 C2/C4/C5，conflict resolution 必须重投，见 c6 §3.3），`review block` → R1 加 `human:block` + comment findings（c6 §3.1 I7/I9），`human:block` 已存在 → 按 I8 precedence 优先，等人解锁 |
+| **实现选项谱系** | (a) **standalone Python CLI `suiyin-flow gate run`**（最轻，零 SaaS；P1.2 默认；**不挂 pre-push** —— 见 c6 §7 / Q6-7）／ (b) 通用 CI + 仓库规则 ／ (c) GitHub Branch Protection + Merge Queue（最完整）／ (d) 混合 |
+| **依赖** | git + （C4/C5 report） + gh CLI（label / comment） |
+| **~~未决 Q6~~** | ~~失败升级通知渠道~~ → **P1.2 关闭**（决议: PR comment + `human:block` 标签作为通知通道；邮件 / IM webhook 留 P3+，详 c6 §6） |
 
 #### C8. Deploy Contract（Layer 6）
 
@@ -388,11 +388,11 @@ P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看
 | **Q3** | 仲裁 AI 是第 3 个独立 session 还是 reviewer 兼任 | C3 |
 | **Q4** | AC ↔ test 映射强制方式（命名约定 vs metadata vs 注解） | C4 |
 | **Q5** | AI Reviewer 单次还是 N=2 分歧仲裁 | C5 |
-| **Q6** | Gate Contract 失败升级通知渠道（取决于实现选项） | C6 |
+| ~~Q6~~ | ~~Gate Contract 失败升级通知渠道~~ → **closed P1.2** (通道 = PR comment + label; 邮件/IM 留 P3+) | C6 |
 | **Q7** | phase 内某 task 卡住，已 merge 的回滚还是隔离 | C7 |
 | **Q8** | Deploy Contract 风险 summary 格式（人 30s 读完） | C8 |
 
 ---
 
-**Version**: 0.3.0-draft（v0.2 → v0.3 修订内容：Fork J-S 全部拍板进表；C5 加 `complexity` finding 类 + 调用 C11 query；Plan 死锁防御明确；C11 一致性约束记录）
-**Last Updated**: 2026-05-18
+**Version**: 0.3.1-draft（v0.3 → v0.3.1 修订: C6 spec v0.1.1 落地后 cascade — C6 行表字段名 `verify.all.pass` → `verify_report.overall_verdict==pass`；契约规则改 R1/I8/I9 引用；实现谱系 (a) 改 standalone CLI（去 pre-push）；附录 B Q6 closed P1.2）
+**Last Updated**: 2026-05-25

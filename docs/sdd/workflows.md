@@ -53,7 +53,9 @@ flowchart TD
     BR -.->|R2 P1.3 retry-with-feedback| I
     BR -.->|R1 manual: fix code + reverify| I
     BR -.->|R1 manual: unlock + rerun gate| L
-    L -->|merged to main| M{phase 内所有 task done?}
+    L -->|merged to main, ff-only| M{phase 内所有 task done?}
+    L -->|held: VERIFY_NOT_PASS / NOT_FF_MERGEABLE| I
+    L -->|held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED| BR
     M -->|no, next task| I
     M -->|yes| N{所有 phase done?}
     N -->|no, next phase| H
@@ -86,7 +88,7 @@ flowchart TD
 | **R2** | P1.3 | C5 block → C2 retry-with-feedback（max 2 次）→ 仍 block 退 R1 | C6 增加 retry 分支，把 findings 注入 C2 prompt 后重发 |
 | **R3** | P3+ | + Codex 仲裁（Claude + Codex 双 reviewer 取交集）→ 减少 single-reviewer false positive | C6 接 N=2 verdict，分歧时调仲裁 |
 
-**当前 P1.2 阶段强制**: 任何 `verdict=block` → C6 必触发 R1（标签 + comment），不允许静默 hold。详见 [C6 spec §3.1 I7](components/c6-gate-contract.md)。
+**当前 P1.2 阶段强制**: 任何 `verdict=block` → C6 必尝试 R1（标签 + comment），不允许静默 hold；R1 内部原子性见 [C6 spec §3.1 I7 + I9 atomicity](components/c6-gate-contract.md)（label 成功+comment 失败仍视作 R1 已触发；label 失败则降级 Error）。多条规则同时 false 时 `reason` 按 [I8 precedence](components/c6-gate-contract.md) (HUMAN_BLOCKED > VERIFY > REVIEW > NOT_FF) 单选。
 
 ### 边的判定规则（spec 阶段要钉死的）
 
@@ -229,10 +231,11 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 
 ---
 
-**Version**: 0.1.2-draft
-**Last Updated**: 2026-05-24
+**Version**: 0.1.3-draft
+**Last Updated**: 2026-05-25
 
 ### Changelog
 
+- **v0.1.3** (2026-05-25): C6 spec v0.1.1 round-3 review cascade — §二 主流程图 L (Merge Gate C6) 加 held 出边（`held: VERIFY_NOT_PASS / NOT_FF_MERGEABLE → I` retry path；`held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED → BR`）解 L dead-end 问题；merged 边 label 加 `ff-only` 显式；Block Recovery 节末段加 I8 precedence + I9 atomicity 引用。
 - **v0.1.2** (2026-05-24): Insight C 提升 — §二 主流程图 C5 block 边重绘 (R1 P1.2 / R2 P1.3 dotted)；新增 "Block Recovery（D-autonomous 流派硬约束）" 小节；边判定表 "review block" 行从 "→ retry" 改为 "→ Block Recovery" 并去 `request_changes`；§六 加 Q6-2/Q6-3/Q6-4/Q6-5（C6 spec 派生）。版本号从 v0.1.0 直接跳 v0.1.2（含义变化 + 新增小节，per ADR-0001 SemVer）。
 - **v0.1.0** (2026-05-15): 初版

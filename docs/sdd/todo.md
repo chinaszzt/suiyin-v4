@@ -139,12 +139,16 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ### 阶段 3 — C6 Gate Contract spec + impl
 
-- [x] **C6 spec** `components/c6-gate-contract.md` v0.1.0-draft（spec PR pending）
-  - gate 规则 4 条 (`verify.all.pass && review.verdict == approve && pr.ff_mergeable && !pr.has_label("human:block")`)
-  - 失败处理: VERIFY_NOT_PASS / REVIEW_NOT_APPROVE (→ R1) / NOT_FF_MERGEABLE / HUMAN_BLOCKED
-  - 实现谱系: P1.2 落地 (a) git pre-push hook + Python CLI `suiyin-flow gate run`
-  - §6 新增 Q6-2/Q6-3/Q6-4/Q6-5
-  - 见 `toolchain.md` C6 节，关 Q6 = P1.2 阶段降级为 "通知通道 = PR comment"
+- [x] **C6 spec** `components/c6-gate-contract.md` v0.1.1-draft（spec PR pending；round-3 max-effort review fixes 已落）
+  - gate 规则 4 条全 AND（字段名严格按 C4 §2.2 `overall_verdict` + C5 §2.2 `verdict`）
+  - 失败处理: 拆 (a) Held cases (reason 枚举) / (b) Error cases (code 枚举) 两表
+  - **I8 reason precedence** (HUMAN_BLOCKED > VERIFY > REVIEW > NOT_FF) + **I9 R1 atomicity** (label/comment 分级 partial_failure)
+  - Schema 改 omit-when-absent (去 `nullable: true`)；recovery_action.kind 删死值 `rebase_required`
+  - 实现谱系: P1.2 落地 (a) **standalone CLI** `suiyin-flow gate run`（**不挂 pre-push** — Q6-7 决议）
+  - §3.2 merge 不用 `gh pr merge`，用本地 `git merge --ff-only` + push 或 `git push <sha>:main` ff-only
+  - §3.2 pr_ref → safe_pr_ref 转义规则（NC-5 跨平台文件名安全）
+  - §3.3 NOT_FF_MERGEABLE 复用 verify/review 仅限 rebase 干净；conflict resolution 必须重投
+  - §6 新增 Q6-2/Q6-3/Q6-4/Q6-5/Q6-6/Q6-7；**关 Q6 + cascade toolchain.md**
 - [x] **Block Recovery invariant promote 到 workflows.md** v0.1.1 → v0.1.2 (Insight C ✅)
   - §二 主流程图 C5 block 边重绘（R1 P1.2 / R2 P1.3 dotted）
   - 新增 "Block Recovery（D-autonomous 流派硬约束）" 小节
