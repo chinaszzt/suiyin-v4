@@ -18,14 +18,16 @@ import sys
 from suiyin_flow.c2_executor import cli as c2_cli
 from suiyin_flow.c4_verify import cli as c4_cli
 from suiyin_flow.c5_reviewer import cli as c5_cli
+from suiyin_flow.c6_gate import cli as c6_cli
 
 _USAGE = """\
-usage: suiyin-flow {verify,task,review} ...
+usage: suiyin-flow {verify,task,review,gate} ...
 
 Subcommands:
   verify   C4 Verify Contract (L1 lint + L2 tests)
   task     C2 Task Executor (单 task 自动从 spec 到 PR)
   review   C5 AI Reviewer (独立 session 审 PR, P1.2)
+  gate     C6 Gate Contract (自动 merge gate, P1.2 阶段 3.2)
 
 详细帮助: `suiyin-flow <subcommand> --help`
 """
@@ -47,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         return c2_cli.main(args)
     if cmd == "review":
         return c5_cli.main(args)
+    if cmd == "gate":
+        return c6_cli.main(args)
 
     print(f"suiyin-flow: error: unknown subcommand: {cmd}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)

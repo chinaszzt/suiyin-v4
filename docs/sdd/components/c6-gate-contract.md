@@ -143,8 +143,16 @@ properties:
 - **Merge to main**（gate_result == merged + dry_run == false）: 本地 `git fetch origin main && git merge --ff-only <pr_sha>` 然后 `git push origin main`；或等价的单步 `git push origin <pr_sha>:main`（ff-only push，远端拒非 ff 会失败）。**不用 `gh pr merge`**（见 I5）。merge 后可选 `gh pr close <ref> --delete-branch` 收尾（也是 ff-only 后状态）。
 - **Label add**（reason == REVIEW_NOT_APPROVE + dry_run == false）: `gh pr edit <ref> --add-label "human:block"`。已存在标签视作成功（I9 idempotent）。
 - **Comment finding**（reason == REVIEW_NOT_APPROVE + dry_run == false + label 已成功）: `gh pr comment <ref> --body "<formatted findings>"` — inline C5 findings 用 §2.2 finding schema 字段（**`severity / category / location / suggested_fix` 四字段**，**严禁** 引用不存在的 `summary` 字段，见 C5 §2.2 finding required 列表）。
-- **Gate report 落盘**: `<repo_root>/.suiyin/gates/<safe_pr_ref>-<ts>.json`（gate_report 持久化，供 audit）。`safe_pr_ref` = 把 `pr_ref` 中的 `/` `:` `?` 等文件系统不友好字符替换成 `-`（提取 `https://github.com/.../pull/33` 末段 → `pull-33` / 提取分支名 `claude/c6-spec` → `claude-c6-spec` / 跨平台兼容 NC-5）。
-- **dry_run=true 时一切副作用跳过**：上述 merge / label / comment / 落盘**全部不执行**，仅返回内存中评估的 Output JSON。dry_run 下 merged_sha / label_added / comment_posted / comment_url 字段一律 absent（包括 gate_result=merged 的预测情形）。
+- **Gate report 落盘**: `<repo_root>/.suiyin/gates/<safe_pr_ref>-<ts>.json`（versioned 时间戳化）+ `<repo_root>/.suiyin/gates/latest-<safe_pr_ref>.json`（最新副本覆盖式写入，便于 dogfood / debug 直接读最新；跟 C5 review_report `latest.json` 同模式，跨平台不用 symlink）。**落盘是 audit trail 而非 side-effect**（详 dry_run 边界节）。
+- `safe_pr_ref` = 把 `pr_ref` 中的 `/` `:` `?` 等文件系统不友好字符替换成 `-`（提取 `https://github.com/.../pull/33` 末段 → `pull-33` / 提取分支名 `claude/c6-spec` → `claude-c6-spec` / 跨平台兼容 NC-5）。
+
+#### dry_run 副作用边界（v0.1.2 新增）
+
+- **dry_run=true 跳过**: 真 merge (`git push origin <sha>:main`)、`gh pr edit --add-label`、`gh pr comment` — 即任何**对外可观察**的副作用（main 历史、PR 状态、PR comments）。
+- **dry_run=true 仍执行**: gate_report.json 落盘（versioned + latest 副本）— 这是本地 audit trail，纯 fs 写入，不影响 PR / main / 外部观察者状态。**dogfood (T-005) 依赖 dry_run + 落盘组合**读取评估结果。
+- **dry_run 下 Output 字段约定**: merged_sha / label_added / comment_posted / comment_url 一律 absent（per §2.2 omit-when-absent；gate_result=merged 时也 absent merged_sha 因为没真 merge）。`gate_result=merged` 仍 emit，表"假设真 run 会 merge"的预测。
+
+> **修正历史**: v0.1.1 把"落盘"列在 dry_run 跳过列表内，跟 AC-10 "每次非 Error 调用必落盘（含 dry_run 标志）" 直接矛盾。v0.1.2 (#34 C5 round-1 finding cascade) 拍板 audit trail 优先 — 落盘永远执行（除 Error abort 前未产 Output 的情形），dry_run 仅跳对外可观察副作用。
 
 不触碰的：
 - 不调 C4 重 verify
@@ -210,6 +218,7 @@ properties:
 - **Q6**（从 `toolchain.md` C6 节继承）: Gate 失败升级通知渠道（取决于实现选项）。**P1.2 决议（本 PR 关闭 Q6）**: 仅落地 PR comment + `human:block` 标签作为通知通道；邮件 / IM webhook 留 P3+。**`toolchain.md` Q-table 同步更新**（cascade by ADR-0001 governance 要求，本 PR 一起改）。
 - **Q6-6 (新)**: Schema 形态 — 可选字段是 `null` 占位还是 omit-when-absent？P1.2 阶段已拍板 omit（§2.2 顶部约定），但仍待 P1.3 跨 spec 统一（C4 / C5 现有 schema 是否一致？需要 sweep）。
 - **Q6-7 (新)**: gate 触发时机 vs git push 关系 — P1.2 决议是 standalone CLI（不挂 pre-push 钩子）。Q6-5 (a) 选项保留，但显式排除 (b) pre-push（exit code 1 会 abort branch push，破坏 PR 创建流程，见 §7）。
+- **Q6-8 (新, PR #34 C5 finding #4)**: 跨平台 mock gh CLI 测试模式 — tests/c6_gate/conftest.py 的 `mock_gh_on_path` fixture 用 Python shebang + chmod 0o755 写到 PATH，**Windows 不识别 shebang + chmod 无效** → c6_gate AC tests 在 Windows 上跑不过。候选修法：(a) 加 `gh.bat` Windows shim 调 Python 脚本；(b) 用 `monkeypatch.setattr(subprocess, "run", ...)` patch subprocess 不依赖 fs；(c) `pytest.mark.skipif(sys.platform=="win32")` 跳过（违 NC-5）。**P1.2 当前**: 跑通 macOS / Linux，Windows gap 留 P1.3 (b) 方案兜底（更通用 + 无 fs 副作用）。同 sink Insight F → todo.md（C5 mini-dogfood T-005 sinks 节）。
 - **Q6-2**: `NOT_FF_MERGEABLE` 时 rebase 由谁触发？候选：
   - (a) C6 自动 rebase 后重新评估（contract 内嵌）— 复杂度高、有 merge conflict 风险
   - (b) hold + 等 C7 Phase Coordinator 重排队列（P1.3 加 C7 后）
@@ -354,12 +363,13 @@ R2（C2 retry-with-feedback）和 R3（Codex 仲裁）在 P1.3 / P3+ 阶段才�
 
 ---
 
-**Version**: v0.1.1-draft
+**Version**: v0.1.2-draft
 **Last Updated**: 2026-05-25
-**Status**: draft（C5 self-review round-3 修订 — 见下方 Changelog）
+**Status**: draft（PR #34 impl-期间 C5 round-1 cascade fix — 见下方 Changelog）
 
 ### Changelog
 
+- **v0.1.2** (2026-05-25, PR #34 cascade): impl 期间 C5 self-review 暴露 §3.2 vs AC-10 内部矛盾（dry_run 是否落盘）+ latest 副本未文档化。**拍板 audit trail 优先** — 落盘永远执行（dry_run 也落），仅对外可观察副作用 (merge/label/comment) 跳过；新增 "dry_run 副作用边界" 节明确边界 + latest 副本文档化。AC-10 措辞不变（本来就对的，§3.2 跟上）。**PATCH bump** per ADR-0001 SemVer (措辞修正 + clarify，无 invariant 变化)。
 - **v0.1.1** (2026-05-25): C5 self-review round-3 max-effort recall 反馈，15 项修订：
   - §2.2 schema: 引入 omit-when-absent 约定（去 `nullable: true`）；删 `recovery_action.kind.rebase_required` 死值；加 `partial_failure` 字段；明确 `gate_result` / `code` enum 加 `type: string`
   - §2.3 schema: 标 Error 与 Output 互斥 top-level shape

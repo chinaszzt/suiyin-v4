@@ -1,0 +1,27 @@
+{
+  "target": "PR #30 (C5 AI Reviewer impl v0.1.1, merged commit 9793d51)",
+  "overall_verdict": "pass",
+  "levels": [
+    {
+      "level": "L1",
+      "status": "pass",
+      "tool": "ruff",
+      "summary": {"errors": 0, "warnings": 0},
+      "details": "All checks passed!"
+    },
+    {
+      "level": "L2",
+      "status": "pass",
+      "tool": "pytest",
+      "summary": {"passed": 12, "failed": 0, "skipped": 0},
+      "details": "12 c5_reviewer AC tests passed"
+    }
+  ],
+  "ac_summary": {
+    "covered": ["AC-101", "AC-102", "AC-103", "AC-104", "AC-105"],
+    "missing": []
+  },
+  "generated_at": "2026-05-25T20:00:00Z",
+  "contract_version": "v0.1.2",
+  "_note": "T-005 minimal fixture. 真实数据可用 `suiyin-flow verify run --target <PR #30 commit 9793d51>` 重生成. C4 §2.2 schema 字段齐."
+}
