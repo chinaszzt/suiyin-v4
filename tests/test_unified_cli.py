@@ -80,3 +80,15 @@ def test_dispatcher_propagates_c2_exit_code(monkeypatch: pytest.MonkeyPatch) -> 
     """c2 main 返回非 0 时, dispatcher 透传."""
     monkeypatch.setattr("suiyin_flow.cli.c2_cli.main", lambda argv: 2)
     assert dispatcher.main(["task", "anything"]) == 2
+
+
+def test_dispatcher_propagates_c5_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    """c5 main 返回非 0 时, dispatcher 透传."""
+    monkeypatch.setattr("suiyin_flow.cli.c5_cli.main", lambda argv: 3)
+    assert dispatcher.main(["review", "anything"]) == 3
+
+
+def test_dispatcher_propagates_c6_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    """c6 main 返回非 0 时, dispatcher 透传 (P1.2 阶段 3.2 加)."""
+    monkeypatch.setattr("suiyin_flow.cli.c6_cli.main", lambda argv: 1)
+    assert dispatcher.main(["gate", "anything"]) == 1
