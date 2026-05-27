@@ -15,8 +15,11 @@ Output:
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -193,6 +196,19 @@ def main() -> int:
     summary_lines.append("")
 
     # ============================================================
+    # AC-506 (round-2 add): 真主路径 run_batch → execute_task → success
+    # ============================================================
+    # 走通完整 run_batch → execute_task → success 主路径 (round-1 C5 finding
+    # #1 medium spec_drift 要求补的真 evidence: 不只是 dry-run + error 场景).
+    # 用程序化 API (不是 CLI subprocess) 因为 claude_cmd 注入只在 Python 层暴露
+    # — 这跟 tests/c2_executor/test_acceptance_criteria.py AC-B7 的套路一致.
+    scenario = "4-real-run-success"
+    real_run_pass = _run_real_batch_scenario(scenario, summary_lines)
+    if not real_run_pass:
+        all_pass = False
+    summary_lines.append("")
+
+    # ============================================================
     # Summary
     # ============================================================
     summary_lines.append("---")
@@ -204,6 +220,179 @@ def main() -> int:
 
     print("\n".join(summary_lines))
     return 0 if all_pass else 1
+
+
+# ---------------------------------------------------------------------------
+# Scenario 4 helper: real run_batch 主路径 with fake claude script
+# ---------------------------------------------------------------------------
+
+
+_FAKE_CLAUDE_SCRIPT = textwrap.dedent(
+    """\
+    import json
+    import sys
+
+    sys.stdin.read()  # consume prompt
+    print(json.dumps({"type": "message", "content": "starting"}))
+    # C2 §4 Prompt Output —— session.py _is_implementer_final 要求 task_id +
+    # verify_cmd_exit_code 同时存在 (跟 tests/c2_executor/conftest.py
+    # mock_claude_success 同套路). task_id 填什么都行, C2 不校验跟 input 一致.
+    print(json.dumps({
+        "task_id": "T-stub",
+        "files_changed": ["README.md"],
+        "verify_cmd_exit_code": 0,
+        "commit_sha": "abc1234",
+    }))
+    """
+)
+
+
+def _setup_throwaway_repo(repo: Path) -> None:
+    """造一个最小 git repo (main 分支 + 1 commit + spec/plan/context/constitution).
+
+    跟 tests/c2_executor/conftest.py fixture_repo 等价, 但独立 (dogfood 不依赖 pytest).
+    """
+
+    def _git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            shell=False,
+        )
+
+    repo.mkdir(parents=True, exist_ok=True)
+    _git("init", "-b", "main")
+    _git("config", "user.email", "dogfood@suiyin.local")
+    _git("config", "user.name", "T-006")
+    _git("config", "commit.gpgsign", "false")
+    (repo / "spec.md").write_text(
+        "# T-006 throwaway spec\n\n## 5. Acceptance Criteria\n\n- **AC-1**: example\n",
+        encoding="utf-8",
+    )
+    (repo / "plan.md").write_text("# Plan\n", encoding="utf-8")
+    (repo / "constitution.md").write_text("# Constitution\n", encoding="utf-8")
+    (repo / "context.md").write_text("# Context seed\n", encoding="utf-8")
+    _git("add", ".")
+    _git("commit", "-m", "initial")
+
+
+def _run_real_batch_scenario(scenario: str, summary_lines: list[str]) -> bool:
+    """跑真 run_batch (2 个 task 连续, fake claude success).
+
+    Returns True iff all assertions pass.
+    """
+    # Lazy import: dogfood script 不依赖 suiyin_flow 安装时也能跑 (scenarios 1-3 走
+    # subprocess); 这个场景必须 import. 失败 → 标 fail, 但其他场景仍正常报告.
+    try:
+        from suiyin_flow.c2_executor.batch import (
+            BATCH_SCHEMA_VERSION,
+            BatchManifest,
+            BatchTaskEntry,
+            run_batch,
+        )
+    except ImportError as e:
+        summary_lines.append(f"## Scenario {scenario}")
+        summary_lines.append(f"  ✗ import suiyin_flow.c2_executor.batch failed: {e}")
+        summary_lines.append(
+            "    (装包: `pip install -e .[dev]` 在 worktree root)"
+        )
+        return False
+
+    summary_lines.append(f"## Scenario {scenario}")
+    summary_lines.append("- mode: 真 run_batch (programmatic) + fake claude script")
+
+    all_ok = True
+    tmp_root = Path(tempfile.mkdtemp(prefix="t006-real-"))
+    try:
+        repo = tmp_root / "repo"
+        _setup_throwaway_repo(repo)
+
+        script_path = tmp_root / "fake_claude.py"
+        script_path.write_text(_FAKE_CLAUDE_SCRIPT, encoding="utf-8")
+        fake_claude_cmd = [sys.executable, str(script_path)]
+
+        manifest = BatchManifest(
+            schema_version=BATCH_SCHEMA_VERSION,
+            feature_name="dogfood-T-006-real-run",
+            tasks=[
+                BatchTaskEntry(
+                    task_id="T-601",
+                    spec_ref="spec.md",
+                    plan_ref="plan.md",
+                    constitution_ref="constitution.md",
+                    context_seeds=["context.md"],
+                    verify_cmd="true",
+                    criticality="medium",
+                    ac_list=["AC-1"],
+                ),
+                BatchTaskEntry(
+                    task_id="T-602",
+                    spec_ref="spec.md",
+                    plan_ref="plan.md",
+                    constitution_ref="constitution.md",
+                    context_seeds=["context.md"],
+                    verify_cmd="true",
+                    criticality="medium",
+                    ac_list=["AC-1"],
+                    depends_on=["T-601"],
+                ),
+            ],
+        )
+
+        output = run_batch(
+            manifest, repo_root=str(repo), claude_cmd=fake_claude_cmd
+        )
+
+        # 落 evidence (BatchOutput JSON + stdout-like summary)
+        (RESULTS_DIR / f"{scenario}-batch_output.json").write_text(
+            output.model_dump_json(indent=2), encoding="utf-8"
+        )
+
+        checks = [
+            (output.status == "all_success", 'BatchOutput.status == "all_success"'),
+            (output.stopped_at_task_id is None, "stopped_at_task_id == None"),
+            (
+                [r.task_id for r in output.tasks] == ["T-601", "T-602"],
+                "task order = T-601, T-602",
+            ),
+            (
+                all(r.status == "success" for r in output.tasks),
+                "all per-task status == success",
+            ),
+            (
+                all(r.output is not None and r.output.attempts == 1 for r in output.tasks),
+                "all per-task attempts == 1 (fake claude 一次过)",
+            ),
+            (
+                all(
+                    r.output is not None and r.output.pr_created is False
+                    for r in output.tasks
+                ),
+                "all pr_created == False (NC-1: 无 remote, branch fallback)",
+            ),
+            (
+                all(
+                    r.output is not None
+                    and (r.output.pr_url_or_branch or "").startswith("task/")
+                    for r in output.tasks
+                ),
+                "all pr_url_or_branch fallback 到 'task/T-NNN' branch 名",
+            ),
+        ]
+        for ok, label in checks:
+            if not ok:
+                all_ok = False
+            summary_lines.append(f"  {'✓' if ok else '✗'} {label}")
+    except Exception as e:
+        summary_lines.append(f"  ✗ unexpected exception: {type(e).__name__}: {e}")
+        all_ok = False
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
+
+    return all_ok
 
 
 if __name__ == "__main__":

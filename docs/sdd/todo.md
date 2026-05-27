@@ -187,7 +187,10 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - exit 0 = all_success / dry_run, 1 = partial_failed, 2 = INVALID_MANIFEST / MANIFEST_NOT_FOUND / REPO_ROOT_NOT_FOUND
 - [x] **AC tests** (15 个, `tests/c2_executor/test_batch.py`): tasks.yaml 解析 / 缺字段 / 反序 depends_on / 顺序调度 / 中间 fail 行为 / dry-run mode / CLI smoke
 - [x] **改造 `/sy-tasks` 输出格式 md → yaml**: `runtime/templates/tasks-template.md` 内容改为 yaml schema 指引 (resolver 仍按 `.md` 后缀查找)，`skills/sy-tasks/SKILL.md` 顶部加 v4 OVERRIDE 节，强制输出 `tasks.yaml`
-- [x] **mini-dogfood T-006**: `dogfood/T-006/` (spec + 3 fixtures + run.py)；3 场景全 pass — happy dry-run / 缺 verify_cmd → INVALID_MANIFEST / depends_on 反序 → BATCH_ORDER_VIOLATION。**注意**：未跑真 Claude session（那要 2h × N + 真闭环留给下一 session 真用 `/sy-tasks` 验证）
+- [x] **mini-dogfood T-006**: `dogfood/T-006/` (spec + 3 fixtures + run.py)；4 场景全 pass:
+  - 1 happy dry-run (CLI subprocess) / 2 缺 verify_cmd → INVALID_MANIFEST / 3 depends_on 反序 → BATCH_ORDER_VIOLATION
+  - **4 real run_batch → execute_task → success 主路径**: fake claude script (Python) + 2 个连续 task (T-601 + T-602, depends_on) + 临时 git repo, 走完整 worktree 创建 → prompt 渲染 → claude session → verify → commit → branch fallback, evidence 落 `results/4-real-run-success-batch_output.json` (round-2 add, 覆盖原 spec "跑通 2-3 个连续 task" 真主路径要求)
+  - 真起 Claude session 的全闭环（用 /sy-tasks 真生成 yaml + N × ~2h session → merge）留给用户在 v4/v5 业务场景下验收, 那是 D-autonomous 用户验收而非 implementer dogfood scope
 - [x] **不 bump C2 spec major**: 只是新增 batch CLI subcommand, contract / behavior 不变 (C2 SCHEMA_VERSION 仍 v0.1.3)
 
 预估：1-2 天 → 实际 0.5 天 ✅

@@ -1,0 +1,62 @@
+{
+  "schema_version": "v0.1.0",
+  "feature_name": "dogfood-T-006-real-run",
+  "status": "all_success",
+  "tasks": [
+    {
+      "task_id": "T-601",
+      "status": "success",
+      "output": {
+        "task_id": "T-601",
+        "status": "success",
+        "attempts": 1,
+        "worktree_path": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t006-real-bl7u1p7u/repo/worktrees/T-601",
+        "pr_url_or_branch": "task/T-601",
+        "pr_created": false,
+        "verify_report_path": null,
+        "session_logs": [
+          {
+            "attempt": 1,
+            "log_path": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t006-real-bl7u1p7u/repo/worktrees/T-601/.suiyin/sessions/attempt-1.log",
+            "duration_seconds": 0.016943000000537722,
+            "verify_pass": true
+          }
+        ],
+        "diff_stats": {
+          "files_changed": 0,
+          "insertions": 0,
+          "deletions": 0
+        }
+      },
+      "error": null
+    },
+    {
+      "task_id": "T-602",
+      "status": "success",
+      "output": {
+        "task_id": "T-602",
+        "status": "success",
+        "attempts": 1,
+        "worktree_path": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t006-real-bl7u1p7u/repo/worktrees/T-602",
+        "pr_url_or_branch": "task/T-602",
+        "pr_created": false,
+        "verify_report_path": null,
+        "session_logs": [
+          {
+            "attempt": 1,
+            "log_path": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t006-real-bl7u1p7u/repo/worktrees/T-602/.suiyin/sessions/attempt-1.log",
+            "duration_seconds": 0.016858582999702776,
+            "verify_pass": true
+          }
+        ],
+        "diff_stats": {
+          "files_changed": 0,
+          "insertions": 0,
+          "deletions": 0
+        }
+      },
+      "error": null
+    }
+  ],
+  "stopped_at_task_id": null
+}

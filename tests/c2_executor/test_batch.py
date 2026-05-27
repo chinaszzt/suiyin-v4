@@ -91,6 +91,27 @@ def _write_manifest(
     path.write_text(yaml.safe_dump(manifest, sort_keys=False), encoding="utf-8")
 
 
+def _make_manifest(task_ids: list[str]) -> BatchManifest:
+    """Build a BatchManifest with N minimal BatchTaskEntry directly (skipping yaml round-trip).
+
+    用于"测 run_batch 调度行为"那一族 AC test — yaml 解析路径由 B1/B5 系列覆盖。
+    """
+    return BatchManifest(
+        schema_version=BATCH_SCHEMA_VERSION,
+        tasks=[
+            BatchTaskEntry(
+                task_id=tid,
+                spec_ref="s.md",
+                plan_ref="p.md",
+                verify_cmd="true",
+                context_seeds=[],
+                ac_list=[],
+            )
+            for tid in task_ids
+        ],
+    )
+
+
 # =============================================================================
 # AC-B1: tasks.yaml 解析 — 合法 + 缺字段
 # =============================================================================
@@ -185,20 +206,7 @@ def test_AC_B2_sequential_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
 
-    manifest = BatchManifest(
-        schema_version=BATCH_SCHEMA_VERSION,
-        tasks=[
-            BatchTaskEntry(
-                task_id=f"T-00{i}",
-                spec_ref=f"spec-{i}.md",
-                plan_ref=f"plan-{i}.md",
-                verify_cmd="true",
-                context_seeds=[],
-                ac_list=["AC-1"],
-            )
-            for i in (1, 2, 3)
-        ],
-    )
+    manifest = _make_manifest(["T-001", "T-002", "T-003"])
 
     output = run_batch(manifest, repo_root="/tmp/repo")
 
@@ -232,20 +240,7 @@ def test_AC_B3a_middle_task_returns_failed_status(
 
     monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
 
-    manifest = BatchManifest(
-        schema_version=BATCH_SCHEMA_VERSION,
-        tasks=[
-            BatchTaskEntry(
-                task_id=f"T-00{i}",
-                spec_ref="s.md",
-                plan_ref="p.md",
-                verify_cmd="true",
-                context_seeds=[],
-                ac_list=[],
-            )
-            for i in (1, 2, 3)
-        ],
-    )
+    manifest = _make_manifest(["T-001", "T-002", "T-003"])
 
     output = run_batch(manifest, repo_root="/tmp/repo")
 
@@ -276,20 +271,7 @@ def test_AC_B3b_middle_task_raises_executor_error(
 
     monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
 
-    manifest = BatchManifest(
-        schema_version=BATCH_SCHEMA_VERSION,
-        tasks=[
-            BatchTaskEntry(
-                task_id=f"T-00{i}",
-                spec_ref="s.md",
-                plan_ref="p.md",
-                verify_cmd="true",
-                context_seeds=[],
-                ac_list=[],
-            )
-            for i in (1, 2, 3)
-        ],
-    )
+    manifest = _make_manifest(["T-001", "T-002", "T-003"])
 
     output = run_batch(manifest, repo_root="/tmp/repo")
 
@@ -321,20 +303,7 @@ def test_AC_B4_dry_run_does_not_invoke_executor(
 
     monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
 
-    manifest = BatchManifest(
-        schema_version=BATCH_SCHEMA_VERSION,
-        tasks=[
-            BatchTaskEntry(
-                task_id=f"T-00{i}",
-                spec_ref="s.md",
-                plan_ref="p.md",
-                verify_cmd="true",
-                context_seeds=[],
-                ac_list=[],
-            )
-            for i in (1, 2)
-        ],
-    )
+    manifest = _make_manifest(["T-001", "T-002"])
 
     output = run_batch(manifest, repo_root="/tmp/repo", dry_run=True)
 
@@ -444,3 +413,100 @@ def test_AC_B6b_cli_manifest_not_found_exits_2(
     assert rc == 2
     err = json.loads(captured.err)
     assert err["code"] == "MANIFEST_NOT_FOUND"
+
+
+def test_AC_B6c_cli_repo_root_not_found_exits_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """AC-B6c: --repo-root 不存在 → exit 2 + stderr JSON REPO_ROOT_NOT_FOUND.
+
+    跟 INVALID_MANIFEST / MANIFEST_NOT_FOUND 共用 BatchAdapterError 序列化路径,
+    确保所有 batch error code 走同一形状 (PR #35 round-1 finding #2).
+    """
+    yaml_path = tmp_path / "tasks.yaml"
+    _write_manifest(yaml_path, [_task_entry("T-001")])
+    rc = c2_cli.main(
+        [
+            "task",
+            "batch",
+            "--tasks-yaml",
+            str(yaml_path),
+            "--repo-root",
+            str(tmp_path / "does-not-exist"),
+        ]
+    )
+    captured = capsys.readouterr()
+    assert rc == 2
+    err = json.loads(captured.err)
+    assert err["code"] == "REPO_ROOT_NOT_FOUND"
+    # 验证 details 字段存在 (BatchAdapterError 统一路径自带; inline dict 旧实现没有)
+    assert "details" in err
+    assert err["details"].get("repo_root", "").endswith("does-not-exist")
+
+
+# =============================================================================
+# AC-B7: integration — run_batch 真跑 (fixture_repo + mock_claude_success)
+# =============================================================================
+#
+# 覆盖原 spec "跑通 2-3 个连续 task" 的真主路径 (round-1 finding #1 medium spec_drift).
+# 跟 B2/B3a/B3b 用 monkeypatch fake_execute 不同 — 这里 execute_task 真跑:
+# 真 git worktree 创建 / 真 prompt render / 假 claude script 真 subprocess
+# / 真 commit / branch 兜底 (无 remote).
+
+
+def test_AC_B7_real_run_batch_two_tasks_success(
+    fixture_repo: Path, mock_claude_success: list[str]
+) -> None:
+    """AC-B7: 2 个连续 task 真走 run_batch → execute_task → success (no monkeypatch).
+
+    评估 PR #35 mini-dogfood AC 实现: 真 batch 跑通连续 task, 每 task 都创建独立
+    worktree、commit、本地分支 (NC-1 无 remote 兼容 → pr_url_or_branch = branch 名).
+    """
+    manifest = BatchManifest(
+        schema_version=BATCH_SCHEMA_VERSION,
+        feature_name="ac-b7-integration",
+        tasks=[
+            BatchTaskEntry(
+                task_id="T-901",
+                spec_ref="spec.md",
+                plan_ref="plan.md",
+                constitution_ref="constitution.md",
+                context_seeds=["context.md"],
+                verify_cmd="true",
+                criticality="medium",
+                ac_list=["AC-1"],
+            ),
+            BatchTaskEntry(
+                task_id="T-902",
+                spec_ref="spec.md",
+                plan_ref="plan.md",
+                constitution_ref="constitution.md",
+                context_seeds=["context.md"],
+                verify_cmd="true",
+                criticality="medium",
+                ac_list=["AC-1"],
+                depends_on=["T-901"],
+            ),
+        ],
+    )
+
+    output = run_batch(
+        manifest,
+        repo_root=str(fixture_repo),
+        claude_cmd=mock_claude_success,
+    )
+
+    assert output.status == "all_success"
+    assert output.stopped_at_task_id is None
+    assert [r.task_id for r in output.tasks] == ["T-901", "T-902"]
+    for r in output.tasks:
+        assert r.status == "success"
+        assert r.output is not None
+        assert r.output.status == "success"
+        assert r.output.attempts == 1  # mock claude 一次过
+        # 无 remote → pr_created=false, pr_url_or_branch fallback 到 branch 名
+        assert r.output.pr_created is False
+        assert r.output.pr_url_or_branch is not None
+        assert r.output.pr_url_or_branch.startswith(("task/", "http"))
+        # worktree 真创建
+        assert r.output.worktree_path.endswith(f"worktrees/{r.task_id}")

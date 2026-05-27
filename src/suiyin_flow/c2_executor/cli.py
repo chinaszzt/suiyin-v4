@@ -442,17 +442,14 @@ def _cmd_task_batch(args: argparse.Namespace) -> int:
         run_batch,
     )
 
-    repo_root = Path(args.repo_root).resolve()
-    if not repo_root.exists() or not repo_root.is_dir():
-        err = {
-            "code": "REPO_ROOT_NOT_FOUND",
-            "message": f"--repo-root not a directory: {repo_root}",
-        }
-        import json as _json
-        print(_json.dumps(err, ensure_ascii=False, indent=2), file=sys.stderr)
-        return 2
-
     try:
+        repo_root = Path(args.repo_root).resolve()
+        if not repo_root.exists() or not repo_root.is_dir():
+            raise BatchAdapterError(
+                "REPO_ROOT_NOT_FOUND",
+                f"--repo-root not a directory: {repo_root}",
+                repo_root=str(repo_root),
+            )
         manifest = load_tasks_yaml(Path(args.tasks_yaml))
     except BatchAdapterError as e:
         print(e.error.model_dump_json(indent=2), file=sys.stderr)

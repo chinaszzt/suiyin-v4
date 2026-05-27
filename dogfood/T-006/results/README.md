@@ -25,5 +25,15 @@ suiyin-flow cmd: `/Users/zhangtuo/Documents/suiyin-v4/.claude/worktrees/determin
   ✓ message mentions BATCH_ORDER_VIOLATION
   ✓ message names offending dep (T-402)
 
+## Scenario 4-real-run-success
+- mode: 真 run_batch (programmatic) + fake claude script
+  ✓ BatchOutput.status == "all_success"
+  ✓ stopped_at_task_id == None
+  ✓ task order = T-601, T-602
+  ✓ all per-task status == success
+  ✓ all per-task attempts == 1 (fake claude 一次过)
+  ✓ all pr_created == False (NC-1: 无 remote, branch fallback)
+  ✓ all pr_url_or_branch fallback 到 'task/T-NNN' branch 名
+
 ---
 ## Overall: ✓ ALL PASS
