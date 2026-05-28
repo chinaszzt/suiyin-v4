@@ -266,6 +266,25 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 预估：1 周
 
+### P1.6 远期 — Governance 终态：运行时审批前置（hooks）
+
+**为什么**: v4 终极治理目标 = 审批前置到 spec/plan 阶段，运行时零审批。当前 `runtime/claude-settings.json` baseline 的 4 条 deny 是 v0.x 对话式开发的 **reflection trigger 过渡态**——不是防墙（AI 用 `python -c '...'` 嵌套就能绕，settings.json 本身 AI 也能 Edit），等下面这套上线就该退场。
+
+**做什么**: 用 Claude Code `hooks.PreToolUse` 给每个 tool call 挂一个 `agent` hook（小模型跑一行评审 prompt），按"这条命令在当前已批准的 spec/plan 里吗"判断 allow / block。超出 spec 范围 → block，主 Claude 拿 reason 重新规划。审批语义完全前置到 spec/plan，运行时按 spec 自动跑，零人工打断。
+
+**子任务**:
+- [ ] 调研 Claude Code hooks 实际语义（PreToolUse 上 `agent` 类型 hook 的 input/output 协议、blocking 效果、`if` filter 写法）
+- [ ] 设计审查 prompt（小模型读 current spec/plan + 当前 tool call → verdict）
+- [ ] 写到 `runtime/claude-settings.json` baseline 作为 opt-in 配置（默认关，业务项目 `bin/init.sh --strict` 或单独 flag 开）
+- [ ] mini-dogfood：v4 自己开一个 spec 跑 C2，配合 hook 验证"超出 spec 的命令被 block"
+- [ ] 跑通后讨论：要不要把 4 条 deny 从 baseline 完全移除（让 hooks 取代）
+
+**依赖**: P1.2（C6 impl）+ P1.2.5（tasks.yaml→C2）+ P1.3（C1 + C2 retry-with-feedback）—— 需要 spec→plan→execute 链路完整、机器可解析，hook 评审才有"当前 spec/plan"可读。
+
+**优先级**: 远期（governance 工程化基础设施，不影响 MVP 闭环）。先把 P1.2-P1.5 跑完再启动。
+
+预估：2-3 天（spec + impl + 1 个 mini-dogfood）
+
 ---
 
 ## P2 — Slash commands / Templates
@@ -428,6 +447,7 @@ P1.1 P0 MVP + P1.2 阶段 1 spec + 阶段 2 C5 impl 都已 done。
 
 ---
 
-**Version**: v0.3.1
-**Last Updated**: 2026-05-24
+**Version**: v0.3.2
+**Last Updated**: 2026-05-28
 **Status**: Living document — P1.1 P0 MVP ✅ + P1.2 阶段 1/2 ✅。下一步: P1.2 阶段 3 (C6) → P1.2.5 (tasks.yaml adapter，**窄义 MVP 真可用**)。
+**Changelog**: v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
