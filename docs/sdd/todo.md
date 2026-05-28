@@ -238,6 +238,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 预估：2-3 天 (C2 spec bump v0.2 + impl + AC test)
 - [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
 - [ ] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）
+  - **spec 预设 invariant**（2026-05-28 讨论沉淀，开 C7 spec PR 时作为锚点）：
+    - C7 = **deterministic state machine**（同 C6 "行为契约"性质 — transition table 纯 Python，零 AI 在 routing path）
+    - **路由集中**在 C7：C 组件输出只描述语义状态（`reason` / `recovery_action.kind`），**不**含 `next_action_owner` 等拓扑字段——拓扑会随阶段切换（P1.2 = 人 / P1.3+ = C7 / SaaS 场景 = merge queue），写进组件 schema 会引爆 churn
+    - **状态持久化**到 `<repo_root>/.suiyin/phase-state/<safe_pr_ref>.json`（versioned + latest，同 C5/C6 落盘 pattern）；记录 retry_count / parked phases / 队列优先级
+    - **harness 边界（先于 C7 落地）**：sy-* slash command / dogfood orchestrator 硬约束 "C 组件 exit ≠ 0 → stop + surface to human"，不许 LLM session 自由续跑；这条规则不依赖 C7，P1.2 阶段就该上
+    - **关 Q6-2 cascade**: C7 spec 落地后回 [c6-gate-contract.md §6 Q6-2](components/c6-gate-contract.md) 翻牌 (b) "C7 重排队列" 为 default
+  - **来源**: 2026-05-28 session 讨论 — 撞到 LLM 拿到 C6 `held + recovery_action.kind=no_op` 自由研究 merge → 反推"组件 vs 编排"分层 + 路由集中性
 
 预估：2 周
 
