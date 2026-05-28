@@ -1,0 +1,10 @@
+{
+  "verdict": "approve",
+  "findings": [],
+  "reviewed_at": "2026-05-28T00:00:00Z",
+  "session_id": "T-007-self-review-skip",
+  "task_id": "T-007-c6-bug-fixes",
+  "pr_ref": "claude/c6-bug-fixes",
+  "contract_version": "v0.1.1",
+  "notes": "T-007 dogfood mock approve — 焦点是验证 C6 Bug 1 fix (refs-direct ff merge in worktree)。真 C5 review 跳过 (用户 explicit choice: C6-only)；evidence: PR #36 + 5 新 AC tests + 98/98 pass。"
+}

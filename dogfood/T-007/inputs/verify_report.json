@@ -1,0 +1,29 @@
+{
+  "target": "claude/c6-bug-fixes",
+  "overall_verdict": "pass",
+  "levels": [
+    {
+      "name": "L1",
+      "verdict": "pass",
+      "summary": "ruff check src tests — All checks passed!"
+    },
+    {
+      "name": "L2",
+      "verdict": "pass",
+      "summary": "mypy src — Success: no issues found in 33 source files"
+    }
+  ],
+  "ac_summary": {
+    "covered": [
+      "AC-11 worktree refs-direct merge",
+      "AC-12 gh retry resolve_pr_sha recovers after EOF",
+      "AC-12b gh retry fallback to git rev-parse",
+      "AC-12c gh retry has_human_block_label recovers",
+      "AC-12d gh retry exhausted returns False for labels"
+    ],
+    "missing": []
+  },
+  "generated_at": "2026-05-28T00:00:00Z",
+  "contract_version": "v0.1.2",
+  "notes": "T-007 dogfood mock — C4 已实证 98/98 pass + ruff + mypy clean (terminal evidence on this branch). 不跑真 C4 是为了 T-007 聚焦验证 C6 Bug 1 fix (refs-direct ff merge), 不绕弯。"
+}
