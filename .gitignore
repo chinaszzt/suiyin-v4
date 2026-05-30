@@ -20,3 +20,9 @@ htmlcov/
 # suiyin-flow 运行时产物 (verify_report.json / session logs / worktrees/)
 .suiyin/
 /worktrees/
+
+# v4 self-install dogfood 产物 — v4 仓内跑 bin/init.sh 会生成下面这些
+# 业务项目运行时副本，v4 source of truth 在 skills/ / runtime/，不该 commit
+.specify/
+.claude/skills/
+*.suiyin-suggested.*

@@ -27,7 +27,8 @@ echo "   Target project: $TARGET_DIR ($PROJECT_NAME)"
 echo ""
 
 # ─── 1. Validate git repo ───
-if [ ! -d "$TARGET_DIR/.git" ]; then
+# Use git rev-parse so worktrees (where .git is a file, not a directory) also pass.
+if ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "Error: $TARGET_DIR is not a git repository" >&2
   echo "Hint:  run 'git init' first or clone an existing repo" >&2
   exit 1
