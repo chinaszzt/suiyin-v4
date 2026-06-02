@@ -27,7 +27,7 @@ This extension provides Git operations as an optional, self-contained module. It
 | Event | Command | Optional | Description |
 |-------|---------|----------|-------------|
 | `before_constitution` | `sy.git.initialize` | No | Init git repo before constitution |
-| `before_specify` | `sy.git.feature` | No | Create feature branch before specification |
+| `before_specify` | `sy.git.feature` | No | Create feature branch before specification — **DISABLED by default in v4** (worktree-centric workflow; set `enabled: true` in `.specify/extensions.yml` to restore — see ADR-0004) |
 | `before_clarify` | `sy.git.commit` | Yes | Commit outstanding changes before clarification |
 | `before_plan` | `sy.git.commit` | Yes | Commit outstanding changes before planning |
 | `before_tasks` | `sy.git.commit` | Yes | Commit outstanding changes before task generation |

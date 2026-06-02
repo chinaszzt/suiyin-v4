@@ -94,6 +94,11 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 | `/sy-tasks` | 拆 task | analyze 后 |
 | `/sy-implement` | 实施（暂用 suiyin-flow 默认，待 v4 P0 替换为 C2 Task Executor） | tasks 完成后 |
 
+> **分支创建（v4 默认行为）**：v4 默认**关闭** spec-kit 的 `before_specify` hook —— `/sy-specify`
+> **不会**自动创建新分支。v4 是 worktree-centric 工作流：**先**自己 `git worktree add` 建好分支再
+> 跑 `/sy-specify`。若想恢复 spec-kit "每次 specify 自动切新分支" 的行为，把 `.specify/extensions.yml`
+> 里 `before_specify` 的 `enabled` 改成 `true`（详见 ADR-0004）。
+
 ---
 
 ## 参考文档（suiyin-v4 仓）
