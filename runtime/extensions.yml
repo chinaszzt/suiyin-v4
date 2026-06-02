@@ -11,35 +11,18 @@ hooks:
     prompt: Execute sy.git.initialize?
     description: Initialize Git repository before constitution setup
     condition: null
-  # ─────────────────────────────────────────────────────────────────
-  # v4 OVERRIDE: before_specify hook disabled by default
-  # ─────────────────────────────────────────────────────────────────
-  # spec-kit 上游设计：每次 /sy-specify 强制创建新 feature branch
-  # (sy.git.feature → `git checkout -b NNN-<short-name>`)。
-  #
-  # v4 工作流跟这个设计冲突：
-  #   - 多 Claude session 并行时，开发者**预先**用 `git worktree add`
-  #     建好 worktree 才进 session；分支已经存在
-  #   - 强切分支会让 worktree 目录名 vs branch 名错位
-  #     (`.claude/worktrees/foo` 上跑着 `001-bar`)，C2/C6/batch
-  #     识别 worktree 不直观
-  #   - "v4 dogfood 自身"时 hook 会创不合 v4 命名约定 (`claude/*`)
-  #     的 `001-*` 分支
-  #
-  # 因此 v4 默认把这条 hook 关掉，让 /sy-specify 直接在当前
-  # branch 写 spec。业务项目若希望恢复 spec-kit 原行为可手改为
-  # `enabled: true`。
-  #
-  # 参考: ADR-0004（待立，v4 worktree-centric vs spec-kit hook-driven
-  # branch creation 决策）
-  # ─────────────────────────────────────────────────────────────────
+  # v4 OVERRIDE: before_specify disabled by default — rationale in docs/sdd/adrs/0004-*.md.
+  # v4 is worktree-centric (devs pre-create the worktree + branch before the session), which
+  # conflicts with spec-kit's "every /sy-specify cuts a new NNN-<name> branch". To restore
+  # spec-kit upstream behavior, set `enabled: true` below — `optional` stays false, so the
+  # hook then runs automatically, exactly like upstream (flip `enabled` alone, nothing else).
   before_specify:
   - extension: git
     command: sy.git.feature
-    enabled: false                                                    # v4 OVERRIDE (was true)
-    optional: true                                                    # 双重保险：即使被开也不强制
-    prompt: Execute sy.git.feature? (disabled by default in v4)
-    description: Create feature branch before specification — DISABLED in v4 (worktree-centric workflow); set enabled=true to restore spec-kit upstream behavior
+    enabled: false                    # v4 OVERRIDE — upstream default is true
+    optional: false                   # unchanged from upstream; flip `enabled` alone to restore
+    prompt: Execute sy.git.feature?
+    description: Create feature branch before specification (disabled by default in v4 — see ADR-0004)
     condition: null
   before_clarify:
   - extension: git

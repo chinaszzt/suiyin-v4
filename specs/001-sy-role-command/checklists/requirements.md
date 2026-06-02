@@ -32,6 +32,5 @@
 
 ## Notes
 
-- Iteration 1 (2026-05-28): 2 [NEEDS CLARIFICATION] markers present (FR-007 about /sy-role bootstrap-or-not, FR-010 about v4 self vs runtime/ target)
-- Iteration 2 (2026-05-29): both resolved per Decision Log D-1 (option A) + D-2 (option D); spec ready for `/sy-plan`
-- 已校验过 spec 内容已经反映 hook disable 这件事的间接含义（不再依赖 hook 创新分支）。
+- 2 个澄清问题已解决，决议见 spec.md 的 Decision Log（D-1 / D-2）。Spec ready for `/sy-plan`。
+- spec 已反映 `before_specify` hook disable 的间接含义（不依赖 hook 创新分支）。

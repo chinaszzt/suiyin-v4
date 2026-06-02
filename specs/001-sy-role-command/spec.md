@@ -1,6 +1,10 @@
 # Feature Specification: /sy-role — 协商 role-profile.yml 的交互式 slash command
 
-**Feature Branch**: `001-sy-role-command`
+**Feature Branch**: `claude/sy-role-dogfood-p125` (spec dir: `specs/001-sy-role-command`)
+
+> v4 disables the `before_specify` hook, so the working branch is the pre-created worktree
+> branch — NOT a hook-cut `NNN-<slug>` branch. The spec directory keeps the `NNN-` prefix
+> only for ordering; it does not imply a matching git branch exists.
 
 **Created**: 2026-05-28
 
@@ -73,10 +77,10 @@
 - **FR-004**: `/sy-role` MUST 显示草稿 yaml 给用户确认，确认前不写入文件系统
 - **FR-005**: 写入的 yaml MUST 符合 v4 default `runtime/role-profile.yml` 的结构（顶部注释 + preset + ai_capabilities + git_automation + bootstrap_special_cases + human_gates）
 - **FR-006**: `/sy-role` MUST 拒绝修改 `bootstrap_special_cases` 字段（工具链内置，不参与协商）
-- **FR-007**: `/sy-role` MUST 在写文件后按 role-profile.yml 自身的 `auto_commit_on_sy_command` 字段决定是否 git commit（不应硬编码 commit；profile 的修订必须遵守 profile 自己的规则——这是 dogfooding 的自洽性要求）。Resolution: 选项 A（按 profile 自决）—— SDD 自洽性优先于便利；区别于 /sy-constitution（bootstrap 立基产物，所有档强制 push）。详见 [Decision Log](#decision-log)
+- **FR-007**: `/sy-role` MUST 在写文件后按 role-profile.yml 自身的 `auto_commit_on_sy_command` 字段决定是否 git commit（不应硬编码 commit；profile 的修订必须遵守 profile 自己的规则——这是 dogfooding 的自洽性要求）。Resolution: 选项 A（D-1，见 [Decision Log](#decision-log)）
 - **FR-008**: `/sy-role` MUST 在协商中途被用户终止时**不修改** `.specify/role-profile.yml`
 - **FR-009**: `/sy-role` MUST 保留 yaml 中的未知字段（向前兼容 v4 后续版本添加的字段）
-- **FR-010**: `/sy-role` MUST 只读写 `.specify/role-profile.yml`，**不**尝试感知"当前是 v4 自身仓还是业务项目"。v4 仓的 `runtime/role-profile.yml` 是给业务项目的 default template，跟 `.specify/role-profile.yml`（dogfood / 业务项目实际使用的那份）语义不同，更新 default template 不在 /sy-role 的服务范围（需走 ADR + 手动 PR）。Resolution: 选项 D —— 把"v4 用自己" 的语义错位变成显式约定。详见 [Decision Log](#decision-log)
+- **FR-010**: `/sy-role` MUST 只读写 `.specify/role-profile.yml`，**不**尝试感知"当前是 v4 自身仓还是业务项目"。v4 仓的 `runtime/role-profile.yml` 是给业务项目的 default template，跟 `.specify/role-profile.yml`（dogfood / 业务项目实际使用的那份）语义不同，更新 default template 不在 /sy-role 的服务范围（需走 ADR + 手动 PR）。Resolution: 选项 D（D-2，见 [Decision Log](#decision-log)）
 
 ### Key Entities
 

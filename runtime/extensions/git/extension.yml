@@ -46,8 +46,9 @@ hooks:
     description: "Initialize Git repository before constitution setup"
   before_specify:
     command: sy.git.feature
+    enabled: false   # v4 OVERRIDE — disabled by default (worktree-centric workflow); see ADR-0004
     optional: false
-    description: "Create feature branch before specification"
+    description: "Create feature branch before specification (disabled by default in v4)"
   before_clarify:
     command: sy.git.commit
     optional: true

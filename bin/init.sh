@@ -26,12 +26,34 @@ echo "   v4 toolchain : $V4_DIR"
 echo "   Target project: $TARGET_DIR ($PROJECT_NAME)"
 echo ""
 
-# ─── 1. Validate git repo ───
-# Use git rev-parse so worktrees (where .git is a file, not a directory) also pass.
-if ! git -C "$TARGET_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "Error: $TARGET_DIR is not a git repository" >&2
-  echo "Hint:  run 'git init' first or clone an existing repo" >&2
+# ─── 1. Validate git repo (worktree-safe; must be the work-tree root) ───
+# Worktrees store .git as a FILE (not a dir), so `[ -d .git ]` wrongly fails there.
+# But `rev-parse --is-inside-work-tree` ALONE is too loose: it walks UP, so a subdir
+# of an unrelated outer repo (or a bare repo / a .git dir, which return "false") would
+# silently pass and we'd scatter the toolchain into the wrong place. Require BOTH:
+# the path is inside a work tree AND it is that work tree's top level.
+if [ "$(git -C "$TARGET_DIR" rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
+  echo "Error: $TARGET_DIR is not a git work tree" >&2
+  echo "Hint:  run 'git init' first, or clone an existing repo" >&2
   exit 1
+fi
+TARGET_TOPLEVEL="$(git -C "$TARGET_DIR" rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$TARGET_TOPLEVEL" ] || [ "$(cd "$TARGET_TOPLEVEL" && pwd)" != "$TARGET_DIR" ]; then
+  echo "Error: $TARGET_DIR is not the git work-tree root (toplevel: ${TARGET_TOPLEVEL:-<none>})" >&2
+  echo "Hint:  run init from the repository root, not a subdirectory" >&2
+  exit 1
+fi
+
+# ─── 1b. Warn on self-install (v4's own source repo) ───
+# v4 IS the toolchain source. Installing into it produces .specify/ and .claude/skills/
+# copies that merely duplicate the authoritative skills/ and runtime/ trees. Supported
+# only for dogfooding v4 against itself; those copies are gitignored. Make it loud, not
+# a silent footgun (see ADR-0004 / CLAUDE.md "v4 是工具链开发项目本身").
+if [ "$TARGET_DIR" = "$V4_DIR" ]; then
+  echo "⚠️  Self-install: target IS the v4 source repo ($V4_DIR)." >&2
+  echo "    For dogfooding only — .specify/ + .claude/skills/ are throwaway copies" >&2
+  echo "    (gitignored). Edit skills/ and runtime/ for real changes." >&2
+  echo "" >&2
 fi
 
 # ─── 2. Validate v4 toolchain has skills + runtime ───
@@ -60,8 +82,10 @@ if [ "$IS_REINSTALL" = true ]; then
   for subdir in templates scripts extensions workflows integrations; do
     rm -rf "$TARGET_DIR/.specify/$subdir"
   done
-  rm -f "$TARGET_DIR/.specify/extensions.yml" \
-        "$TARGET_DIR/.specify/init-options.json" \
+  # NOTE: extensions.yml is intentionally NOT removed here — it is user-tunable
+  # (hook enable/disable), so step 7 preserves it and surfaces v4's latest as a
+  # .suiyin-suggested variant (same treatment as role-profile.yml).
+  rm -f "$TARGET_DIR/.specify/init-options.json" \
         "$TARGET_DIR/.specify/integration.json"
 
   # 4c. Report what was preserved
@@ -116,6 +140,18 @@ for item in "$V4_DIR/runtime/"*; do
         echo "   - $name preserved (user-tuned, not overwritten)"
       fi
       ;;
+    extensions.yml)
+      # User-tunable (hook enable/disable): preserve if exists; surface v4 latest as
+      # .suiyin-suggested so reinstall never silently destroys a project's hook config.
+      target_f="$TARGET_DIR/.specify/$name"
+      if [ ! -e "$target_f" ]; then
+        cp "$item" "$target_f"
+        echo "   - $name (v4 default)"
+      else
+        cp "$item" "$TARGET_DIR/.specify/extensions.suiyin-suggested.yml"
+        echo "   - $name preserved (user-tuned); v4 latest → extensions.suiyin-suggested.yml"
+      fi
+      ;;
     claude-settings.json)
       # Handled in step 8 (installed to .claude/settings.json), skip here
       ;;
@@ -166,6 +202,11 @@ Slash commands: \`/sy-constitution\` \`/sy-specify\` \`/sy-clarify\` \`/sy-plan\
 Role profile: see \`.specify/role-profile.yml\` (default: autonomous).
 Git automation: \`/sy-constitution\` always auto-commits + auto-pushes (bootstrap special case);
 other \`/sy-*\` follow role-profile.
+
+Branch creation: v4 disables spec-kit's \`before_specify\` hook by default (worktree-centric
+workflow — create your worktree/branch first, then run \`/sy-specify\`). To restore spec-kit's
+"each /sy-specify cuts a new branch" behavior, set \`enabled: true\` for \`before_specify\` in
+\`.specify/extensions.yml\` (see ADR-0004).
 
 See \`README.md\` for the full workflow.
 <!-- SUIYIN-FLOW END -->

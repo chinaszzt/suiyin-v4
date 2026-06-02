@@ -78,6 +78,8 @@ Given that feature description, do this:
 
    If the user explicitly provided `GIT_BRANCH_NAME`, pass it through to the hook so the branch script uses the exact value as the branch name (bypassing all prefix/suffix generation).
 
+   **If no `before_specify` hook ran** (e.g. it is disabled — the v4 default for its worktree-centric workflow): do **not** invent a branch name. When you fill the spec template's `**Feature Branch**` field in step 6, use the **actual current git branch** (`git rev-parse --abbrev-ref HEAD`), not the spec directory name. If git is unavailable, write the spec directory name and note that no git branch was created. The `NNN-` prefix on the spec directory is for ordering only and does not imply a matching branch exists.
+
 3. **Create the spec feature directory**:
 
    Specs live under the default `specs/` directory unless the user explicitly provides `SPECIFY_FEATURE_DIRECTORY`.
