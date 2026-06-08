@@ -155,12 +155,18 @@ Focus on high-signal findings. Limit to 50 findings total; aggregate remainder i
 - Task ordering contradictions (e.g., integration tasks before foundational setup tasks without dependency note)
 - Conflicting requirements (e.g., one requires Next.js while other specifies Vue)
 
+#### G. (v4) Known Failure-Mode Recurrence
+
+- Read `.specify/memory/failure-modes.md` if present (skip silently if absent, or if it holds only template placeholders / no real entries).
+- For each recorded failure mode, check whether `plan.md` / `tasks.md` show an explicit story or task addressing it (architecture-level → a plan section or design choice; implementation-level → a task, test, or acceptance criterion that would catch the recurrence).
+- Flag any failure mode with no addressing plan/task. Note: analyze sees only spec/plan/tasks, so it verifies *acknowledgement*, not the code itself — actual code-level detection is the reviewer's (C5) job, fed by the same file.
+
 ### 5. Severity Assignment
 
 Use this heuristic to prioritize findings:
 
 - **CRITICAL**: Violates constitution MUST, missing core spec artifact, or requirement with zero coverage that blocks baseline functionality
-- **HIGH**: Duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion
+- **HIGH**: Duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion, or recurrence of a recorded failure mode (category G) with no addressing plan/task
 - **MEDIUM**: Terminology drift, missing non-functional task coverage, underspecified edge case
 - **LOW**: Style/wording improvements, minor redundancy not affecting execution order
 

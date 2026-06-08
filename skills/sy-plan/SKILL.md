@@ -58,12 +58,13 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 1. **Setup**: Run `.specify/scripts/bash/setup-plan.sh --json` from repo root and parse JSON for FEATURE_SPEC, IMPL_PLAN, SPECS_DIR, BRANCH. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
-2. **Load context**: Read FEATURE_SPEC and `.specify/memory/constitution.md`. Load IMPL_PLAN template (already copied).
+2. **Load context**: Read FEATURE_SPEC and `.specify/memory/constitution.md`. Load IMPL_PLAN template (already copied). **(v4)** Also read `.specify/memory/failure-modes.md` if it exists — use ONLY its `## Architecture-level (plan stage)` section here (the `## Implementation-level` section is for code review, not planning). If the file is absent, or contains only template placeholders / no real entries, skip this input silently.
 
 3. **Execute plan workflow**: Follow the structure in IMPL_PLAN template to:
    - Fill Technical Context (mark unknowns as "NEEDS CLARIFICATION")
    - Fill Constitution Check section from constitution
    - Evaluate gates (ERROR if violations unjustified)
+   - **(v4) Failure-Mode check**: for each Architecture-level entry loaded from `failure-modes.md` (skip if none), verify the plan has an explicit story addressing it (e.g. idempotency for double-submit, a concurrency story for concurrent edits, offline/error states). For any entry the plan does not address, add a `NEEDS CLARIFICATION: <failure mode> — no plan story` marker and surface it rather than silently proceeding. Soft gate (surface + recommend), not a hard ERROR, unless the constitution elevates it.
    - Phase 0: Generate research.md (resolve all NEEDS CLARIFICATION)
    - Phase 1: Generate data-model.md, contracts/, quickstart.md
    - Phase 1: Update agent context by running the agent script
