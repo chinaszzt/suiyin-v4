@@ -230,7 +230,35 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 - **R2 retry-with-feedback** (C2 v0.2): 整合 review_report 到 batch retry context — 真实使用后看是否要把 manifest 里加 `review_attempts` 字段
 - **C1 Planning Engine**: 在现有 tasks.yaml 上**增加** `execution_plan: [{phase, parallel: [task_ids]}]` 字段 — schema 不变, depends_on 已预留
-- **真闭环用户验证**: 用户在 v4 自身或 v5 仓跑一次 `/sy-specify → /sy-plan → /sy-tasks → suiyin-flow task batch → merge`, 验证 `/sy-tasks` 改造正确性 (本 PR 未真跑 /sy-tasks)
+- **真闭环用户验证**: ✅ 已跑 (2026-06-08~09, v5 `login-credential-core` feature) —— Stage 1 (specify→plan→tasks) 通过, Stage 2 (batch) 暴露头号能力错配。详见下方 **【真闭环 dogfood 实测发现】**。
+
+#### 【真闭环 dogfood 实测发现】(2026-06-08~09, v5 login-core)
+
+> 用 v5 真业务仓跑 `/sy-specify → /sy-plan → /sy-tasks → suiyin-flow task batch`。
+> feature = 登录凭证核心 (validatePhone / hashPassword / selectEnterprise, TS+vitest, 照搬 react-suiyin authService)。
+
+**Stage 1 (specify→plan→tasks) ✅** —— PR #35 没真跑过的部分,现在实证:
+- `/sy-tasks` 真输出 `tasks.yaml`(非上游 `tasks.md`),Fork A override 生效。
+- `batch --dry-run` exit 0,schema v0.1.0 解析 + 顺序断言全过;`depends_on`/`base_branch` 扩展字段不破 schema。
+
+**Stage 2 (batch) 🔴 头号发现 —— batch 跑不了依赖链**:
+- `/sy-tasks` 拆出 5 个**有真代码依赖**的 task(T-002/3/4 依赖 T-001 骨架,T-005 聚合),但 `run_batch` 对每个 task **从 `base_branch` HEAD 独立起 worktree → commit 到 `task/<id>` → 不 merge 回 base**(merge 是 C6 `gate` 的活,batch 不调;`depends_on` 仅顺序断言,见 batch.py docstring)。
+- → 依赖 task 从 base 分叉看不到前序产物(T-002 的 worktree 没有 T-001 建的 package.json)→ **链断 / fail-stop 在 T-002**。
+- **能力错配: `/sy-tasks` 会拆依赖链,P1.2.5 batch 执行不了依赖链。** 逐 phase merge 是 C7 (P1.3) 才有。
+- **单 task 路径 (T-001 smoke) ✅**: worktree → claude session → scaffold(package.json/tsconfig/vitest.config + npm install)→ verify(`npx vitest run --passWithNoTests` pass)→ commit → **push + 开 v5 PR #1**。1 attempt / 194s / verify_pass=true / 5 files +1340。session 守住 task 边界(只 scaffold,没越界写 src/tests)。**单 task 自治闭环完整成立(含建 PR)。**
+  - **附注**: C2 的"task → PR"是其自身契约,**会 autopush 到业务仓 remote + 开 PR**(独立于 role-profile `auto_push: false`,后者只管 `/sy-*` 交互层)。用户该知道 batch 会动 v5 remote。
+
+**行动项**(择一/组合):
+- **(A 短) 约束 `/sy-tasks` 输出**: C7 落地前,`skills/sy-tasks/SKILL.md` + `tasks-template.md` 加约束 —— **只拆单 task 或完全独立 task**(禁跨 task 代码依赖),否则用户拿到跑不通的 yaml。
+- **(B 中) batch 加最小整合**: task 间 ff-merge `task/<id>` → base_branch —— 但这其实就是 C7 核心,等于提前做 C7 MVP。
+- **(C 正) 直接上 C7 Phase Coordinator** (P1.3),逐 phase merge。
+
+**附带环境/工具坑(真闭环才暴露,各自独立小修)**:
+1. **venv 坏**: `suiyin-flow` 从旧 worktree editable 装 + 缺 `pyyaml` → `batch.py` `import yaml` 炸,开箱即坏。`pip install -e <v4>` from main 修。→ 装机文档/init 应提示 `pip install -e` + pyproject 已声明 pyyaml 但 venv 未同步。
+2. **auto-commit 没触发**: autonomous 档跑 `/sy-specify|plan|tasks` 后 artifact **没自动 commit**(`after_*` hook optional + bypassPermissions 下没执行)→ batch 子 worktree 从 base HEAD 看不到 `spec_ref`。→ harness 应在 batch 前确保 spec/plan/tasks 已提交,或 batch 前置检查"`spec_ref` 在 base HEAD 可见"否则 fail-fast。
+3. **proxy 不传播**: `session.py` 的 `Popen` 不设 `env=`(继承父进程)。代理网络下必须 `export https_proxy=... ` 再起 batch,否则子 claude 连不上 API 干等(本次撞到:`claude` 是带 proxy 的 alias,subprocess 不认 alias)。→ 文档化;或 session 起前自检 API 连通。
+4. **allowlist python 取向**: `claude-settings.json` baseline 缺 `node/npm/npx`,TS 项目卡权限。→ init.sh/文档按栈补,或 P1.6 hooks 取代。
+5. **init.sh PROJECT_NAME 用 worktree basename**: 在 worktree 内跑 init,`README.suggested` 名字取成 worktree 目录名(非项目名)。→ 用 `git rev-parse --show-toplevel` basename 或 remote 名。(小 bug)
 
 ### P1.3 P2 — 并行加速 + R2
 
