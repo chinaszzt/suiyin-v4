@@ -259,6 +259,25 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 3. **proxy 不传播**: `session.py` 的 `Popen` 不设 `env=`(继承父进程)。代理网络下必须 `export https_proxy=... ` 再起 batch,否则子 claude 连不上 API 干等(本次撞到:`claude` 是带 proxy 的 alias,subprocess 不认 alias)。→ 文档化;或 session 起前自检 API 连通。
 4. **allowlist python 取向**: `claude-settings.json` baseline 缺 `node/npm/npx`,TS 项目卡权限。→ init.sh/文档按栈补,或 P1.6 hooks 取代。
 5. **init.sh PROJECT_NAME 用 worktree basename**: 在 worktree 内跑 init,`README.suggested` 名字取成 worktree 目录名(非项目名)。→ 用 `git rev-parse --show-toplevel` basename 或 remote 名。(小 bug)
+6. **C2 task PR base 硬指 `main`**: C2 开 task PR 时 base 写死 `main`,无视 task 的 `base_branch`(本次 `claude/login-core`)→ worktree-centric 流里 PR 对错基线(diff 混入 base_branch 相对 main 的提交)。→ PR base 应取 `base_branch`。
+
+#### 🔧 修复清单(下一轮 dogfood 前)—— 准备修
+
+> 修完 P0+P1 再来一轮:`/sy-specify → /sy-plan → /sy-tasks → batch`,这次 `/sy-tasks` 出**独立 task** → batch 跑全 → 验证多 task(独立)闭环 + P0 修复生效。
+
+**P0 快修(独立小 bug,修完下一轮顺滑)**:
+- [ ] **venv/pyyaml**: 装机文档 + 提示 `pip install -e <v4>`(pyproject 已声明 pyyaml,venv 需同步;别用旧 worktree 的 editable install)
+- [ ] **auto-commit 缺口**: batch 前置检查"`spec_ref` 在 `base_branch` HEAD 可见",否则 fail-fast 给清晰错误;或 harness 确保 `/sy-*` 产物已提交再跑 batch
+- [ ] **proxy 不传播**: 文档化"代理环境 `export https_proxy` 再跑 batch";或 `session.py` 起 claude 前自检 API 连通
+- [ ] **allowlist 缺 node**: `claude-settings.json` 按栈补 `node/npm/npx`(或 init.sh 探测栈);长远 P1.6 hooks 取代
+- [ ] **init.sh PROJECT_NAME**: 用 `git rev-parse --show-toplevel` basename,别用 `TARGET_DIR` basename
+- [ ] **C2 PR base**: 取 `base_branch`,别写死 `main`
+
+**P1 关键(让多 task 在 C7 之前可跑)**:
+- [ ] **约束 `/sy-tasks` 输出**(行动项 A): C7 落地前,`skills/sy-tasks/SKILL.md` + `tasks-template.md` 强制**只拆单 task 或完全独立 task**(禁跨 task 代码依赖),否则用户拿到跑不通的 yaml。这是下一轮多 task batch 能跑绿的前提。
+
+**P2 大件(架构,留 P1.3)**:
+- [ ] **C7 Phase Coordinator**(行动项 C): 逐 phase merge,真正支持依赖链 batch。见 P1.3 §C7。
 
 ### P1.3 P2 — 并行加速 + R2
 
