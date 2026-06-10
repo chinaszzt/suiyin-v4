@@ -33,6 +33,9 @@ flowchart TD
 
 ### 正常路径
 
+> **v0.2.0 重绘（C7 落地 + 发现 #7 决议）**：merge 分两级 —— **task→feature** 是 C7 的
+> 本地 ff-merge（无 PR、不上 remote），**feature→main** 才是 PR + C5/C6 gate 层。
+
 ```mermaid
 flowchart TD
     A([Constitution]) -.->|项目一次性立基| B
@@ -42,24 +45,36 @@ flowchart TD
     D -->|all clear| E[Plan]
     E -->|发现 spec 漏关键意图| C
     E -->|ready| F[Tasks]
-    F --> G[Planning Engine C1]
+    F --> G[Planning Engine C1<br/>execution_plan 可缺省<br/>缺省 = 每 task 一 phase]
     G --> H[Phase Coordinator C7]
-    H -->|per task in phase| I[Task Executor C2]
-    I --> J[Verify Engine C4]
-    J -->|fail, retry ≤3| I
-    J -->|all pass| K[AI Reviewer C5]
-    K -->|approve| L[Merge Gate C6]
-    K -->|block, R1 P1.2| BR[Block Recovery<br/>+ human:block label<br/>+ comment findings]
-    BR -.->|R2 P1.3 retry-with-feedback| I
-    BR -.->|R1 manual: fix code + reverify| I
-    BR -.->|R1 manual: unlock + rerun gate| L
-    L -->|merged to main, ff-only| M{phase 内所有 task done?}
-    L -->|held: VERIFY_NOT_PASS / NOT_FF_MERGEABLE| I
-    L -->|held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED| BR
-    M -->|no, next task| I
-    M -->|yes| N{所有 phase done?}
-    N -->|no, next phase| H
-    N -->|yes| O[Deploy Gate C8]
+
+    subgraph TF[task→feature 层 - C7 本地 ff-merge, 无 PR]
+        H -->|per task in phase<br/>open_pr=false| I[Task Executor C2]
+        I --> J[Verify C4<br/>C2 闭环内, 不绿不出]
+        J -->|fail, retry ≤3| I
+        J -->|pass| K[C7 整合队列<br/>ff-merge task→feature<br/>非 ff → rebase + 重 verify]
+        K -->|REBASE_CONFLICT /<br/>REVERIFY_FAILED / TASK_*| PK[park + run stopped<br/>worktree 留现场<br/>人修 → --retry-parked]
+        K -->|merged| M{phase 内全部 merged?}
+        M -->|no, next task| I
+        M -->|yes| N{全部 phase done?}
+        N -->|no, next phase| H
+    end
+
+    N -->|yes, feature 聚合完成| FB[人/编排开 feature→main PR<br/>C7 Q7-3: 收口编排留拍]
+
+    subgraph FM[feature→main 层 - PR + gate]
+        FB --> K5[AI Reviewer C5]
+        K5 -->|approve| L[Merge Gate C6]
+        K5 -->|block, R1 P1.2| BR[Block Recovery<br/>+ human:block label<br/>+ comment findings]
+        BR -.->|R2 P1.3 retry-with-feedback| FB
+        BR -.->|R1 manual: fix + reverify| FB
+        BR -.->|R1 manual: unlock + rerun gate| L
+        L -->|held: VERIFY_NOT_PASS| FB
+        L -->|held: NOT_FF_MERGEABLE<br/>Q6-2: coordinator 重排 / 人 rebase| FB
+        L -->|held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED| BR
+    end
+
+    L -->|merged to main, ff-only| O[Deploy Gate C8]
     O -->|人按按钮| P([Production])
 ```
 
@@ -99,6 +114,8 @@ flowchart TD
 | spec ↔ clarify 反复 | Clarify | Specify | clarify 输出含 unresolved questions |
 | plan → spec（回头） | Plan | Specify | plan 阶段 AI 发现"实现 X 必需的意图 spec 没说"|
 | verify fail → retry | Verify | Task Executor | verify_report.checks 含 fail |
+| task 整合非 ff → rebase-requeue | C7 整合队列 | C7 整合队列 | `merge-base --is-ancestor` 否（同 phase 先完成者推进 base）→ rebase + **重 verify**（C7 I10）→ ff 重试 |
+| 整合失败 → park | C7 整合队列 | 人介入（run stopped） | rebase conflict / 重 verify 非绿 / C2 failed/Error；worktree 留现场，人修后 `--retry-parked` resume（C7 §3.3） |
 | review block → Block Recovery | AI Reviewer | Block Recovery（节内） | `verdict == "block"`（v0.1.1: 已二元化无 `request_changes`）；P1.2=R1 标签+comment；P1.3=R2 retry-with-feedback；P3+=R3 Codex 仲裁。详 Block Recovery 节 |
 | spec drift exception | 任何节点 | Specify (via issue) | AI 实现/审查中发现 spec 自相矛盾 / 有歧义 |
 | cross-spec exception | 任何节点 | 人介入 | diff 影响的文件被其他 spec 引用 |
@@ -231,12 +248,13 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 
 ---
 
-**Version**: 0.1.4-draft
+**Version**: 0.2.0-draft
 **Last Updated**: 2026-06-10
 
 ### Changelog
 
-- **v0.1.4** (2026-06-10): C7 spec v0.1.0 落地 cascade — §六 Q-table 关 Q7（隔离不回滚）+ Q6-2（C7 重排队列 default）。**注**: §二 主流程图仍画的是 task 级 merge to main 旧架构；按两级整合（task→feature 本地 ff-merge → feature→main PR+C6，发现 #7 决议）重绘留 C7 impl PR 一起做（同 sy-tasks 独立性约束解除的 cascade 时点）。
+- **v0.2.0** (2026-06-10): C7 impl 落地 + r3 dogfood 实证后的主流程图重绘 — §二按**两级 merge** 重画：task→feature 层（C7 本地 ff-merge 子图：C2 open_pr=false / 整合队列 rebase+重verify / park+retry-parked）与 feature→main 层（PR + C5/C6 gate）分离；边判定表加「task 整合非 ff → rebase-requeue」「整合失败 → park」两行。**MINOR**（流程结构变化）。
+- **v0.1.4** (2026-06-10): C7 spec v0.1.0 落地 cascade — §六 Q-table 关 Q7（隔离不回滚）+ Q6-2（C7 重排队列 default）。
 - **v0.1.3** (2026-05-25): C6 spec v0.1.1 round-3 review cascade — §二 主流程图 L (Merge Gate C6) 加 held 出边（`held: VERIFY_NOT_PASS / NOT_FF_MERGEABLE → I` retry path；`held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED → BR`）解 L dead-end 问题；merged 边 label 加 `ff-only` 显式；Block Recovery 节末段加 I8 precedence + I9 atomicity 引用。
 - **v0.1.2** (2026-05-24): Insight C 提升 — §二 主流程图 C5 block 边重绘 (R1 P1.2 / R2 P1.3 dotted)；新增 "Block Recovery（D-autonomous 流派硬约束）" 小节；边判定表 "review block" 行从 "→ retry" 改为 "→ Block Recovery" 并去 `request_changes`；§六 加 Q6-2/Q6-3/Q6-4/Q6-5（C6 spec 派生）。版本号从 v0.1.0 直接跳 v0.1.2（含义变化 + 新增小节，per ADR-0001 SemVer）。
 - **v0.1.0** (2026-05-15): 初版

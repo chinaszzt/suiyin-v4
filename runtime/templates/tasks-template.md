@@ -12,11 +12,17 @@ output_filename: tasks.yaml
 > 而不是 markdown checklist。C2 Task Executor 的 batch adapter (`suiyin-flow task batch`)
 > 直接消费这个 yaml；md 仅在 P2+ 由 render 工具二次生成给人看。
 >
-> **🔴 任务独立性（P1.2.5 硬约束）**：batch 给每个 task 从 `base_branch` HEAD **独立**起
-> worktree，task 产物互相不可见（task 分支不 merge 回 base；逐 phase merge 是 P1.3 C7）。
-> 所以**每个 task 必须 self-contained**——禁止跨 task 代码依赖（"T-002 用 T-001 建的文件"
-> 必挂）。需要顺序构建的 feature 请**塌缩成 1 个 self-contained task**；多 task 仅限完全
-> 独立（不共享新建文件、verify 各自可跑）。`depends_on` 只是顺序声明，不传递代码。
+> **🔴 任务边界规则（C7 落地后版，2026-06-10）**：执行器有两档，规则随档位走——
+>
+> - **C7 `suiyin-flow phase run`（默认推荐）**：逐 phase merge——phase N 全部 task
+>   ff-merge 回 `base_branch` 后 phase N+1 才分叉，**依赖链成立**。按构建顺序拆 task +
+>   标 `depends_on`（只能指向更早 phase）+ 建议给 `execution_plan`。**同 phase 并行组内
+>   task 不可触碰同一文件**（并行 fork 靠 rebase 整合，同文件 = conflict = park）：每个
+>   共享文件恰好一个 task 拥有，聚合类文件（barrel / index / 注册表）归最后的聚合 task，
+>   并给每个 task 的 context_seeds 附 scope note 钉死文件边界（r3 dogfood 实证 pattern）。
+> - **P1.2.5 `task batch`（仅独立 task）**：每 task 从 base HEAD 独立分叉、产物互不可见，
+>   旧硬约束仍生效——task 必须 self-contained，顺序构建塌缩成 1 个 task，`depends_on`
+>   只是顺序声明不传递代码。
 
 ---
 
@@ -44,10 +50,15 @@ tasks:                                  # list[BatchTaskEntry], 必须 ≥ 1
       - AC-1
       - AC-2
     criticality: medium                 # low | medium | high; high 会被 C2 拒绝 (走 C3)
-    depends_on: []                      # list[task_id], P1.2.5 只做"被依赖必须在前"顺序断言
+    depends_on: []                      # list[task_id]; C7 下只能指向更早 phase 的 task
     max_retries: 3                      # optional, 0..3, 默认 3
     session_timeout_seconds: 7200       # optional, > 0, 默认 7200 (2h)
-    base_branch: main                   # optional, 默认 "main"
+    base_branch: main                   # optional, 默认 "main"; C7 要求全部 task 一致
+execution_plan:                         # optional; C7 phase 分组 (缺省 = 每 task 一 phase 串行)
+  - phase: 1                            # int, 从 1 连续递增
+    parallel: [T-001]                   # 本 phase 可并行的 task_id (恰好覆盖 tasks[] 全集)
+  - phase: 2
+    parallel: [T-002, T-003]            # 并行组内 task 不可触碰同一文件
 ```
 
 ### 字段语义
@@ -57,12 +68,13 @@ tasks:                                  # list[BatchTaskEntry], 必须 ≥ 1
 | `schema_version` | ✅ | 当前固定 `v0.1.0`；C2 解析时会校验；bump 见 [batch.py](../../src/suiyin_flow/c2_executor/batch.py) BATCH_SCHEMA_VERSION |
 | `feature_name` | ❌ | metadata 用；不影响 C2 行为 |
 | `task_id` | ✅ | 唯一；写 yaml 时按执行顺序排列（depends_on 关系必须在前） |
-| `spec_ref` / `plan_ref` | ✅ | C2 验证存在性（不存在 → SPEC_NOT_FOUND） |
-| `verify_cmd` | ✅ | 单 task 完成判定；C4 §1+§2 范畴 |
-| `context_seeds` | ✅ | AI 必读文件清单；空数组合法 |
+| `spec_ref` / `plan_ref` | ✅ | C2 验证「在 `base_branch` HEAD 可见」（C2 v0.2.1；不可见 → SPEC_NOT_FOUND，**未提交的文件不算存在**） |
+| `verify_cmd` | ✅ | 单 task 完成判定；C4 §1+§2 范畴。C7 下 rebase 后还会用它重 verify（I10） |
+| `context_seeds` | ✅ | AI 必读文件清单（同样要求在 base_branch 上已提交）；空数组合法。**建议含本 task 的 scope note**（钉文件边界） |
 | `ac_list` | ❌ | 默认空；Fork D 自然语言 AC 编号 |
 | `criticality` | ❌ | 默认 `medium`；`high` 必须由 C3 Arbiter 调度（C2 拒接） |
-| `depends_on` | ❌ | 默认空数组；P1.2.5 只校验顺序，不做拓扑/并行（留 P1.3 C1）。**注意：不传递代码可见性** —— 后面的 task 看不到前面 task 的产物（worktree 各自从 base HEAD 分叉） |
+| `depends_on` | ❌ | 默认空数组。batch：只校验顺序、**不传递代码可见性**。C7：依赖通过逐 phase merge 真实可见，但边只能指向**更早 phase**（同 phase 内依赖 → `INVALID_PLAN`） |
+| `execution_plan` | ❌ | C7 phase 分组（batch 忽略此字段）。校验三规则：恰好覆盖 `tasks[]` 全集 / 依赖只指向更早 phase / 全部 task `base_branch` 一致。缺省 → C7 退化为每 task 一 phase 串行（依赖链照跑） |
 
 ### Schema-level 校验（C2 batch adapter 落地）
 

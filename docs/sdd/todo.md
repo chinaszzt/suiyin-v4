@@ -285,8 +285,8 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 **P1 关键(让多 task 在 C7 之前可跑)**: ✅ 完成 (2026-06-09)
 - [x] **约束 `/sy-tasks` 输出**(行动项 A): `skills/sy-tasks/SKILL.md` 输出契约加第 6 条「任务独立性 P1.2.5 硬约束」+ `tasks-template.md` 同步(self-contained / 顺序构建塌缩成 1 task / depends_on 不传递代码可见性)
 
-**P2 大件(架构,留 P1.3)**:
-- [ ] **C7 Phase Coordinator**(行动项 C): 逐 phase merge,真正支持依赖链 batch。见 P1.3 §C7。
+**P2 大件(架构,留 P1.3)**: ✅ 完成 (2026-06-10)
+- [x] **C7 Phase Coordinator**(行动项 C): 逐 phase merge,真正支持依赖链 batch。spec PR #47 + impl PR #49 + r3 dogfood 实证,见 P1.3 §C7 + 下方「第三轮真闭环」。
 
 #### ✅ 第二轮真闭环 (2026-06-10, v5 login-core-r2) — 修复全部生效实证
 
@@ -313,13 +313,31 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
     短期缓解 = 文档约定"同一 feature 同时只跑一个 batch"
   - **附带验证 ✅**: 已完成代码上重跑同 task = 幂等重验通过(T-007 式),session 未画蛇添足
 
+#### ✅ 第三轮真闭环 (2026-06-10, v5 login-core-r3) — C7 依赖链 dogfood, all_merged
+
+> C7 spec (PR #47, 人审) + impl (PR #49) 当天落地后, 复刻 r1 跑不动的 **5-task 依赖链**
+> (T-001 骨架 → T-002/3/4 三模块并行 → T-005 聚合) 作为 spec §7 预定的"天然验收件":
+> 从 r2 的 plan 提交点开 `claude/login-core-r3` 分支 (v5 main 不动), 手工写 tasks.yaml
+> (execution_plan 3 phases) + 每 task 一份 scope note 钉文件边界。
+
+- **🟢 头号能力错配关闭**: `suiyin-flow phase run` → **5/5 task all_merged, exit 0**。T-002 fork 时 base HEAD 已含 T-001 骨架 (r1 在此必挂); 聚合分支 `npx vitest run` 21 tests 全绿; 全程零 merge commit (I7); 每 task 1 attempt, session 共 ~13 min; `pr_created=false` ×5 (I6 open_pr=false 生效, v5 remote 全程没动)。
+- **🟢 rebase-requeue 真实走通 (Q6-2 (b) 实证)**: phase 2 三 task 同点 fork (预 fork 钉死并行语义), T-002 ff 先 merge → T-003/T-004 非 ff → **rebase + 重 verify (I10) → merge**, 输出 `rebased=true, reverify_pass=true, requeue_count=1`。scope note 的"每文件恰好一个 task 拥有 / barrel 归 T-005"边界被 5 个 session 全部遵守 (files=2 ×4), 零 conflict。
+- **🟢 park / resume / retry-parked 真实走通**: 第一跑 fail-fast 在 T-001 (发现 #9, 见下) → park + 后续全 skipped + state 落盘; 修复后 `--retry-parked T-001` resume 继续, merged task 不重 dispatch。生命周期 (I11) 与锁 (I9) 收尾干净: worktrees/ 空、task/* 分支删光、lock 释放。
+- **🆕 发现 #9 — C2 输入校验基准错 (r3 首跑即中, 当天修复 PR #50)**: `validate_refs`/`validate_context_seeds` 旧版按 **repo_root 当前 checkout 的文件系统**校验, 而 session 读的是从 `base_branch` 分叉的 worktree —— r3 的 v5 主树在 main、seed 只在 r3 分支 → `CONTEXT_SEEDS_MISSING` 误报。**r1/r2 没炸纯属主树碰巧在 feature 分支上**。反向 bug 同修: 盘上未提交文件旧版假通过 (session 真看不到)。修法 = `git cat-file -e <base>:<ref>` (C2 spec v0.2.1 PATCH + 回归 test ×2)。
+- **附带环境坑 #10**: `claude` alias 自带的 proxy (127.0.0.1:59692) 已死, 本轮用 env `HTTPS_PROXY` 的 7897 通 —— alias 内嵌 proxy 对 subprocess 双重无效 (alias 不可见 + proxy 可能过期); 建议文档化"跑前 curl 探活 API 再起 batch/phase"。
+- **遗留观察 (非 bug)**: phase 2/3 每个 session 各自 `npm install` (~30s ×4) —— worktree 不共享未跟踪产物的固有成本; 真并行 (Q7-1) 落地时可观察是否值得 node_modules 缓存优化。
+
 ### P1.3 P2 — 并行加速 + R2
 
 - [ ] **R2: C2 retry-with-feedback** — C2 v0.2 加 `--review-feedback` flag, C5 block 后 C2 拿 findings 作为新 context 重 attempt (C5 §6 Q5-5 + §7 Block Recovery R2)
   - 预估：2-3 天 (C2 spec bump v0.2 + impl + AC test)
 - [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
-- [ ] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）
-  - **📋 spec v0.1.0 已草拟**（2026-06-10，PR 待人审拍板 — spec_pinning human gate）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows v0.1.4 Q-table）。**impl 时再 cascade**: sy-tasks 独立性硬约束解除 + workflows/diagrams 主流程图两级 merge 重绘
+- [x] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）✅ **spec + impl + dogfood 全闭环 (2026-06-10)**
+  - **spec v0.1.0**（PR #47，人审拍板通过）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows Q-table）
+  - **impl v0.1.0**（PR #49）：`suiyin-flow phase run`，7 模块 + 18 AC test；C2 v0.2.0 加 `open_pr`（联动需求 1）。PR #50：C2 v0.2.1 输入校验基准修正（dogfood 发现 #9）
+  - **dogfood r3 ✅**：5-task 依赖链 all_merged + rebase-requeue/park/resume 全路径实证，见「第三轮真闭环」
+  - **impl 后 cascade ✅**（本 PR）：sy-tasks 独立性硬约束解除（两档规则：C7 依赖链 OK / batch 仍旧约束）+ workflows v0.2.0 / diagrams v0.2.0 主流程图两级 merge 重绘
+  - **留给后续**：C2 联动需求 2（worktree 活跃 session 锁，#8 C2 半边）；Q7-1 真并行开闸；Q7-2 parked→R2 联动；Q7-3 feature→main 收口编排
   - **spec 预设 invariant**（2026-05-28 讨论沉淀，开 C7 spec PR 时作为锚点）：
     - C7 = **deterministic state machine**（同 C6 "行为契约"性质 — transition table 纯 Python，零 AI 在 routing path）
     - **路由集中**在 C7：C 组件输出只描述语义状态（`reason` / `recovery_action.kind`），**不**含 `next_action_owner` 等拓扑字段——拓扑会随阶段切换（P1.2 = 人 / P1.3+ = C7 / SaaS 场景 = merge queue），写进组件 schema 会引爆 churn
@@ -499,10 +517,12 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 我在 /Users/zhangtuo/Documents/suiyin-v4 项目里。
 v4 是 SDD 工具链开发项目本身（不是业务项目，业务在 suiyin-v5）。
 
-P1.1 P0 MVP + P1.2 阶段 1 spec + 阶段 2 C5 impl 都已 done。
-真 dogfood × 3 跑通 (T-001/T-002/T-003)。
+P1.1 P0 MVP + P1.2 (C5/C6) + P1.2.5 (batch) + P1.3 C7 Phase Coordinator
+(spec PR #47 / impl PR #49+#50 / r3 依赖链 dogfood all_merged) 都已 done。
+真闭环 dogfood × 3 轮跑通 (r1 暴露错配 / r2 单 task 闭环 / r3 C7 依赖链)。
 
-先读 docs/sdd/todo.md 了解全貌和下一步选项。
+先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 剩 R2 retry-with-feedback
++ C1 Planning Engine；C2 联动需求 2 worktree 锁）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
 我打算先做：__________
@@ -514,13 +534,13 @@ P1.1 P0 MVP + P1.2 阶段 1 spec + 阶段 2 C5 impl 都已 done。
 |---|---|
 | 了解 SDD 方法论 | `methodology.md` |
 | 了解工具链节点定义（C1-C11 是啥）| `toolchain.md` |
-| 看流程图 | `diagrams.md` v0.1.1（11 张 Mermaid + C12 placeholder） |
+| 看流程图 | `diagrams.md` v0.2.0（11 张 Mermaid；图 2 两级 merge） |
 | 看状态机 + Bug / Initiative 流程 | `workflows.md` |
 | 了解项目宪法 | `constitution.md` v0.2.2（NC v1.0 完整 = NC-1..NC-5 + PC-1..PC-3） |
 | 写 C 模块 spec | `component-spec-template.md` |
 | 了解 AI 角色 4 档 | `role-profiles.md` |
 | 看一堆未决和讨论 | `discussion-notes.md` v0.3.1 |
-| **用 v4 工具链跑 task** | `src/suiyin_flow/` impl + `suiyin-flow {verify,task,review}` CLI |
+| **用 v4 工具链跑 task** | `src/suiyin_flow/` impl + `suiyin-flow {verify,task,review,gate,phase}` CLI（依赖链用 `phase run`） |
 | 装 v4 到新业务项目 | `bin/init.sh` |
 | 14 个 slash command 实现 | `skills/sy-*/SKILL.md` |
 | 给 v5 项目的 README 模板 | `templates/README-v5.md` |
@@ -529,7 +549,7 @@ P1.1 P0 MVP + P1.2 阶段 1 spec + 阶段 2 C5 impl 都已 done。
 
 ---
 
-**Version**: v0.3.2
-**Last Updated**: 2026-05-28
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 阶段 1/2 ✅。下一步: P1.2 阶段 3 (C6) → P1.2.5 (tasks.yaml adapter，**窄义 MVP 真可用**)。
-**Changelog**: v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Version**: v0.4.0
+**Last Updated**: 2026-06-10
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 C7 ✅**（spec #47 / impl #49+#50 / r3 依赖链 dogfood all_merged）。下一步: P1.3 剩件 — R2 retry-with-feedback / C1 Planning Engine / C2 worktree 锁（联动需求 2）。
+**Changelog**: v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。

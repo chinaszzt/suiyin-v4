@@ -41,19 +41,21 @@ flowchart TD
     RV2 --> F
     F -->|发现 spec 漏意图| C
     F --> G[Tasks]
-    G --> H[Planning Engine C1<br/>分 phase + 并行组]
+    G --> H[Planning Engine C1<br/>分 phase + 并行组<br/>execution_plan 可缺省]
     H --> I[Phase Coordinator C7]
-    I -->|per task in phase| J[Task Executor C2]
-    J --> K[Verify Engine C4<br/>5 层 check]
+    I -->|per task in phase<br/>open_pr=false| J[Task Executor C2]
+    J --> K[Verify Engine C4<br/>C2 闭环内, 不绿不出]
     K -->|fail, retry ≤3| J
-    K -->|pass| L[AI Reviewer C5<br/>独立 session]
-    L -->|block| J
-    L -->|approve| M[Merge Gate C6<br/>全绿自动 merge]
-    M -->|merged| N{phase 完成?}
+    K -->|pass| IM[C7 整合: ff-merge task→feature<br/>非 ff → rebase + 重 verify<br/>conflict → park 等人]
+    IM -->|merged| N{phase 完成?}
     N -->|no, next task| J
     N -->|yes| O{所有 phase done?}
     O -->|no, next phase| I
-    O -->|yes| P[Deploy Gate C8<br/>人按按钮]
+    O -->|yes| FB[feature→main PR<br/>两级 merge, 发现 #7 决议]
+    FB --> L[AI Reviewer C5<br/>独立 session]
+    L -->|block| BR[Block Recovery R1/R2]
+    L -->|approve| M[Merge Gate C6<br/>全绿自动 merge to main, ff-only]
+    M --> P[Deploy Gate C8<br/>人按按钮]
     P --> Q([Production])
 
     style C fill:#1565C0,color:#fff
@@ -442,9 +444,10 @@ flowchart TB
 
 ---
 
-**Version**: 0.1.1-WIP
-**Last Updated**: 2026-05-20
+**Version**: 0.2.0-WIP
+**Last Updated**: 2026-06-10
 
 **Changelog**:
+- v0.2.0 (2026-06-10): 图 2 按两级 merge 重绘（C7 impl + r3 dogfood 实证）— C2 verify 后进 C7 整合（ff-merge task→feature，非 ff rebase+重verify），C5/C6 移到 feature→main PR 层（发现 #7 决议）；同 workflows.md v0.2.0
 - v0.1.1 (2026-05-20): 图 11 加 C12 Knowledge Capture Prompt dashed placeholder（post-MVP follow-up，见 `discussion-notes.md` §十）
 - v0.1.0 (2026-05-15): 初稿 11 张图
