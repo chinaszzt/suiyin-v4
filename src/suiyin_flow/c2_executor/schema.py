@@ -19,7 +19,11 @@ from pydantic import BaseModel, Field
 # PATCH bump (非 schema 变更, 仅 impl 健壮).
 # v0.2.0 (2026-06-10): TaskInput 加 open_pr (default true 向后兼容).
 # MINOR bump — C7 spec v0.1.0 §7 联动需求 1 (I6: C7 调度下不 push 不开 task PR).
-SCHEMA_VERSION: str = "v0.2.0"
+# v0.3.0 (2026-06-10): MINOR — P1.3 R2 + C7 联动需求 2:
+#   1. review_feedback input + review_feedback_applied output + REVIEW_FEEDBACK_INVALID
+#      (R2 retry-with-feedback, C5 §7 Block Recovery R2 / Q5-5 的 C2 半边)
+#   2. WORKTREE_LOCKED + I8 worktree pid 锁 (dogfood 发现 #8 C2 半边)
+SCHEMA_VERSION: str = "v0.3.0"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -72,6 +76,16 @@ class TaskInput(BaseModel):
             "False 时跳过 push + gh pr create, 只留本地 task/<id> 分支 "
             "(pr_created=False). C7 调度时传 False — task→feature 是本地 "
             "merge 语义, PR 只在 feature→main 层 (C7 spec I6, dogfood 发现 #7)"
+        ),
+    )
+    review_feedback: str | None = Field(
+        default=None,
+        description=(
+            "可选; C5 review_report.json 路径 (绝对或相对 repo_root). "
+            "提供时 = R2 retry-with-feedback: findings 注入 prompt "
+            "「上次 Review 发现的问题」节. 文件系统校验语义 (运行时 artifact "
+            "不入库, 不走 base_branch 可见性校验). retry budget 由 caller "
+            "编排 (Q2-6 → Q7-2), C2 单次调用无状态"
         ),
     )
 
@@ -150,6 +164,13 @@ class TaskOutput(BaseModel):
         default=None,
         description="conditional (when status=success); git diff 统计",
     )
+    review_feedback_applied: bool = Field(
+        default=False,
+        description=(
+            "always; True = 本次 run 注入了 review feedback "
+            "(input.review_feedback 提供且解析通过). R2 audit trail"
+        ),
+    )
 
 
 # -------------------------------------------------------------------
@@ -166,6 +187,8 @@ TaskErrorCode = Literal[
     "INVALID_TASK_ID",
     "HIGH_CRITICALITY_REJECT",
     "CONTEXT_SEEDS_MISSING",
+    "WORKTREE_LOCKED",
+    "REVIEW_FEEDBACK_INVALID",
 ]
 
 

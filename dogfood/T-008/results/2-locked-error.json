@@ -1,0 +1,10 @@
+{
+  "code": "WORKTREE_LOCKED",
+  "message": "another C2 run (pid 17778) is active in this worktree: /private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t008-tajr298u/repo2/worktrees/T-001/.suiyin/lock. Refusing to run — concurrent sessions in one worktree silently race (dogfood finding #8).",
+  "task_id": "T-001",
+  "details": {
+    "lock_path": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t008-tajr298u/repo2/worktrees/T-001/.suiyin/lock",
+    "holder_pid": 17778
+  },
+  "retryable": false
+}

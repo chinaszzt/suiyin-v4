@@ -1,14 +1,23 @@
-"""C2 worktree management — git worktree add/remove wrappers.
+"""C2 worktree management — git worktree add/remove wrappers + I8 pid 锁.
 
 I1 invariant: worktree 命名严格 `worktrees/<task_id>`.
 I2 invariant: AI session 在 worktree 内启动, 严禁在主仓库工作树跑.
-跨平台: pathlib.Path + subprocess shell=False.
+I8 invariant (v0.3.0): 同一 worktree 同时至多一个活跃 C2 run —
+`.suiyin/lock` pid 文件, 同 C7 coordinator 锁 pattern (lock.py):
+O_CREAT|O_EXCL 原子创建 + psutil 探活 + stale/损坏锁确定性接管.
+真闭环 dogfood 发现 #8 的 C2 半边 (C7 spec §7 联动需求 2).
+跨平台: pathlib.Path + subprocess shell=False + psutil.pid_exists.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
+
+import psutil
 
 from suiyin_flow.c2_executor.schema import TaskExecutorError
 
@@ -86,6 +95,80 @@ def ensure_worktree(
         shell=False,
     )
     return wt_path
+
+
+def lock_path_for(worktree_path: Path) -> Path:
+    """I8 锁文件路径: <worktree>/.suiyin/lock."""
+    return worktree_path / ".suiyin" / "lock"
+
+
+def _lock_payload(task_id: str) -> str:
+    return json.dumps(
+        {
+            "pid": os.getpid(),
+            "task_id": task_id,
+            "start_ts": datetime.now(UTC).isoformat(),
+        }
+    )
+
+
+def acquire_worktree_lock(worktree_path: Path, task_id: str) -> Path:
+    """取 I8 worktree 锁; 活跃持有者存在时 raise WORKTREE_LOCKED.
+
+    同 C7 coordinator 锁语义 (c7_coordinator/lock.py):
+    - O_CREAT|O_EXCL 原子创建
+    - 已存在 → 读 pid; pid 存活 (psutil) → WORKTREE_LOCKED 拒跑
+    - pid 已死 / 锁内容损坏到无法识别持有者 → stale, 确定性接管
+    - 自己进程持有的旧锁 (同 pid) 也走接管 (重入安全)
+    """
+    lock_path = lock_path_for(worktree_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        holder_pid: int | None = None
+        try:
+            data = json.loads(lock_path.read_text(encoding="utf-8"))
+            holder_pid = int(data["pid"])
+        except (OSError, ValueError, KeyError, TypeError):
+            holder_pid = None  # 损坏锁 = 无法识别持有者 → stale
+        if (
+            holder_pid is not None
+            and holder_pid != os.getpid()
+            and psutil.pid_exists(holder_pid)
+        ):
+            raise TaskExecutorError(
+                "WORKTREE_LOCKED",
+                f"another C2 run (pid {holder_pid}) is active in this "
+                f"worktree: {lock_path}. Refusing to run — concurrent "
+                "sessions in one worktree silently race (dogfood finding #8).",
+                task_id=task_id,
+                lock_path=str(lock_path),
+                holder_pid=holder_pid,
+            ) from None
+        # stale / 自己的旧锁 → 接管 (覆写)
+        lock_path.write_text(_lock_payload(task_id), encoding="utf-8")
+        return lock_path
+    try:
+        os.write(fd, _lock_payload(task_id).encode("utf-8"))
+    finally:
+        os.close(fd)
+    return lock_path
+
+
+def release_worktree_lock(worktree_path: Path) -> None:
+    """释放 I8 锁 (幂等; 只删自己 pid 持有的锁, 防误删并发新主)."""
+    lock_path = lock_path_for(worktree_path)
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        if int(data["pid"]) != os.getpid():
+            return
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # 锁缺失/损坏 → unlink 兜底 (损坏锁没有合法持有者)
+    try:
+        lock_path.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def remove_worktree(repo_root: Path, task_id: str, *, force: bool = False) -> None:
