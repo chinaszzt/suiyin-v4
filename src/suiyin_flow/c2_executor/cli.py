@@ -171,18 +171,23 @@ def _finalize_success(
     session_logs: list[SessionLog],
     verify_report_path: str | None,
 ) -> TaskOutput:
-    """成功后 commit + push + (best effort) 开 PR. 返回 TaskOutput."""
+    """成功后 commit + push + (best effort) 开 PR. 返回 TaskOutput.
+
+    open_pr=False (C7 调度, C7 spec I6): 跳过 push + PR, 只留本地 task/<id> 分支.
+    """
     branch = worktree_branch_name(task_input.task_id)
     diff_stats = _compute_diff_stats(wt_path, task_input.base_branch)
-    pr_url_or_branch = _open_pr_or_branch(
-        wt_path=wt_path,
-        task_id=task_input.task_id,
-        ac_list=task_input.ac_list,
-        spec_ref=task_input.spec_ref,
-        attempts=attempts,
-        branch=branch,
-        base_branch=task_input.base_branch,
-    )
+    pr_url_or_branch: str | None = None
+    if task_input.open_pr:
+        pr_url_or_branch = _open_pr_or_branch(
+            wt_path=wt_path,
+            task_id=task_input.task_id,
+            ac_list=task_input.ac_list,
+            spec_ref=task_input.spec_ref,
+            attempts=attempts,
+            branch=branch,
+            base_branch=task_input.base_branch,
+        )
     pr_created = pr_url_or_branch is not None and pr_url_or_branch.startswith("http")
 
     return TaskOutput(
@@ -373,6 +378,11 @@ def _make_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--max-retries", type=int, default=3)
     run_p.add_argument("--timeout", dest="session_timeout_seconds", type=int, default=7200)
     run_p.add_argument("--base-branch", default="main")
+    run_p.add_argument(
+        "--no-pr",
+        action="store_true",
+        help="跳过 push + gh pr create, 只留本地 task/<id> 分支 (v0.2.0 open_pr=false)",
+    )
 
     # batch subcommand (P1.2.5): tasks.yaml → 顺序跑一批
     batch_p = task_sub.add_parser(
@@ -429,6 +439,7 @@ def _cmd_task_run(args: argparse.Namespace) -> int:
             max_retries=args.max_retries,
             session_timeout_seconds=args.session_timeout_seconds,
             base_branch=args.base_branch,
+            open_pr=not args.no_pr,
         )
         output = execute_task(task_input)
         print(output.model_dump_json(indent=2))

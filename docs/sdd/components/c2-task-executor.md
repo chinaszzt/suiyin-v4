@@ -72,6 +72,15 @@ properties:
   base_branch:
     type: string
     default: main
+  open_pr:
+    type: boolean
+    default: true
+    description: |
+      false 时跳过 push + gh pr create，只留本地 task/<id> 分支
+      （pr_created=false，pr_url_or_branch=分支名）。
+      C7 Phase Coordinator 调度时传 false —— task→feature 是本地 merge 语义，
+      PR 只在 feature→main 层（C7 spec §3.1 I6，真闭环 dogfood 发现 #7 决议）。
+      default true 向后兼容 standalone 直跑。
 ```
 
 ### 2.2 Output Schema
@@ -445,11 +454,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.2-draft
-**Last Updated**: 2026-05-24
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；待 P1.2 (C5+C6) 后整体稳态
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-06-10
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.0 接入 C7 调度（open_pr）
 
 **Changelog**:
+- v0.2.0 (2026-06-10): **MINOR** — §2.1 加 `open_pr: bool`（default true 向后兼容）。C7 spec v0.1.0 §7 联动需求 1 落地（I6：C7 调度下 task→feature 本地 merge，不 push 不开 task PR，关 dogfood 发现 #7）。CLI 加 `--no-pr`。注：todo P1.3 的 R2 `--review-feedback` 留后续 MINOR；联动需求 2（worktree 活跃 session 锁，发现 #8 C2 半边）一并留待下一 bump。
 - v0.1.2 (2026-05-24): **P1.1.2 反推** — §3.1 I2 加 NC-4 reference；§3.2 加 diff_stats fallback 说明；§7 加 "Session 调用模式" 节（4 个必需 flag + stream-json 解析优先级，PR #21+23+25 实证）；§7 加 "Unified CLI" 节（PR #25 实证）；§7 跨平台节加 NC-5 reference；§7 跟 constitution 关系加 NC-4 / NC-5
 - v0.1.1 (2026-05-20): §1 Purpose 加"含闭环 verify"；§2.2 Output schema 强化（conditionality + path 绝对/相对标注 + failed fallback + 2 examples）；新增 `pr_created` 字段消歧；§7 加"跨平台兼容性"节
 - v0.1.0 (2026-05-20): 初稿
