@@ -210,13 +210,13 @@ Layer 1  业务协商              Layer 2-5  执行引擎                  Laye
 
 | 项 | 内容 |
 |---|---|
-| **性质** | 自建组件 |
-| **作用** | 按 execution_plan 调度 phase，**phase 间逐次 merge to main** |
-| **输入** | tasks.yaml 含 execution_plan |
-| **输出** | 所有 task 完成 / phase 失败标记 |
-| **核心能力** | 按 phase 顺序触发 task batch ／ phase 内并行触发 multiple Task Executor ／ phase 完成等所有 task merge → 进下一 phase ／ 失败处理 |
-| **依赖** | C2 + C6 |
-| **未决 Q7** | phase 内某 task 卡住、其他已 merge——卡住的回滚还是隔离 |
+| **性质** | 自建组件（spec: [c7-phase-coordinator.md](components/c7-phase-coordinator.md) v0.1.0） |
+| **作用** | 按 execution_plan 调度 phase，**phase 间逐次 ff-merge 回 feature 分支（base_branch，本地，不开 task PR）**；feature→main 收口属 C6 层（C7 spec Q7-3 / 发现 #7 决议） |
+| **输入** | tasks.yaml（execution_plan 可缺省 → degenerate plan：每 task 一 phase，依赖链照跑） |
+| **输出** | 所有 task merged / parked phase 标记 + phase-state 落盘 |
+| **核心能力** | 按 phase 顺序触发 task batch ／ phase 内并行触发 multiple Task Executor ／ phase 完成等所有 task merge → 进下一 phase ／ rebase-requeue 整合队列 ／ park 失败隔离 |
+| **依赖** | C2（C6 收口联动留 C7 spec Q7-3） |
+| **~~未决 Q7~~** | ~~phase 内某 task 卡住、其他已 merge——卡住的回滚还是隔离~~ → **closed P1.3**（隔离不回滚，C7 spec §3.1 I8） |
 
 ### 行为契约（declarative）
 
@@ -389,10 +389,10 @@ P0 做出来就可用——单 task 单线程跑，AI 写完跑 verify 给你看
 | **Q4** | AC ↔ test 映射强制方式（命名约定 vs metadata vs 注解） | C4 |
 | **Q5** | AI Reviewer 单次还是 N=2 分歧仲裁 | C5 |
 | ~~Q6~~ | ~~Gate Contract 失败升级通知渠道~~ → **closed P1.2** (通道 = PR comment + label; 邮件/IM 留 P3+) | C6 |
-| **Q7** | phase 内某 task 卡住，已 merge 的回滚还是隔离 | C7 |
+| ~~Q7~~ | ~~phase 内某 task 卡住，已 merge 的回滚还是隔离~~ → **closed P1.3** (隔离不回滚: merged task 是 verify 过的 ff 增量, park + worktree 留现场; C7 spec §3.1 I8 / §6) | C7 |
 | **Q8** | Deploy Contract 风险 summary 格式（人 30s 读完） | C8 |
 
 ---
 
-**Version**: 0.3.1-draft（v0.3 → v0.3.1 修订: C6 spec v0.1.1 落地后 cascade — C6 行表字段名 `verify.all.pass` → `verify_report.overall_verdict==pass`；契约规则改 R1/I8/I9 引用；实现谱系 (a) 改 standalone CLI（去 pre-push）；附录 B Q6 closed P1.2）
-**Last Updated**: 2026-05-25
+**Version**: 0.3.2-draft（v0.3.1 → v0.3.2 修订: C7 spec v0.1.0 落地后 cascade — C7 行表"merge to main"改"ff-merge 回 feature 分支"（两级整合，发现 #7 决议）+ degenerate plan + 依赖去 C6；Q7 closed P1.3（隔离不回滚）。v0.3.1: C6 spec v0.1.1 cascade — C6 行表字段名 `verify.all.pass` → `verify_report.overall_verdict==pass`；契约规则改 R1/I8/I9 引用；实现谱系 (a) 改 standalone CLI（去 pre-push）；附录 B Q6 closed P1.2）
+**Last Updated**: 2026-06-10
