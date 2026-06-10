@@ -181,6 +181,7 @@ def _finalize_success(
         spec_ref=task_input.spec_ref,
         attempts=attempts,
         branch=branch,
+        base_branch=task_input.base_branch,
     )
     pr_created = pr_url_or_branch is not None and pr_url_or_branch.startswith("http")
 
@@ -262,10 +263,16 @@ def _open_pr_or_branch(
     spec_ref: str,
     attempts: int,
     branch: str,
+    base_branch: str,
 ) -> str | None:
     """Best-effort: push branch + open PR with gh; 失败降级返回本地 branch.
 
     NC-1 友好: 无 gh / 无 remote → 返回 branch 名 (caller 看 pr_created=false).
+
+    PR base = task 的 base_branch (P1.2.5 真闭环发现 #6: 旧版不传 --base,
+    gh 默认 repo default branch (main) —— worktree-centric 流里 task 从
+    claude/<feature> 分叉, PR 对 main 开会把 base_branch 相对 main 的提交
+    全部混进 diff, 对错基线)。
     """
     # push (允许失败 — 无 remote 时本地分支也算 OK)
     push_result = subprocess.run(
@@ -297,6 +304,8 @@ def _open_pr_or_branch(
             gh,
             "pr",
             "create",
+            "--base",
+            base_branch,
             "--head",
             branch,
             "--title",
@@ -462,11 +471,16 @@ def _cmd_task_batch(args: argparse.Namespace) -> int:
         file=sys.stderr,
     )
 
-    output = run_batch(
-        manifest,
-        repo_root=str(repo_root),
-        dry_run=args.dry_run,
-    )
+    try:
+        output = run_batch(
+            manifest,
+            repo_root=str(repo_root),
+            dry_run=args.dry_run,
+        )
+    except BatchAdapterError as e:
+        # 例: precheck_refs_on_base 发现 spec_ref/plan_ref 未提交到 base_branch
+        print(e.error.model_dump_json(indent=2), file=sys.stderr)
+        return 2
 
     # Per-task progress (stderr, human-friendly)
     for idx, result in enumerate(output.tasks, start=1):

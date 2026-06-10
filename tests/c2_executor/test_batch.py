@@ -510,3 +510,144 @@ def test_AC_B7_real_run_batch_two_tasks_success(
         assert r.output.pr_url_or_branch.startswith(("task/", "http"))
         # worktree 真创建
         assert r.output.worktree_path.endswith(f"worktrees/{r.task_id}")
+
+
+# =============================================================================
+# AC-B8: base-branch ref 可见性 precheck (P1.2.5 真闭环发现 #2)
+# =============================================================================
+
+
+def test_AC_B8a_uncommitted_spec_ref_fails_fast(
+    fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-B8a: spec_ref 不在 base_branch HEAD → run_batch 抛 INVALID_MANIFEST,
+    且 execute_task 一次都不被调用 (fail-fast 在任何 session 起来之前)."""
+    called = {"n": 0}
+
+    def fake_execute(
+        task_input: TaskInput, *, claude_cmd: list[str] | None = None
+    ) -> TaskOutput:
+        called["n"] += 1
+        return _make_success_output(task_input.task_id)
+
+    monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
+
+    manifest = BatchManifest(
+        schema_version=BATCH_SCHEMA_VERSION,
+        tasks=[
+            BatchTaskEntry(
+                task_id="T-001",
+                spec_ref="not-committed.md",  # repo 里不存在
+                plan_ref="plan.md",  # 已 commit
+                verify_cmd="true",
+                context_seeds=[],
+                ac_list=[],
+                base_branch="main",
+            )
+        ],
+    )
+
+    with pytest.raises(BatchAdapterError) as exc_info:
+        run_batch(manifest, repo_root=str(fixture_repo))
+
+    assert exc_info.value.error.code == "INVALID_MANIFEST"
+    assert "not-committed.md" in exc_info.value.error.message
+    assert "T-001" in exc_info.value.error.message
+    assert exc_info.value.error.details["missing_refs"] == ["not-committed.md"]
+    assert called["n"] == 0
+
+
+def test_AC_B8b_committed_refs_pass_precheck(
+    fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-B8b: spec/plan 都已 commit 在 base HEAD → precheck 放行, 正常调度."""
+
+    def fake_execute(
+        task_input: TaskInput, *, claude_cmd: list[str] | None = None
+    ) -> TaskOutput:
+        return _make_success_output(task_input.task_id)
+
+    monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
+
+    manifest = BatchManifest(
+        schema_version=BATCH_SCHEMA_VERSION,
+        tasks=[
+            BatchTaskEntry(
+                task_id="T-001",
+                spec_ref="spec.md",
+                plan_ref="plan.md",
+                verify_cmd="true",
+                context_seeds=[],
+                ac_list=[],
+                base_branch="main",
+            )
+        ],
+    )
+
+    output = run_batch(manifest, repo_root=str(fixture_repo))
+    assert output.status == "all_success"
+
+
+def test_AC_B8c_non_git_repo_root_skips_precheck(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-B8c: repo_root 非 git repo (base_branch 解析不了) → precheck 优雅跳过,
+    不挡调度 (兼容单测 mock 场景; 真实坏路径由 execute_task 自己报错)."""
+
+    def fake_execute(
+        task_input: TaskInput, *, claude_cmd: list[str] | None = None
+    ) -> TaskOutput:
+        return _make_success_output(task_input.task_id)
+
+    monkeypatch.setattr(batch_mod, "execute_task", fake_execute)
+
+    manifest = _make_manifest(["T-001"])  # spec_ref="s.md" 哪都不存在
+    output = run_batch(manifest, repo_root=str(tmp_path))
+    assert output.status == "all_success"
+
+
+def test_AC_B8d_dry_run_skips_precheck(fixture_repo: Path) -> None:
+    """AC-B8d: dry-run 只解析列 task, 不跑 precheck (refs 缺失也 dry_run 成功)."""
+    manifest = BatchManifest(
+        schema_version=BATCH_SCHEMA_VERSION,
+        tasks=[
+            BatchTaskEntry(
+                task_id="T-001",
+                spec_ref="not-committed.md",
+                plan_ref="plan.md",
+                verify_cmd="true",
+                context_seeds=[],
+                ac_list=[],
+            )
+        ],
+    )
+    output = run_batch(manifest, repo_root=str(fixture_repo), dry_run=True)
+    assert output.status == "dry_run"
+
+
+def test_AC_B8e_cli_precheck_failure_exits_2(
+    fixture_repo: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """AC-B8e: CLI 真跑撞 precheck → exit 2 + stderr 给清晰 JSON error."""
+    yaml_path = tmp_path / "tasks.yaml"
+    _write_manifest(
+        yaml_path,
+        [_task_entry("T-001", spec_ref="not-committed.md", plan_ref="plan.md")],
+    )
+
+    rc = c2_cli.main(
+        [
+            "task",
+            "batch",
+            "--tasks-yaml",
+            str(yaml_path),
+            "--repo-root",
+            str(fixture_repo),
+        ]
+    )
+    assert rc == 2
+    captured = capsys.readouterr()
+    assert "INVALID_MANIFEST" in captured.err
+    assert "not-committed.md" in captured.err

@@ -19,7 +19,16 @@ if [ ! -d "$TARGET_DIR" ]; then
   exit 1
 fi
 TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
-PROJECT_NAME="$(basename "$TARGET_DIR")"
+# Project name: prefer the MAIN repo directory name (worktree-safe). In a linked
+# worktree, basename(TARGET_DIR) is the worktree label (e.g. "login-core"), not the
+# project (P1.2.5 dogfood finding #5). git-common-dir points at the main repo's .git
+# in both layouts; its parent dirname is the project. Fallback: TARGET_DIR basename.
+_git_common_dir="$(git -C "$TARGET_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$_git_common_dir" ]; then
+  PROJECT_NAME="$(basename "$(dirname "$_git_common_dir")")"
+else
+  PROJECT_NAME="$(basename "$TARGET_DIR")"
+fi
 
 echo "=> Initializing suiyin-flow"
 echo "   v4 toolchain : $V4_DIR"

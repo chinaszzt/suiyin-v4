@@ -26,6 +26,23 @@ pytest
 lefthook install
 ```
 
+## 给业务项目跑 `suiyin-flow task batch` 前
+
+```bash
+# 1) CLI 必须从 v4 main checkout 装（editable）——
+#    不要在 v4 的某个 worktree 里 pip install -e（worktree 删掉后 CLI 指向悬空旧代码），
+#    pyyaml 等依赖随 pyproject 一起装上（缺 pyyaml = 装的是 P1.2.5 之前的旧环境，重装即可）
+cd /path/to/suiyin-v4 && .venv/bin/pip install -e .
+
+# 2) 代理网络注意：C2 用 subprocess 起 claude session，shell alias 不生效。
+#    如果你平时靠 `alias claude='https_proxy=... claude'` 上网，跑 batch 前先 export：
+export https_proxy=http://127.0.0.1:<port> http_proxy=http://127.0.0.1:<port>
+suiyin-flow task batch --tasks-yaml specs/<feature>/tasks.yaml --repo-root .
+
+# 3) /sy-specify / /sy-plan / /sy-tasks 的产物必须已 commit 到 base_branch ——
+#    task worktree 从 base HEAD 分叉，看不到未提交文件（batch 会 fail-fast 提示）
+```
+
 ## 项目结构
 
 ```

@@ -41,6 +41,17 @@ disable-model-invocation: false
 >    - `depends_on` 不可含自身
 > 4. **任务粒度**：单 task ≈ AI 一次 session 能改完 + verify 能跑过（一般 1-3 个文件 + 测试）
 > 5. **执行**：用户后续会跑 `suiyin-flow task batch --tasks-yaml <path> --repo-root <p>` 顺序跑完
+> 6. **🔴 任务独立性（P1.2.5 硬约束，C7 落地前必须遵守）**：batch 给**每个 task 从
+>    `base_branch` HEAD 独立起 worktree**，task 之间的产物**互相不可见**（task 分支不会
+>    merge 回 base —— 逐 phase merge 是 P1.3 C7 的能力）。因此：
+>    - **每个 task 必须 self-contained**：禁止"T-002 用 T-001 建的文件"这类跨 task 代码依赖
+>      —— T-002 的 worktree 里**根本没有** T-001 的产物，verify 必挂
+>    - `depends_on` 只声明顺序语义，**不会让后面的 task 看到前面 task 的代码**
+>    - feature 天然需要顺序构建（先骨架后功能）时，**塌缩成 1 个 self-contained task**
+>      （一个 session 做完骨架 + 功能 + 测试，verify 全量跑）；宁可 1 个大 task,不要 N 个跑不通的小 task
+>    - 多 task 只在它们**完全独立**（不共享新建文件、各自 verify 独立可跑）时才生成
+>    - 来源：P1.2.5 真闭环 dogfood (2026-06-08~09, v5 login-core) —— /sy-tasks 拆了 5 个依赖
+>      task，batch 在 T-002 必然 fail-stop。见 todo.md「真闭环 dogfood 实测发现」
 >
 > **不再生成的内容**：spec-kit 原 template 的 markdown checkbox 格式、`[P]` `[Story]` 标签、"Parallel Example" 节、"Implementation Strategy" 节 —— 这些信息**全部融入 yaml 字段语义**（顺序 = `tasks[]` 顺序；并行/phase 划分留给 P1.3 C1 Planning Engine）。
 >
