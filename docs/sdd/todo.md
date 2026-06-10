@@ -291,6 +291,18 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - (a) C2 开 PR 前先 push base_branch —— 但 base 是否该上 remote 是用户的事,C2 越权
   - (b) **维持现状 + 文档化**(倾向): base 不在 remote = 不开 PR,task 分支留本地,feature 聚合后由人/C6 对 main 开 PR —— PR 本来就该开在 feature→main 一层,task→feature 是本地 merge 语义(C7 的逐 phase merge 就是这个)
   - 决策可留到 C6/C7 spec 时一起定
+- **🆕 发现 #8 — batch 对 task worktree 无并发锁(静默竞态,第二轮意外实测)**:
+  用户与 AI 各启动一次 batch(16:15:37 vs ~16:16,同一 tasks.yaml),第二个 batch **静默复用**
+  第一个创建的 `worktrees/T-001`(worktree.py "存在则复用" 语义)→ 两个 claude session
+  同时写同一 worktree ~5 分钟;先完成方 merge + 清理(16:22 删 worktree/分支)把后完成方的
+  运行环境**从脚下抽掉**,后者 verify 早已 pass 故仍报 `success`,仅 finalize 元数据损坏
+  (`diff_stats: null` / push 失败 `pr_created: false`)——**唯一痕迹,极易漏看**。这次走运
+  代码没坏(活已干完,幂等重验),并发写阶段若重叠在编码期会互相踩脏。
+  - **修复方向**: C2 起 worktree 前检测"已存在 + 有活跃 session"(`.suiyin/lock` pid 文件或
+    git worktree 注册 + 进程探活)→ 拒跑并报清晰错误;batch 层同 manifest 加文件锁
+  - **优先级**: P1.3 跟 C7 一起做(C7 调度多 task 时本来就要管 worktree 生命周期);
+    短期缓解 = 文档约定"同一 feature 同时只跑一个 batch"
+  - **附带验证 ✅**: 已完成代码上重跑同 task = 幂等重验通过(T-007 式),session 未画蛇添足
 
 ### P1.3 P2 — 并行加速 + R2
 
