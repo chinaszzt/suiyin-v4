@@ -206,11 +206,11 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 | Q4 | AC ↔ test 映射强制方式 | C4 |
 | Q5 | AI Reviewer 单次还是 N=2 分歧仲裁 | C5 |
 | Q6 | Merge Gate 升级通知渠道 | C6 |
-| Q6-2 | NOT_FF_MERGEABLE 时 rebase 由谁触发（C6 内嵌 / C7 重排 / 人） | C6 / C7 |
+| ~~Q6-2~~ | ~~NOT_FF_MERGEABLE 时 rebase 由谁触发（C6 内嵌 / C7 重排 / 人）~~ → **closed P1.3** (default = C7 重排队列, 定义见 C7 spec §3.3; feature→main 层 C7 接管收口前人工兜底) | C6 / C7 |
 | Q6-3 | `human:block` 标签被移除后是否自动 re-run gate | C6 |
 | Q6-4 | 多次 hold 同一 PR 时 comment 策略（thread vs 新 comment） | C6 |
 | Q6-5 | gate 评估触发时机（显式 CLI / pre-push hook / GH Actions） | C6 / 工程化 |
-| Q7 | phase 内 task 卡住，已 merge 的回滚还是隔离 | C7 |
+| ~~Q7~~ | ~~phase 内 task 卡住，已 merge 的回滚还是隔离~~ → **closed P1.3** (隔离不回滚, C7 spec §3.1 I8) | C7 |
 | Q8 | Deploy Gate 风险 summary 格式 | C8 |
 | **Q9** | **drift / cross-spec exception 的 AI 自检 prompt 怎么写** | C2 / C4 / C5 |
 | **Q10** | **Bug Type D 24h 倒计时具体实现**（CI 怎么阻断 deploy） | C8 / 工程化 |
@@ -231,11 +231,12 @@ Initiative 流程引入的新工具，归 Layer 2（规划）：
 
 ---
 
-**Version**: 0.1.3-draft
-**Last Updated**: 2026-05-25
+**Version**: 0.1.4-draft
+**Last Updated**: 2026-06-10
 
 ### Changelog
 
+- **v0.1.4** (2026-06-10): C7 spec v0.1.0 落地 cascade — §六 Q-table 关 Q7（隔离不回滚）+ Q6-2（C7 重排队列 default）。**注**: §二 主流程图仍画的是 task 级 merge to main 旧架构；按两级整合（task→feature 本地 ff-merge → feature→main PR+C6，发现 #7 决议）重绘留 C7 impl PR 一起做（同 sy-tasks 独立性约束解除的 cascade 时点）。
 - **v0.1.3** (2026-05-25): C6 spec v0.1.1 round-3 review cascade — §二 主流程图 L (Merge Gate C6) 加 held 出边（`held: VERIFY_NOT_PASS / NOT_FF_MERGEABLE → I` retry path；`held: REVIEW_NOT_APPROVE / HUMAN_BLOCKED → BR`）解 L dead-end 问题；merged 边 label 加 `ff-only` 显式；Block Recovery 节末段加 I8 precedence + I9 atomicity 引用。
 - **v0.1.2** (2026-05-24): Insight C 提升 — §二 主流程图 C5 block 边重绘 (R1 P1.2 / R2 P1.3 dotted)；新增 "Block Recovery（D-autonomous 流派硬约束）" 小节；边判定表 "review block" 行从 "→ retry" 改为 "→ Block Recovery" 并去 `request_changes`；§六 加 Q6-2/Q6-3/Q6-4/Q6-5（C6 spec 派生）。版本号从 v0.1.0 直接跳 v0.1.2（含义变化 + 新增小节，per ADR-0001 SemVer）。
 - **v0.1.0** (2026-05-15): 初版

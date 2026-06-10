@@ -319,6 +319,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 预估：2-3 天 (C2 spec bump v0.2 + impl + AC test)
 - [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
 - [ ] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）
+  - **📋 spec v0.1.0 已草拟**（2026-06-10，PR 待人审拍板 — spec_pinning human gate）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows v0.1.4 Q-table）。**impl 时再 cascade**: sy-tasks 独立性硬约束解除 + workflows/diagrams 主流程图两级 merge 重绘
   - **spec 预设 invariant**（2026-05-28 讨论沉淀，开 C7 spec PR 时作为锚点）：
     - C7 = **deterministic state machine**（同 C6 "行为契约"性质 — transition table 纯 Python，零 AI 在 routing path）
     - **路由集中**在 C7：C 组件输出只描述语义状态（`reason` / `recovery_action.kind`），**不**含 `next_action_owner` 等拓扑字段——拓扑会随阶段切换（P1.2 = 人 / P1.3+ = C7 / SaaS 场景 = merge queue），写进组件 schema 会引爆 churn
