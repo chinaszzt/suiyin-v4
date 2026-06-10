@@ -11,8 +11,10 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from suiyin_flow.c2_executor.prompt import (
+    load_review_findings,
     render_prompt,
     validate_context_seeds,
     validate_refs,
@@ -28,7 +30,9 @@ from suiyin_flow.c2_executor.schema import (
 )
 from suiyin_flow.c2_executor.session import run_session
 from suiyin_flow.c2_executor.worktree import (
+    acquire_worktree_lock,
     ensure_worktree,
+    release_worktree_lock,
     worktree_branch_name,
 )
 
@@ -64,9 +68,10 @@ def execute_task(
             criticality=task_input.criticality,
         )
 
-    # 输入校验 (path 存在性)
+    # 输入校验 (path 存在性 + R2 feedback 解析)
     validate_refs(task_input)
     validate_context_seeds(task_input)
+    review_findings = load_review_findings(task_input)
 
     repo_root = Path(task_input.repo_root).resolve()
 
@@ -77,9 +82,30 @@ def execute_task(
         base_branch=task_input.base_branch,
     )
 
-    prompt_text = render_prompt(task_input, wt_path)
+    # I8: worktree 活跃 run 锁 (raises WORKTREE_LOCKED if held by live pid)
+    acquire_worktree_lock(wt_path, task_input.task_id)
+    try:
+        return _run_attempts(
+            task_input=task_input,
+            wt_path=wt_path,
+            review_findings=review_findings,
+            claude_cmd=claude_cmd,
+        )
+    finally:
+        # I8: 终态释放 (success / RETRY_EXHAUSTED / 任何异常路径)
+        release_worktree_lock(wt_path)
 
-    # 重试循环
+
+def _run_attempts(
+    *,
+    task_input: TaskInput,
+    wt_path: Path,
+    review_findings: list[dict[str, Any]] | None,
+    claude_cmd: list[str] | None,
+) -> TaskOutput:
+    """重试循环 + 终态 (execute_task 的锁内主体)."""
+    prompt_text = render_prompt(task_input, wt_path, review_findings)
+
     session_logs: list[SessionLog] = []
     last_error: TaskErrorCode | None = None
     timeout_retries = 0
@@ -160,6 +186,7 @@ def execute_task(
         attempts=attempt,
         session_logs=session_logs,
         verify_report_path=verify_report_path,
+        review_feedback_applied=review_findings is not None,
     )
 
 
@@ -170,6 +197,7 @@ def _finalize_success(
     attempts: int,
     session_logs: list[SessionLog],
     verify_report_path: str | None,
+    review_feedback_applied: bool = False,
 ) -> TaskOutput:
     """成功后 commit + push + (best effort) 开 PR. 返回 TaskOutput.
 
@@ -200,6 +228,7 @@ def _finalize_success(
         verify_report_path=verify_report_path,
         session_logs=session_logs,
         diff_stats=diff_stats,
+        review_feedback_applied=review_feedback_applied,
     )
 
 
@@ -383,6 +412,16 @@ def _make_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="跳过 push + gh pr create, 只留本地 task/<id> 分支 (v0.2.0 open_pr=false)",
     )
+    run_p.add_argument(
+        "--review-feedback",
+        dest="review_feedback",
+        default=None,
+        help=(
+            "C5 review_report.json 路径 (绝对或相对 repo_root); "
+            "R2 retry-with-feedback: findings 注入 prompt 让 session 优先修复 "
+            "(v0.3.0)"
+        ),
+    )
 
     # batch subcommand (P1.2.5): tasks.yaml → 顺序跑一批
     batch_p = task_sub.add_parser(
@@ -440,6 +479,7 @@ def _cmd_task_run(args: argparse.Namespace) -> int:
             session_timeout_seconds=args.session_timeout_seconds,
             base_branch=args.base_branch,
             open_pr=not args.no_pr,
+            review_feedback=args.review_feedback,
         )
         output = execute_task(task_input)
         print(output.model_dump_json(indent=2))

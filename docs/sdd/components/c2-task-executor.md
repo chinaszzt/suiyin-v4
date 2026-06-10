@@ -81,6 +81,21 @@ properties:
       C7 Phase Coordinator 调度时传 false —— task→feature 是本地 merge 语义，
       PR 只在 feature→main 层（C7 spec §3.1 I6，真闭环 dogfood 发现 #7 决议）。
       default true 向后兼容 standalone 直跑。
+  review_feedback:
+    type: string
+    description: |
+      可选；C5 review_report.json 路径（绝对路径，或相对 repo_root）。
+      提供时 = R2 retry-with-feedback 模式（C5 spec §7 Block Recovery R2 / Q5-5）：
+      C2 解析 report 的 findings，注入 prompt「上次 Review 发现的问题」节（§4），
+      session 必须优先逐条处理后再走常规 Steps。
+      语义要点：
+      (1) R2 复用既有 worktree（I1 复用语义）—— 在被 block 的实现上修，不从头重写；
+      (2) retry budget 由 caller 编排（Q5-5 预案 ≤2 轮后退 R1），C2 单次调用无状态；
+      (3) 校验语义是**文件系统存在性** —— review report 是运行时 artifact
+          （.suiyin/reviews/...，gitignored 不入库），不走 spec_ref 那套
+          base_branch 可见性校验（区别于 v0.2.1 #9 修正的适用范围）；
+      (4) findings 为空数组 → REVIEW_FEEDBACK_INVALID（block report 必有 ≥1
+          finding，空反馈属 caller 调用错误，宁可 fail-fast 不静默跑普通模式）。
 ```
 
 ### 2.2 Output Schema
@@ -147,6 +162,11 @@ properties:
       files_changed: { type: integer }
       insertions: { type: integer }
       deletions: { type: integer }
+  review_feedback_applied:
+    type: boolean
+    description: |
+      always；true = 本次 run 注入了 review feedback
+      （input.review_feedback 提供且解析通过）。R2 audit trail 字段。
 ```
 
 #### Example outputs
@@ -207,6 +227,8 @@ properties:
       - INVALID_TASK_ID        # 不符合 pattern
       - HIGH_CRITICALITY_REJECT  # criticality=high 应走 C3，C2 拒接
       - CONTEXT_SEEDS_MISSING  # 任一 context_seeds 文件不存在
+      - WORKTREE_LOCKED        # worktree 有活跃 C2 run（.suiyin/lock pid 存活，I8）
+      - REVIEW_FEEDBACK_INVALID  # review_feedback 不存在 / JSON 非法 / findings 缺失或为空
   message: { type: string }
   task_id: { type: string }
   details:
@@ -229,6 +251,7 @@ properties:
 - **I5**: `criticality=high` 直接报 `HIGH_CRITICALITY_REJECT`，调度责任在 C3，不在 C2。
 - **I6**: PR 描述里必须包含 `spec_ref` + `ac_list` + `attempts`，便于 C5 Reviewer 关联回 spec。
 - **I7**: 单 session 超 `session_timeout_seconds` 强制 `kill -9`，**不允许优雅退出超时**（避免假活）。
+- **I8**: 同一 worktree 同时至多一个活跃 C2 run。run 起步（worktree 创建/复用后、session 启动前）在 `worktrees/<task_id>/.suiyin/lock` 写 pid 锁（`O_CREAT|O_EXCL` 原子创建），终态（success / RETRY_EXHAUSTED 等一切退出路径）释放；已存在且持有者 pid 存活（`psutil.pid_exists`）→ `WORKTREE_LOCKED` 拒跑，不动 worktree 内容；pid 已死或锁内容损坏 = stale → 确定性接管。**真闭环 dogfood 发现 #8 的 C2 半边** —— C7 的 I9 coordinator 锁挡「同 manifest 双 coordinator」，本锁挡「coordinator 在跑 + 人又直跑单 task」的交叉竞态（C7 spec §7 联动需求 2）。锁文件与 C7 coordinator 锁同 pattern（pid + task_id + start_ts JSON）。
 
 ### 3.2 Side Effects
 
@@ -239,6 +262,7 @@ properties:
 - 跑 `verify_cmd` 期间可能调用业务项目 toolchain（dart / pnpm / pytest / ...）
 - 写 `verify_report.json`（C4 输出，C2 透传路径，不解析内容）
 - 写 session log 到 `worktrees/<task_id>/.suiyin/sessions/attempt-{N}.log`
+- 写/删 `worktrees/<task_id>/.suiyin/lock` pid 锁（I8；run 起步创建，终态释放；`.suiyin/` gitignored 不入库）
 - 计算 `diff_stats` 时跑 `git diff --shortstat <base_ref>...HEAD`：**fallback 链** = 先试 `origin/<base_branch>`，origin 缺失则 fallback 到本地 `<base_branch>`（dogfood 场景常见 base_branch 未 push 到 remote；P0 spike 经验，见 PR #25）
 - task 完成后 worktree **保留**（C6 merge 后由 cleanup 阶段或人工删，C2 不删）
 
@@ -254,6 +278,8 @@ properties:
 | `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` | 输入路径不存在 | 立即报错，不启动 session |
 | `HIGH_CRITICALITY_REJECT` | `criticality=high` | 立即报错，提示调用 C3 |
 | `INVALID_TASK_ID` | 不符合 `T-\d{3,}` | 立即报错 |
+| `WORKTREE_LOCKED` | `worktrees/<task_id>/.suiyin/lock` 存在且持有者 pid 存活 | 立即报错，不启动 session、不动 worktree（details 带 `holder_pid` + `lock_path`）|
+| `REVIEW_FEEDBACK_INVALID` | `review_feedback` 路径不存在 / JSON 解析失败 / `findings` 缺失或为空 | 立即报错，不启动 session |
 
 **重试策略**：
 - VERIFY_FAILED / SESSION_CRASHED → 重试（max_retries 默认 3）
@@ -277,7 +303,7 @@ properties:
 - **ac_list**: {ac_list}（你产出的代码必须能让对应 `AC-N: ...` 命名的测试通过）
 - **context_seeds**（必读，先扫一遍再动手）:
 {context_seeds_yaml}
-
+{review_feedback_section}
 ## Steps
 
 1. 读 spec / plan / constitution / 所有 context_seeds
@@ -310,6 +336,23 @@ properties:
 verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 ````
 
+**`{review_feedback_section}` 渲染规则（v0.3.0 R2）**：
+
+- `review_feedback` 未提供 → 渲染为空字符串（模板退化为 v0.2.x 形态）。
+- 提供时渲染为下节（findings 按 severity 排序 high → medium → low，同级保持 report 原序）：
+
+````markdown
+## 上次 Review 发现的问题（R2 retry-with-feedback — 必须优先处理）
+
+上一轮实现被独立 AI Reviewer (C5) block。当前 worktree 里已有上一轮的实现，
+**不要从头重写** —— 逐条修复以下 findings（或在最终输出的 JSON 里加
+`feedback_disputes` 字段说明为什么某条不需要改），然后再走常规 Steps：
+
+1. [{severity}/{category}] {location}
+   fix: {suggested_fix}
+2. ...
+````
+
 ## 5. Acceptance Criteria
 
 - **AC-1**: 给定 valid input（spec/plan/seeds 都存在 + verify_cmd 可跑通），返回 `status=success` 且 `pr_url_or_branch` 非空
@@ -321,6 +364,11 @@ verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 - **AC-7**: `worktree_path` 命名严格为 `worktrees/<task_id>`，跨 100 次调用 100% 满足
 - **AC-8**: 成功时 PR / 分支描述含 `task_id` + `ac_list` + `attempts` 三个字段
 - **AC-9**: 每个 attempt 在 `.suiyin/sessions/attempt-{N}.log` 留下完整 stdout/stderr
+- **AC-10**: 给定 `review_feedback` 指向合法 C5 report（≥1 finding），渲染的 prompt 含「上次 Review 发现的问题」节及每条 finding 的 `location` + `suggested_fix`（severity 降序），且 output `review_feedback_applied=true`；未提供时该节不出现且 `review_feedback_applied=false`
+- **AC-11**: 给定 `review_feedback` 路径不存在 / JSON 非法 / findings 缺失或为空，返回 `REVIEW_FEEDBACK_INVALID`，不启动 session
+- **AC-12**: worktree `.suiyin/lock` 存在且持有者 pid 存活 → 返回 `WORKTREE_LOCKED`，不启动 session、不修改 worktree 内容
+- **AC-13**: lock 持有者 pid 已死（stale）→ 确定性接管，run 正常跑完
+- **AC-14**: run 终态后（success 与 RETRY_EXHAUSTED 两路径）lock 文件均被释放
 
 ## 6. Open Questions
 
@@ -329,6 +377,8 @@ verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 - **Q2-3**: 重试是同 worktree 续命，还是清 worktree 从头？当前默认续命（I4），但有 corner case：AI 把代码搞乱后 worktree 状态不可恢复 → 后续考虑 `--reset-on-retry` flag
 - **Q2-4**: remote push 失败（无 gh / 网络断）时的降级 —— 当前是停在本地分支返回 success（带 branch name），但 caller 可能误以为有 PR。考虑加 `pr_created: bool` 字段
 - **Q2-5**: session 跑过程中产生的 `node_modules` / `.dart_tool` 等大目录是否纳入 worktree git ignore —— 跟业务项目自身 `.gitignore` 关系？暂定信任业务项目 `.gitignore`
+- **Q2-6** (v0.3.0): R2 的 retry 编排（谁数 budget、仍 block 后退 R1 的触发）放哪一层？C2 单次调用无状态（§2.1 review_feedback 语义要点 2），编排候选 = C7 v0.2（Q7-2 parked→R2 联动）或独立 harness。**C2 侧能力本版关闭（Q5-5 的 C2 半边）**，编排留 Q7-2
+- **Q2-7** (v0.3.0): prompt 给了 session `feedback_disputes` 出口（§4 渲染规则）——dispute 内容要不要回流给 C5 / 人？当前只落在 session final JSON 里等人看，结构化回流留 R3（Codex 仲裁）阶段一起设计
 
 ## 7. Implementation Notes
 
@@ -454,11 +504,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.2.1-draft
+**Version**: v0.3.0-draft
 **Last Updated**: 2026-06-10
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁
 
 **Changelog**:
+- v0.3.0 (2026-06-10): **MINOR** — P1.3 R2 + C7 联动需求 2 双件落地。(1) **R2 retry-with-feedback**（C5 §7 Block Recovery R2 / Q5-5 的 C2 半边）：§2.1 加 `review_feedback`（C5 report 路径，文件系统校验语义），§4 加「上次 Review 发现的问题」渲染规则（severity 降序 + `feedback_disputes` 出口），§2.2 加 `review_feedback_applied` audit 字段，§2.3 加 `REVIEW_FEEDBACK_INVALID`；retry 编排留 caller（新 Q2-6 → Q7-2）。(2) **worktree 活跃 session 锁**（真闭环 dogfood 发现 #8 C2 半边）：§3.1 新 I8（`.suiyin/lock` pid 锁，同 C7 I9 pattern：O_EXCL 原子创建 + psutil 探活 + stale 接管），§2.3 加 `WORKTREE_LOCKED`。AC-10..AC-14。CLI 加 `--review-feedback`。
 - v0.2.1 (2026-06-10): **PATCH** — `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` 校验语义钉死为「在 `base_branch` HEAD 可见」（`git cat-file -e`；base 解析不了 fallback 文件系统）。**C7 dogfood r3 发现 #9**：旧版按 repo_root 当前 checkout 的文件系统校验，repo 主树与 base_branch 分支不一致时双向出错——feature 分支独有文件被误报 missing（r3 实测 fail-fast 在 T-001），盘上未提交文件被误判可用（session worktree 实际看不到）。错误码不变，仅校验基准修正；error message 带 `checked_against` 提示。
 - v0.2.0 (2026-06-10): **MINOR** — §2.1 加 `open_pr: bool`（default true 向后兼容）。C7 spec v0.1.0 §7 联动需求 1 落地（I6：C7 调度下 task→feature 本地 merge，不 push 不开 task PR，关 dogfood 发现 #7）。CLI 加 `--no-pr`。注：todo P1.3 的 R2 `--review-feedback` 留后续 MINOR；联动需求 2（worktree 活跃 session 锁，发现 #8 C2 半边）一并留待下一 bump。
 - v0.1.2 (2026-05-24): **P1.1.2 反推** — §3.1 I2 加 NC-4 reference；§3.2 加 diff_stats fallback 说明；§7 加 "Session 调用模式" 节（4 个必需 flag + stream-json 解析优先级，PR #21+23+25 实证）；§7 加 "Unified CLI" 节（PR #25 实证）；§7 跨平台节加 NC-5 reference；§7 跟 constitution 关系加 NC-4 / NC-5

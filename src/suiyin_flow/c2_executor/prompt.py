@@ -1,13 +1,16 @@
 """C2 prompt template — §4 implementation.
 
 注入 task context (spec/plan/constitution + ac_list + context_seeds) 给
-Claude headless session. 同时含 ref 校验 (SPEC_NOT_FOUND / CONTEXT_SEEDS_MISSING).
+Claude headless session. 同时含 ref 校验 (SPEC_NOT_FOUND / CONTEXT_SEEDS_MISSING)
+与 R2 review feedback 解析 (REVIEW_FEEDBACK_INVALID, v0.3.0).
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from suiyin_flow.c2_executor.schema import TaskExecutorError, TaskInput
 
@@ -28,7 +31,7 @@ _TEMPLATE = """\
 - **ac_list**: {ac_list} (产出的代码必须能让对应 `AC-N` 命名的测试通过)
 - **context_seeds** (必读, 先扫一遍再动手):
 {context_seeds_yaml}
-
+{review_feedback_section}
 ## Steps
 
 1. 读 spec / plan / constitution / 所有 context_seeds
@@ -143,8 +146,91 @@ def validate_context_seeds(task_input: TaskInput) -> None:
             )
 
 
-def render_prompt(task_input: TaskInput, worktree_path: Path) -> str:
-    """渲染 §4 prompt template (要求 refs / seeds 已校验过)."""
+# R2 feedback section 模板 (spec §4 渲染规则, v0.3.0)
+_FEEDBACK_SECTION_HEADER = """
+## 上次 Review 发现的问题 (R2 retry-with-feedback — 必须优先处理)
+
+上一轮实现被独立 AI Reviewer (C5) block. 当前 worktree 里已有上一轮的实现,
+**不要从头重写** — 逐条修复以下 findings (或在最终输出的 JSON 里加
+`feedback_disputes` 字段说明为什么某条不需要改), 然后再走常规 Steps:
+"""
+
+_SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
+
+
+def load_review_findings(task_input: TaskInput) -> list[dict[str, Any]] | None:
+    """读 + 校验 review_feedback (R2). None = input 未提供.
+
+    校验语义是文件系统存在性 (spec §2.1 语义要点 3): review report 是
+    运行时 artifact (.suiyin/reviews/..., gitignored), 跟 spec_ref 那套
+    base_branch 可见性校验 (#9 修正) 适用范围不同.
+
+    Raises:
+        TaskExecutorError(REVIEW_FEEDBACK_INVALID) — 路径不存在 / JSON 非法 /
+        findings 缺失或为空 (block report 必有 ≥1 finding, 空反馈属 caller
+        调用错误, fail-fast 不静默跑普通模式).
+    """
+    if task_input.review_feedback is None:
+        return None
+    path = Path(task_input.review_feedback)
+    if not path.is_absolute():
+        path = Path(task_input.repo_root) / path
+    if not path.is_file():
+        raise TaskExecutorError(
+            "REVIEW_FEEDBACK_INVALID",
+            f"review_feedback file not found: {path}",
+            task_id=task_input.task_id,
+            review_feedback=str(path),
+        )
+    try:
+        data: Any = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise TaskExecutorError(
+            "REVIEW_FEEDBACK_INVALID",
+            f"review_feedback is not valid JSON: {path} ({exc})",
+            task_id=task_input.task_id,
+            review_feedback=str(path),
+        ) from exc
+    findings = data.get("findings") if isinstance(data, dict) else None
+    if not isinstance(findings, list) or not findings:
+        raise TaskExecutorError(
+            "REVIEW_FEEDBACK_INVALID",
+            f"review_feedback has no findings: {path} (a C5 block report "
+            "always carries >=1 finding; empty feedback is a caller error)",
+            task_id=task_input.task_id,
+            review_feedback=str(path),
+        )
+    return [f for f in findings if isinstance(f, dict)]
+
+
+def _render_feedback_section(findings: list[dict[str, Any]] | None) -> str:
+    """渲染「上次 Review 发现的问题」节; findings=None → 空串 (退化 v0.2.x 形态).
+
+    排序: severity high → medium → low (未知 severity 排最后), 同级保持原序.
+    """
+    if findings is None:
+        return ""
+    ordered = sorted(
+        findings,
+        key=lambda f: _SEVERITY_RANK.get(str(f.get("severity", "")), 99),
+    )
+    lines = []
+    for i, f in enumerate(ordered, start=1):
+        severity = f.get("severity", "?")
+        category = f.get("category", "?")
+        location = f.get("location", "(no location)")
+        fix = f.get("suggested_fix", "(no suggested_fix)")
+        lines.append(f"{i}. [{severity}/{category}] {location}")
+        lines.append(f"   fix: {fix}")
+    return _FEEDBACK_SECTION_HEADER + "\n" + "\n".join(lines) + "\n"
+
+
+def render_prompt(
+    task_input: TaskInput,
+    worktree_path: Path,
+    review_findings: list[dict[str, Any]] | None = None,
+) -> str:
+    """渲染 §4 prompt template (要求 refs / seeds / feedback 已校验过)."""
     seeds_yaml = (
         "\n".join(f"  - {s}" for s in task_input.context_seeds)
         if task_input.context_seeds
@@ -162,4 +248,5 @@ def render_prompt(task_input: TaskInput, worktree_path: Path) -> str:
         context_seeds_yaml=seeds_yaml,
         verify_cmd=task_input.verify_cmd,
         worktree_path=str(worktree_path),
+        review_feedback_section=_render_feedback_section(review_findings),
     )
