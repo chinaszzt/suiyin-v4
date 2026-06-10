@@ -115,6 +115,44 @@ def test_AC_3_context_seeds_missing(fixture_repo: Path) -> None:
     assert exc_info.value.error.code == "CONTEXT_SEEDS_MISSING"
 
 
+def test_AC_3b_refs_validated_against_base_branch_not_checkout(
+    fixture_repo: Path,
+) -> None:
+    """v0.2.1 发现 #9 回归: ref 只在 feature 分支上 (repo 当前 checkout 在 main)
+    → 校验必须过; worktree 从 base_branch 分叉, checkout 分支无关."""
+    import subprocess
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(fixture_repo), *args],
+            check=True, capture_output=True, text=True, shell=False,
+        )
+
+    # feature 分支上提交 main 没有的 seed, 然后切回 main
+    git("checkout", "-b", "feature/x")
+    (fixture_repo / "feature-only.md").write_text("seed\n", encoding="utf-8")
+    git("add", "feature-only.md")
+    git("commit", "-m", "feature-only seed")
+    git("checkout", "main")
+    assert not (fixture_repo / "feature-only.md").exists()
+
+    task_input = _make_input(
+        fixture_repo, context_seeds=["feature-only.md"]
+    ).model_copy(update={"base_branch": "feature/x"})
+    validate_context_seeds(task_input)  # 不应 raise
+    validate_refs(task_input)  # spec/plan/constitution 在 main 也在 feature/x
+
+
+def test_AC_3c_uncommitted_seed_rejected(fixture_repo: Path) -> None:
+    """v0.2.1 发现 #9 反向回归: seed 在盘上但未提交到 base_branch
+    → session 的 worktree 看不到 → 必须拒 (旧版按 fs 校验会假通过)."""
+    (fixture_repo / "uncommitted.md").write_text("seed\n", encoding="utf-8")
+    task_input = _make_input(fixture_repo, context_seeds=["uncommitted.md"])
+    with pytest.raises(TaskExecutorError) as exc_info:
+        validate_context_seeds(task_input)
+    assert exc_info.value.error.code == "CONTEXT_SEEDS_MISSING"
+
+
 # =============================================================================
 # AC-4: AI session 超 timeout → TIMEOUT + 进程 kill -9
 # =============================================================================

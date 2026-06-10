@@ -454,11 +454,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.2.0-draft
+**Version**: v0.2.1-draft
 **Last Updated**: 2026-06-10
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.0 接入 C7 调度（open_pr）
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）
 
 **Changelog**:
+- v0.2.1 (2026-06-10): **PATCH** — `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` 校验语义钉死为「在 `base_branch` HEAD 可见」（`git cat-file -e`；base 解析不了 fallback 文件系统）。**C7 dogfood r3 发现 #9**：旧版按 repo_root 当前 checkout 的文件系统校验，repo 主树与 base_branch 分支不一致时双向出错——feature 分支独有文件被误报 missing（r3 实测 fail-fast 在 T-001），盘上未提交文件被误判可用（session worktree 实际看不到）。错误码不变，仅校验基准修正；error message 带 `checked_against` 提示。
 - v0.2.0 (2026-06-10): **MINOR** — §2.1 加 `open_pr: bool`（default true 向后兼容）。C7 spec v0.1.0 §7 联动需求 1 落地（I6：C7 调度下 task→feature 本地 merge，不 push 不开 task PR，关 dogfood 发现 #7）。CLI 加 `--no-pr`。注：todo P1.3 的 R2 `--review-feedback` 留后续 MINOR；联动需求 2（worktree 活跃 session 锁，发现 #8 C2 半边）一并留待下一 bump。
 - v0.1.2 (2026-05-24): **P1.1.2 反推** — §3.1 I2 加 NC-4 reference；§3.2 加 diff_stats fallback 说明；§7 加 "Session 调用模式" 节（4 个必需 flag + stream-json 解析优先级，PR #21+23+25 实证）；§7 加 "Unified CLI" 节（PR #25 实证）；§7 跨平台节加 NC-5 reference；§7 跟 constitution 关系加 NC-4 / NC-5
 - v0.1.1 (2026-05-20): §1 Purpose 加"含闭环 verify"；§2.2 Output schema 强化（conditionality + path 绝对/相对标注 + failed fallback + 2 examples）；新增 `pr_created` 字段消歧；§7 加"跨平台兼容性"节

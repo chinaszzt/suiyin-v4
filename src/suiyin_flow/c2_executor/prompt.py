@@ -6,6 +6,7 @@ Claude headless session. 同时含 ref 校验 (SPEC_NOT_FOUND / CONTEXT_SEEDS_MI
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from suiyin_flow.c2_executor.schema import TaskExecutorError, TaskInput
@@ -61,37 +62,84 @@ verify 没绿时不要 commit. 可以重复跑 verify_cmd 调试.
 """
 
 
-def validate_refs(task_input: TaskInput) -> None:
-    """SPEC_NOT_FOUND 校验: spec_ref / plan_ref / constitution_ref 文件存在."""
+def _git_ok(repo_root: Path, *args: str) -> bool:
+    """git -C repo_root <args>; 只看 returncode==0; 任何异常视为 False."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            shell=False,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
+
+
+def _ref_visible(task_input: TaskInput, ref: str) -> tuple[bool, str]:
+    """ref 在 task 视角的树里是否可见.
+
+    v0.2.1 (真闭环 r3 发现 #9): session 读的是 worktree (从 base_branch HEAD
+    分叉), 不是 repo_root 当前 checkout 的分支。旧版按 repo_root 文件系统校验,
+    两边分支不一致时双向出错: feature 分支独有文件被误报 missing (r3 实测),
+    盘上未提交文件被误判可用 (session 实际看不到)。
+
+    校验顺序:
+    1. base_branch 可解析 → `git cat-file -e <base>:<ref>` (文件/目录皆可)
+    2. base_branch 解析不了 (非 git repo / unborn) → fallback 文件系统存在性
+
+    Returns:
+        (visible, checked_against)
+    """
     repo_root = Path(task_input.repo_root)
+    base = task_input.base_branch
+    if _git_ok(repo_root, "rev-parse", "--verify", "--quiet", base):
+        return (
+            _git_ok(repo_root, "cat-file", "-e", f"{base}:{ref}"),
+            f"branch {base!r}",
+        )
+    return (repo_root / ref).exists(), "filesystem (base_branch unresolvable)"
+
+
+def validate_refs(task_input: TaskInput) -> None:
+    """SPEC_NOT_FOUND 校验: spec_ref / plan_ref / constitution_ref 对 task 可见.
+
+    "可见" = 在 base_branch HEAD 上 (worktree 从这里分叉), 见 _ref_visible.
+    """
     for label, ref in (
         ("spec_ref", task_input.spec_ref),
         ("plan_ref", task_input.plan_ref),
         ("constitution_ref", task_input.constitution_ref),
     ):
-        path = repo_root / ref
-        if not path.exists():
+        visible, against = _ref_visible(task_input, ref)
+        if not visible:
             raise TaskExecutorError(
                 "SPEC_NOT_FOUND",
-                f"{label} not found: {ref}",
+                f"{label} not found: {ref} (checked against {against}; the "
+                "task worktree forks from base_branch HEAD — commit the file "
+                "to base_branch first)",
                 task_id=task_input.task_id,
                 missing_ref=label,
-                path=str(path),
+                ref=ref,
+                checked_against=against,
             )
 
 
 def validate_context_seeds(task_input: TaskInput) -> None:
-    """CONTEXT_SEEDS_MISSING 校验: 所有 seed 文件/目录存在."""
-    repo_root = Path(task_input.repo_root)
+    """CONTEXT_SEEDS_MISSING 校验: 所有 seed 对 task 可见 (同 validate_refs 语义)."""
     for seed in task_input.context_seeds:
-        seed_path = repo_root / seed
-        if not seed_path.exists():
+        visible, against = _ref_visible(task_input, seed)
+        if not visible:
             raise TaskExecutorError(
                 "CONTEXT_SEEDS_MISSING",
-                f"context_seed not found: {seed}",
+                f"context_seed not found: {seed} (checked against {against}; "
+                "the task worktree forks from base_branch HEAD — commit the "
+                "file to base_branch first)",
                 task_id=task_input.task_id,
                 missing_seed=seed,
-                path=str(seed_path),
+                checked_against=against,
             )
 
 
