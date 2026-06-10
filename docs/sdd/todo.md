@@ -279,6 +279,19 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 **P2 大件(架构,留 P1.3)**:
 - [ ] **C7 Phase Coordinator**(行动项 C): 逐 phase merge,真正支持依赖链 batch。见 P1.3 §C7。
 
+#### ✅ 第二轮真闭环 (2026-06-10, v5 login-core-r2) — 修复全部生效实证
+
+> 回退 v5 到 sy-* 之前 → 重装 (PR #44 工具链) → 同段 feature 输入重跑全链。
+
+- **P1 约束生效**: `/sy-tasks` 这次输出 **1 个 self-contained task**(上轮 5 个依赖 task),yaml 顶部注释自带塌缩推理(引用 template 教训)+ `base_branch: claude/login-core-r2` 写对且带 rationale —— 约束被模型理解而非机械遵守
+- **auto-commit 正常**: spec/plan/tasks 三个独立 commit(上轮缺口未复发)→ batch precheck 顺带通过
+- **batch all_success**: 1 attempt / 330s / 14 files +1811 / `npx vitest run` 17 tests 全绿
+- **merge 完成**: `task/T-001` ff-merge 回 feature 分支,merge 后全量 verify 仍绿 —— **`/sy-specify → /sy-plan → /sy-tasks → batch → merge` 全链首次真正闭环**(产出 v5 真实 login 凭证核心模块)
+- **🆕 发现 #7 — PR-base fix 引出**: push `task/T-001` 成功,但 `gh pr create --base claude/login-core-r2` 失败 → **base 分支不在 remote**(worktree-centric local-first 流的常态)→ 优雅降级 `pr_created=false`(NC-1 兜底正确)。上轮"开出 PR"实为错基线碰巧能开。方向(待拍):
+  - (a) C2 开 PR 前先 push base_branch —— 但 base 是否该上 remote 是用户的事,C2 越权
+  - (b) **维持现状 + 文档化**(倾向): base 不在 remote = 不开 PR,task 分支留本地,feature 聚合后由人/C6 对 main 开 PR —— PR 本来就该开在 feature→main 一层,task→feature 是本地 merge 语义(C7 的逐 phase merge 就是这个)
+  - 决策可留到 C6/C7 spec 时一起定
+
 ### P1.3 P2 — 并行加速 + R2
 
 - [ ] **R2: C2 retry-with-feedback** — C2 v0.2 加 `--review-feedback` flag, C5 block 后 C2 拿 findings 作为新 context 重 attempt (C5 §6 Q5-5 + §7 Block Recovery R2)
