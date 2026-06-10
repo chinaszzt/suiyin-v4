@@ -24,8 +24,8 @@
 | Constitution bootstrap 特例（auto-commit + push） | `runtime/extensions.yml` | ✅ |
 | Git 类命令 allowlist | `runtime/claude-settings.json` | ✅ |
 | **ADR 体系**（template + ADR-0001/0002/0003） | `docs/sdd/adrs/` | ✅ |
-| **C2 Task Executor spec v0.1.2** | `components/c2-task-executor.md` | ✅ (PR #28 反推 6 impl 发现) |
-| **C2 Task Executor impl v0.1.3** | `src/suiyin_flow/c2_executor/` | ✅ (PR #21 + #23 + #25) |
+| **C2 Task Executor spec v0.3.0** | `components/c2-task-executor.md` | ✅ (PR #28 反推 + PR #49/#50 C7 联动 + PR #52 R2+锁) |
+| **C2 Task Executor impl v0.3.0** | `src/suiyin_flow/c2_executor/` | ✅ (PR #21 + #23 + #25 + #49 + #52) |
 | **C4 Verify Contract spec v0.1.2** | `components/c4-verify-contract.md` | ✅ (PR #28 反推 venv 等) |
 | **C4 Verify Contract impl v0.1.2** | `src/suiyin_flow/c4_verify/` | ✅ (PR #20 + #22) |
 | **C5 AI Reviewer spec v0.1.1** | `components/c5-ai-reviewer.md` | ✅ (PR #29 v0.1.0 + v0.1.1 反馈修订) |
@@ -329,8 +329,8 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 ### P1.3 P2 — 并行加速 + R2
 
-- [ ] **R2: C2 retry-with-feedback** — C2 v0.2 加 `--review-feedback` flag, C5 block 后 C2 拿 findings 作为新 context 重 attempt (C5 §6 Q5-5 + §7 Block Recovery R2)
-  - 预估：2-3 天 (C2 spec bump v0.2 + impl + AC test)
+- [x] **R2: C2 retry-with-feedback** ✅ (PR #52, 2026-06-10) — C2 v0.3.0 加 `--review-feedback`：C5 review_report 的 findings 注入 prompt「上次 Review 发现的问题」节（severity 降序 + `feedback_disputes` 出口），R2 复用既有 worktree 不从头重写；`review_feedback_applied` audit 字段 + `REVIEW_FEEDBACK_INVALID`。**Scope = C2 子能力半边**（Q5-5 的 C2 侧关闭）；retry budget / block 后自动重投的编排留 Q2-6 → Q7-2（C7 v0.2）。AC-10/AC-11 + T-008 dogfood 场景 1
+- [x] **C2 联动需求 2: worktree 活跃 session 锁** ✅ (PR #52, 2026-06-10) — 发现 #8 的 C2 半边：I8 `.suiyin/lock` pid 锁（同 C7 I9 pattern：O_EXCL + psutil 探活 + stale 接管），活跃持有者 → `WORKTREE_LOCKED` 拒跑，终态 finally 释放。AC-12..14 + T-008 场景 2/3。**发现 #8 两个半边至此全关**（C7 半边 = I9，PR #49）
 - [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
 - [x] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）✅ **spec + impl + dogfood 全闭环 (2026-06-10)**
   - **spec v0.1.0**（PR #47，人审拍板通过）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows Q-table）
@@ -519,10 +519,11 @@ v4 是 SDD 工具链开发项目本身（不是业务项目，业务在 suiyin-v
 
 P1.1 P0 MVP + P1.2 (C5/C6) + P1.2.5 (batch) + P1.3 C7 Phase Coordinator
 (spec PR #47 / impl PR #49+#50 / r3 依赖链 dogfood all_merged) 都已 done。
+P1.3 的 R2 retry-with-feedback + C2 worktree 锁也已 done (C2 v0.3.0, PR #52)。
 真闭环 dogfood × 3 轮跑通 (r1 暴露错配 / r2 单 task 闭环 / r3 C7 依赖链)。
 
-先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 剩 R2 retry-with-feedback
-+ C1 Planning Engine；C2 联动需求 2 worktree 锁）。
+先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 剩 C1 Planning Engine —
+spec 可能已在 PR 等人审；编排联动 Q7-2/Q7-3 留 C7 v0.2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
 我打算先做：__________
@@ -549,7 +550,7 @@ P1.1 P0 MVP + P1.2 (C5/C6) + P1.2.5 (batch) + P1.3 C7 Phase Coordinator
 
 ---
 
-**Version**: v0.4.0
+**Version**: v0.4.1
 **Last Updated**: 2026-06-10
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 C7 ✅**（spec #47 / impl #49+#50 / r3 依赖链 dogfood all_merged）。下一步: P1.3 剩件 — R2 retry-with-feedback / C1 Planning Engine / C2 worktree 锁（联动需求 2）。
-**Changelog**: v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 C7 ✅** + **P1.3 R2+C2 锁 ✅**（C2 v0.3.0, PR #52）。下一步: P1.3 剩 C1 Planning Engine（spec 先行人审）；编排联动 Q7-2/Q7-3 留 C7 v0.2。
+**Changelog**: v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
