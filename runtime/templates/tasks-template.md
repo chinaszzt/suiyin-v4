@@ -11,6 +11,12 @@ output_filename: tasks.yaml
 > 模型读完这份模板后，**必须**在 `FEATURE_DIR/tasks.yaml` 写出符合下述 schema 的 yaml 文件，
 > 而不是 markdown checklist。C2 Task Executor 的 batch adapter (`suiyin-flow task batch`)
 > 直接消费这个 yaml；md 仅在 P2+ 由 render 工具二次生成给人看。
+>
+> **🔴 任务独立性（P1.2.5 硬约束）**：batch 给每个 task 从 `base_branch` HEAD **独立**起
+> worktree，task 产物互相不可见（task 分支不 merge 回 base；逐 phase merge 是 P1.3 C7）。
+> 所以**每个 task 必须 self-contained**——禁止跨 task 代码依赖（"T-002 用 T-001 建的文件"
+> 必挂）。需要顺序构建的 feature 请**塌缩成 1 个 self-contained task**；多 task 仅限完全
+> 独立（不共享新建文件、verify 各自可跑）。`depends_on` 只是顺序声明，不传递代码。
 
 ---
 
@@ -56,7 +62,7 @@ tasks:                                  # list[BatchTaskEntry], 必须 ≥ 1
 | `context_seeds` | ✅ | AI 必读文件清单；空数组合法 |
 | `ac_list` | ❌ | 默认空；Fork D 自然语言 AC 编号 |
 | `criticality` | ❌ | 默认 `medium`；`high` 必须由 C3 Arbiter 调度（C2 拒接） |
-| `depends_on` | ❌ | 默认空数组；P1.2.5 只校验顺序，不做拓扑/并行（留 P1.3 C1） |
+| `depends_on` | ❌ | 默认空数组；P1.2.5 只校验顺序，不做拓扑/并行（留 P1.3 C1）。**注意：不传递代码可见性** —— 后面的 task 看不到前面 task 的产物（worktree 各自从 base HEAD 分叉） |
 
 ### Schema-level 校验（C2 batch adapter 落地）
 

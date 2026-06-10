@@ -265,16 +265,16 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 > 修完 P0+P1 再来一轮:`/sy-specify → /sy-plan → /sy-tasks → batch`,这次 `/sy-tasks` 出**独立 task** → batch 跑全 → 验证多 task(独立)闭环 + P0 修复生效。
 
-**P0 快修(独立小 bug,修完下一轮顺滑)**:
-- [ ] **venv/pyyaml**: 装机文档 + 提示 `pip install -e <v4>`(pyproject 已声明 pyyaml,venv 需同步;别用旧 worktree 的 editable install)
-- [ ] **auto-commit 缺口**: batch 前置检查"`spec_ref` 在 `base_branch` HEAD 可见",否则 fail-fast 给清晰错误;或 harness 确保 `/sy-*` 产物已提交再跑 batch
-- [ ] **proxy 不传播**: 文档化"代理环境 `export https_proxy` 再跑 batch";或 `session.py` 起 claude 前自检 API 连通
-- [ ] **allowlist 缺 node**: `claude-settings.json` 按栈补 `node/npm/npx`(或 init.sh 探测栈);长远 P1.6 hooks 取代
-- [ ] **init.sh PROJECT_NAME**: 用 `git rev-parse --show-toplevel` basename,别用 `TARGET_DIR` basename
-- [ ] **C2 PR base**: 取 `base_branch`,别写死 `main`
+**P0 快修(独立小 bug,修完下一轮顺滑)**: ✅ 全部完成 (2026-06-09)
+- [x] **venv/pyyaml**: README「跑 batch 前」节 —— 从 v4 main checkout `pip install -e .`,勿用 worktree editable
+- [x] **auto-commit 缺口**: `batch.py` 加 `precheck_refs_on_base` —— 真跑前校验 spec_ref/plan_ref 在 base_branch HEAD 可见,缺失 fail-fast INVALID_MANIFEST(AC-B8a~e ×5)
+- [x] **proxy 不传播**: README 文档化 `export https_proxy` 再跑 batch(alias 对 subprocess 无效)
+- [x] **allowlist 缺 node**: `claude-settings.json` 补 node/npm/npx/pnpm/yarn + mkdir/ls/cat 等文件工具
+- [x] **init.sh PROJECT_NAME**: 用 `git-common-dir` 父目录名(worktree-safe,实测 worktree 内取主仓名)
+- [x] **C2 PR base**: `_open_pr_or_branch` 加 `--base <base_branch>`(test_pr_base.py)
 
-**P1 关键(让多 task 在 C7 之前可跑)**:
-- [ ] **约束 `/sy-tasks` 输出**(行动项 A): C7 落地前,`skills/sy-tasks/SKILL.md` + `tasks-template.md` 强制**只拆单 task 或完全独立 task**(禁跨 task 代码依赖),否则用户拿到跑不通的 yaml。这是下一轮多 task batch 能跑绿的前提。
+**P1 关键(让多 task 在 C7 之前可跑)**: ✅ 完成 (2026-06-09)
+- [x] **约束 `/sy-tasks` 输出**(行动项 A): `skills/sy-tasks/SKILL.md` 输出契约加第 6 条「任务独立性 P1.2.5 硬约束」+ `tasks-template.md` 同步(self-contained / 顺序构建塌缩成 1 task / depends_on 不传递代码可见性)
 
 **P2 大件(架构,留 P1.3)**:
 - [ ] **C7 Phase Coordinator**(行动项 C): 逐 phase merge,真正支持依赖链 batch。见 P1.3 §C7。

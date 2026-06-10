@@ -276,6 +276,7 @@ def test_AC_8_pr_description_includes_required_fields(
         spec_ref="docs/spec.md",
         attempts=3,
         branch="task/T-042",
+        base_branch="main",
     )
     assert result == "https://github.com/fake/repo/pull/1"
 

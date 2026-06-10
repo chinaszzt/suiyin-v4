@@ -14,6 +14,7 @@ Schema 版本 v0.1.0 (随 batch 模块 introduce). 跟 C2 SCHEMA_VERSION 解耦.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any, Literal
 
@@ -243,6 +244,69 @@ def load_tasks_yaml(path: Path) -> BatchManifest:
 
 
 # -------------------------------------------------------------------
+# Base-branch ref visibility precheck
+# -------------------------------------------------------------------
+
+
+def _git_ok(repo_root: str, *args: str) -> bool:
+    """跑 git 命令, 只看 returncode==0. 任何异常 (git 不存在等) 视为 False."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            shell=False,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return False
+    return result.returncode == 0
+
+
+def _refs_missing_on_base(repo_root: str, entry: BatchTaskEntry) -> list[str]:
+    """返回 entry 的 spec_ref/plan_ref 中, 在 base_branch HEAD 上看不到的 ref.
+
+    P1.2.5 真闭环 dogfood 发现 #2: /sy-* 产物若没 commit 到 base_branch,
+    C2 task worktree 从 base HEAD 分叉后看不到 spec_ref/plan_ref —— session
+    拿不到输入, 整段 ~2h 的真跑直接废掉。这里把这种情况 fail-fast 成清晰错误。
+
+    base_branch 本身解析不了时 (repo_root 非 git repo / 分支不存在 —— 例如
+    单测 monkeypatch 场景) **跳过检查返回 []**, 留给 execute_task 自己报错;
+    本检查只在 "base 可解析但 ref 缺失" 这个明确坏状态下出手。
+    """
+    if not _git_ok(repo_root, "rev-parse", "--verify", "--quiet", entry.base_branch):
+        return []
+    missing: list[str] = []
+    for ref in (entry.spec_ref, entry.plan_ref):
+        if not _git_ok(repo_root, "cat-file", "-e", f"{entry.base_branch}:{ref}"):
+            missing.append(ref)
+    return missing
+
+
+def precheck_refs_on_base(manifest: BatchManifest, repo_root: str) -> None:
+    """对 manifest 所有 task 跑 base-branch ref 可见性检查; 有缺失即抛.
+
+    Raises BatchAdapterError(INVALID_MANIFEST): 任一 task 的 spec_ref/plan_ref
+    在其 base_branch HEAD 上不可见 (即引用了未提交的文件)。
+    """
+    for entry in manifest.tasks:
+        missing = _refs_missing_on_base(repo_root, entry)
+        if missing:
+            raise BatchAdapterError(
+                "INVALID_MANIFEST",
+                f"task {entry.task_id}: refs not committed on base_branch "
+                f"{entry.base_branch!r}: {', '.join(missing)}. "
+                "C2 task worktrees fork from the base branch HEAD and cannot "
+                "see uncommitted files — commit your /sy-specify, /sy-plan and "
+                "/sy-tasks artifacts to the base branch first.",
+                task_id=entry.task_id,
+                base_branch=entry.base_branch,
+                missing_refs=missing,
+            )
+
+
+# -------------------------------------------------------------------
 # Batch orchestrator
 # -------------------------------------------------------------------
 
@@ -275,6 +339,9 @@ def run_batch(
             status="dry_run",
             tasks=results,
         )
+
+    # 真跑前 fail-fast: spec_ref/plan_ref 必须在各自 base_branch HEAD 可见
+    precheck_refs_on_base(manifest, repo_root)
 
     stopped_at: str | None = None
     overall_success = True
