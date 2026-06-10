@@ -133,6 +133,7 @@ Execution steps:
     - Only include questions whose answers materially impact architecture, data modeling, task decomposition, test design, UX behavior, operational readiness, or compliance validation.
     - Ensure category coverage balance: attempt to cover the highest impact unresolved categories first; avoid asking two low-impact questions when a single high-impact area (e.g., security posture) is unresolved.
     - Exclude questions already answered, trivial stylistic preferences, or plan-level execution details (unless blocking correctness).
+    - **(v4) Decider-adjudicable only**: only ask the human a question whose branches produce a difference the *decider can actually weigh*. For the default non-developer audience that means an observable user-facing behavior, cost, time-to-ship, or failure consequence. If a decision is a pure internal-technical choice with no such observable difference on the relevant paths (e.g. which equivalent library, internal retry tactic, log format), do NOT surface it: pick a sensible default, apply it, and record it as a one-line decision note deferred to the plan's research.md / Technical Context. Minimizing the number of human decision points is a goal, not a side effect.
     - Favor clarifications that reduce downstream rework risk or prevent misaligned acceptance tests.
     - If more than 5 categories remain unresolved, select the top 5 by (Impact * Uncertainty) heuristic.
 
@@ -146,6 +147,7 @@ Execution steps:
           - Alignment with any explicit project goals or constraints visible in the spec
        - Present your **recommended option prominently** at the top with clear reasoning (1-2 sentences explaining why this is the best choice).
        - Format as: `**Recommended:** Option [X] - <reasoning>`
+       - **(v4) Phrase every option as the consequence the decider observes, not the mechanism.** Each option's description must lead with what the user (or caller) actually experiences down that branch — e.g. "User taps Pay twice quickly → charged twice" vs "Second tap ignored → one charge" — NOT internal jargon ("race condition", "idempotent writes", "eventual consistency"). You MAY append the technical term in parentheses for traceability, but the option must be adjudicable by someone who does not read code. The same rule applies to the short-answer `**Suggested:**` form below.
        - Then render all options as a Markdown table:
 
        | Option | Description |

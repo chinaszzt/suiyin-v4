@@ -31,6 +31,7 @@
 | **C5 AI Reviewer spec v0.1.1** | `components/c5-ai-reviewer.md` | ✅ (PR #29 v0.1.0 + v0.1.1 反馈修订) |
 | **C5 AI Reviewer impl v0.1.1** | `src/suiyin_flow/c5_reviewer/` | ✅ (PR #30, mini-dogfood 自审通过) |
 | **Unified CLI** `suiyin-flow {verify,task,review}` | `src/suiyin_flow/cli.py` | ✅ (PR #25 + #30) |
+| **Plan-quality: clarify 措辞约束 + failure-modes 契约** | `failure-modes-contract.md` / `sy-clarify`·`sy-plan`·`sy-analyze` + `runtime/memory/failure-modes.md` | ✅ (旁观 session 建议落地, 2026-06-09) |
 | **MkDocs Cloudflare preview + PR diff** | `mkdocs.yml` / `.github/workflows/` | ✅ (PR #12, #13) |
 | **真 dogfood × 3 跑通** | T-001 ADR / T-002 C5 spec / T-003 C5 自审 | ✅ (PR #24, #29, evidence in PR #30) |
 
