@@ -31,7 +31,7 @@
 | **C5 AI Reviewer spec v0.1.1** | `components/c5-ai-reviewer.md` | ✅ (PR #29 v0.1.0 + v0.1.1 反馈修订) |
 | **C5 AI Reviewer impl v0.1.1** | `src/suiyin_flow/c5_reviewer/` | ✅ (PR #30, mini-dogfood 自审通过) |
 | **Unified CLI** `suiyin-flow {verify,task,review}` | `src/suiyin_flow/cli.py` | ✅ (PR #25 + #30) |
-| **Plan-quality: clarify 措辞约束 + failure-modes 契约** | `failure-modes-contract.md` / `sy-clarify`·`sy-plan`·`sy-analyze` + `runtime/memory/failure-modes.md` | ✅ (旁观 session 建议落地, 2026-06-09) |
+| **Plan-quality: clarify 措辞约束 + failure-modes 契约** | `failure-modes-contract.md` / `sy-clarify`·`sy-plan`·`sy-analyze` + `runtime/memory/failure-modes.md` | ✅ (PR #41, 旁观 session 建议落地, 2026-06-09) — ⏳ C5 接线待接, 见 P1.2 阶段 2.5 |
 | **MkDocs Cloudflare preview + PR diff** | `mkdocs.yml` / `.github/workflows/` | ✅ (PR #12, #13) |
 | **真 dogfood × 3 跑通** | T-001 ADR / T-002 C5 spec / T-003 C5 自审 | ✅ (PR #24, #29, evidence in PR #30) |
 
@@ -137,6 +137,14 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - unified CLI 加 review subcommand
 - 12 AC tests passed (含 mock claude pipeline)
 - **mini-dogfood T-003**: C5 自审 PR #29 → approve + 3 `reusable_knowledge_not_captured` finding (C12 I6 实证)
+
+### 阶段 2.5 — Plan-quality failure-modes 契约接 C5（⏳ 待接, PR #41 留的 follow-up）
+
+> PR #41 落了 failure-modes 契约：可选文件 `.specify/memory/failure-modes.md`（架构级/实现级两段）。plan 侧已接（`sy-plan` 软门 + `sy-analyze` pass G）；C5 侧的 hook 留作 follow-up。
+
+- **待做**：C5 reviewer 读 `## Implementation-level (review stage)` 段，在 diff 里查 code-level 复发，flag 命中的失败模式。文件格式 / 契约见 `docs/sdd/failure-modes-contract.md`。
+- **触发点**：下次动 C5 reviewer（spec 或 impl）时顺手接 —— C5 调度本来就要读项目 memory。
+- **不阻塞**：文件缺省 / 空 / 仅占位 → 静默跳过；不接也不破坏现状（plan 侧已独立生效）。
 
 ### 阶段 3 — C6 Gate Contract spec + impl
 
