@@ -17,7 +17,9 @@ from pydantic import BaseModel, Field
 #   3. pyproject.toml entry point 改 suiyin_flow.cli:main + 新增 unified dispatcher
 #   4. cli.py:_compute_diff_stats origin/<base> 失败时 fallback 本地 <base>
 # PATCH bump (非 schema 变更, 仅 impl 健壮).
-SCHEMA_VERSION: str = "v0.1.3"
+# v0.2.0 (2026-06-10): TaskInput 加 open_pr (default true 向后兼容).
+# MINOR bump — C7 spec v0.1.0 §7 联动需求 1 (I6: C7 调度下不 push 不开 task PR).
+SCHEMA_VERSION: str = "v0.2.0"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -64,6 +66,14 @@ class TaskInput(BaseModel):
         description="单 session 上限, 超时强制 kill (Q2-1 已拍 2h)",
     )
     base_branch: str = Field(default="main")
+    open_pr: bool = Field(
+        default=True,
+        description=(
+            "False 时跳过 push + gh pr create, 只留本地 task/<id> 分支 "
+            "(pr_created=False). C7 调度时传 False — task→feature 是本地 "
+            "merge 语义, PR 只在 feature→main 层 (C7 spec I6, dogfood 发现 #7)"
+        ),
+    )
 
 
 # -------------------------------------------------------------------

@@ -92,3 +92,17 @@ def test_dispatcher_propagates_c6_exit_code(monkeypatch: pytest.MonkeyPatch) -> 
     """c6 main 返回非 0 时, dispatcher 透传 (P1.2 阶段 3.2 加)."""
     monkeypatch.setattr("suiyin_flow.cli.c6_cli.main", lambda argv: 1)
     assert dispatcher.main(["gate", "anything"]) == 1
+
+
+def test_dispatcher_routes_phase_to_c7(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`suiyin-flow phase ...` 应该调 c7_coordinator.cli.main (P1.3 加)."""
+    captured: dict[str, Any] = {}
+
+    def fake_c7_main(argv: list[str] | None = None) -> int:
+        captured["argv"] = argv
+        return 1
+
+    monkeypatch.setattr("suiyin_flow.cli.c7_cli.main", fake_c7_main)
+    rc = dispatcher.main(["phase", "run", "--help"])
+    assert rc == 1
+    assert captured["argv"] == ["phase", "run", "--help"]
