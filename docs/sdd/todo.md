@@ -498,6 +498,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 | **Q-Constitution-3** | 性能/安全/可观察性硬指标 | constitution Q3 |
 | **Q-Constitution-4** | 项目身份精确措辞 | constitution Q4 |
 | **Q-Role-1/2/3** | 自定义 profile / 跨 feature 不同 profile / profile 切换 ADR | role-profiles.md |
+| **Q-Model-1** | claude session 模型选择放哪层 —— 当前全链**零指定**（C2/C5 session cmd 无 `--model`，靠环境 `ANTHROPIC_MODEL` / `~/.claude/settings.json` / CLI 默认逐级解析，继承父进程环境同 proxy 通道）。候选: (a) role-profile.yml 按角色配（implementer vs reviewer 不同模型，倾向）/ (b) tasks.yaml 按 task / (c) criticality 分级（low 走便宜模型）。无真实需求前靠环境默认 | role-profiles.md / C2 §7 |
 
 **已关闭**:
 - Q2-1 (2h timeout, PR #21)
