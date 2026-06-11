@@ -30,7 +30,8 @@
 | **C4 Verify Contract impl v0.1.2** | `src/suiyin_flow/c4_verify/` | ✅ (PR #20 + #22) |
 | **C5 AI Reviewer spec v0.1.1** | `components/c5-ai-reviewer.md` | ✅ (PR #29 v0.1.0 + v0.1.1 反馈修订) |
 | **C5 AI Reviewer impl v0.1.1** | `src/suiyin_flow/c5_reviewer/` | ✅ (PR #30, mini-dogfood 自审通过) |
-| **Unified CLI** `suiyin-flow {verify,task,review}` | `src/suiyin_flow/cli.py` | ✅ (PR #25 + #30) |
+| **C1 Planning Engine spec + impl v0.1.0** | `components/c1-planning-engine.md` / `src/suiyin_flow/c1_planning/` | ✅ (spec PR #53 人审 + impl PR #54, T-009 dogfood) |
+| **Unified CLI** `suiyin-flow {plan,verify,task,review,gate,phase}` | `src/suiyin_flow/cli.py` | ✅ (PR #25 + #30 + #54 plan) |
 | **Plan-quality: clarify 措辞约束 + failure-modes 契约** | `failure-modes-contract.md` / `sy-clarify`·`sy-plan`·`sy-analyze` + `runtime/memory/failure-modes.md` | ✅ (PR #41, 旁观 session 建议落地, 2026-06-09) — ⏳ C5 接线待接, 见 P1.2 阶段 2.5 |
 | **MkDocs Cloudflare preview + PR diff** | `mkdocs.yml` / `.github/workflows/` | ✅ (PR #12, #13) |
 | **真 dogfood × 3 跑通** | T-001 ADR / T-002 C5 spec / T-003 C5 自审 | ✅ (PR #24, #29, evidence in PR #30) |
@@ -331,9 +332,11 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 
 - [x] **R2: C2 retry-with-feedback** ✅ (PR #52, 2026-06-10) — C2 v0.3.0 加 `--review-feedback`：C5 review_report 的 findings 注入 prompt「上次 Review 发现的问题」节（severity 降序 + `feedback_disputes` 出口），R2 复用既有 worktree 不从头重写；`review_feedback_applied` audit 字段 + `REVIEW_FEEDBACK_INVALID`。**Scope = C2 子能力半边**（Q5-5 的 C2 侧关闭）；retry budget / block 后自动重投的编排留 Q2-6 → Q7-2（C7 v0.2）。AC-10/AC-11 + T-008 dogfood 场景 1
 - [x] **C2 联动需求 2: worktree 活跃 session 锁** ✅ (PR #52, 2026-06-10) — 发现 #8 的 C2 半边：I8 `.suiyin/lock` pid 锁（同 C7 I9 pattern：O_EXCL + psutil 探活 + stale 接管），活跃持有者 → `WORKTREE_LOCKED` 拒跑，终态 finally 释放。AC-12..14 + T-008 场景 2/3。**发现 #8 两个半边至此全关**（C7 半边 = I9，PR #49）
-- [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
-  - **spec v0.1.0-draft 已出，待人审拍板**（PR #53，同 C7 spec #47 先例）：[components/c1-planning-engine.md](components/c1-planning-engine.md)。关键拍板：定位 = wall-clock 优化器非安全门（I3，Q1 精度降级为加速比问题，安全网 = C7 I10 reverify）/ 语义 pass 默认关 + 只收紧（I4）/ marker 写回保 sy-tasks 注释（I5）/ C7 校验函数当自检 oracle（I1）
-  - **impl 等 spec 过审**：`suiyin-flow plan run` + batch `modifies` 可选字段（联动需求 1）+ AC-1..11；dogfood 件 = r3 5-task manifest 去掉手写 plan 让 C1 重生成对比
+- [x] **C1 Planning Engine** ✅ **spec + impl + dogfood 全闭环 (2026-06-11)**
+  - **spec v0.1.0**（PR #53 人审通过）：[components/c1-planning-engine.md](components/c1-planning-engine.md)。关键拍板：定位 = wall-clock 优化器非安全门（I3，Q1 精度降级为加速比问题，安全网 = C7 I10 reverify）/ 语义 pass 默认关 + 只收紧（I4）/ marker 写回保 sy-tasks 注释（I5）/ C7 校验函数当自检 oracle（I1）
+  - **impl v0.1.0**（PR #54）：`suiyin-flow plan run`，`c1_planning/{schema,planner,writer,semantic,cli}.py` 5 模块 + AC-1..11；联动需求 1 落地（`BatchTaskEntry` 加可选 `modifies`，batch schema 不 bump）；环检测在 raw 图上先跑（使 CYCLE_DETECTED 可达）；语义 pass 骨架 fallback-safe
+  - **T-009 dogfood ✅**：r3 5-task 依赖链去手写 plan → C1 确定性重生成同一 3-phase（AC-1 真实版）；场景 3 实证 I3 FP（缺 modifies → 中间三模块从 3 phase 串到 5 phase，证明 Q1-3 动机：声明 modifies 才拿回并行）
+  - **留给后续**：Q1-3 `/sy-tasks` 生成时声明 `modifies`（cascade，让真 sy-tasks 输出能被 C1 精确分组，否则退 context_seeds fallback 过度串行）；Q1 语义 pass 精度实测（开 `--semantic-pass` 收 first data point）；Q7-1 C7 真并行开闸（C1 execution_plan 质量是前置）
 - [x] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）✅ **spec + impl + dogfood 全闭环 (2026-06-10)**
   - **spec v0.1.0**（PR #47，人审拍板通过）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows Q-table）
   - **impl v0.1.0**（PR #49）：`suiyin-flow phase run`，7 模块 + 18 AC test；C2 v0.2.0 加 `open_pr`（联动需求 1）。PR #50：C2 v0.2.1 输入校验基准修正（dogfood 发现 #9）
@@ -520,13 +523,15 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 我在 /Users/zhangtuo/Documents/suiyin-v4 项目里。
 v4 是 SDD 工具链开发项目本身（不是业务项目，业务在 suiyin-v5）。
 
-P1.1 P0 MVP + P1.2 (C5/C6) + P1.2.5 (batch) + P1.3 C7 Phase Coordinator
-(spec PR #47 / impl PR #49+#50 / r3 依赖链 dogfood all_merged) 都已 done。
-P1.3 的 R2 retry-with-feedback + C2 worktree 锁也已 done (C2 v0.3.0, PR #52)。
+P1.1 P0 MVP + P1.2 (C5/C6) + P1.2.5 (batch) + P1.3 全部已 done:
+C7 Phase Coordinator (spec #47 / impl #49+#50 / r3 依赖链 dogfood all_merged)
++ R2 retry-with-feedback & C2 worktree 锁 (C2 v0.3.0, #52)
++ C1 Planning Engine (spec #53 / impl #54 / T-009 dogfood)。
 真闭环 dogfood × 3 轮跑通 (r1 暴露错配 / r2 单 task 闭环 / r3 C7 依赖链)。
 
-先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 剩 C1 Planning Engine —
-spec 可能已在 PR 等人审；编排联动 Q7-2/Q7-3 留 C7 v0.2）。
+先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 已收口；下一阶段
+P1.4 P3 强化关键路径: C3 Arbiter / C4 L3-L4 / C11 / C10 / R3 Codex。
+零散联动: Q1-3 sy-tasks 声明 modifies / Q7-1 真并行开闸 / Q7-2 parked→R2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
 我打算先做：__________
@@ -544,7 +549,7 @@ spec 可能已在 PR 等人审；编排联动 Q7-2/Q7-3 留 C7 v0.2）。
 | 写 C 模块 spec | `component-spec-template.md` |
 | 了解 AI 角色 4 档 | `role-profiles.md` |
 | 看一堆未决和讨论 | `discussion-notes.md` v0.3.1 |
-| **用 v4 工具链跑 task** | `src/suiyin_flow/` impl + `suiyin-flow {verify,task,review,gate,phase}` CLI（依赖链用 `phase run`） |
+| **用 v4 工具链跑 task** | `src/suiyin_flow/` impl + `suiyin-flow {plan,verify,task,review,gate,phase}` CLI（依赖图分组用 `plan run`，依赖链调度用 `phase run`） |
 | 装 v4 到新业务项目 | `bin/init.sh` |
 | 14 个 slash command 实现 | `skills/sy-*/SKILL.md` |
 | 给 v5 项目的 README 模板 | `templates/README-v5.md` |
@@ -553,7 +558,7 @@ spec 可能已在 PR 等人审；编排联动 Q7-2/Q7-3 留 C7 v0.2）。
 
 ---
 
-**Version**: v0.4.1
-**Last Updated**: 2026-06-10
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 C7 ✅** + **P1.3 R2+C2 锁 ✅**（C2 v0.3.0, PR #52）。下一步: P1.3 剩 C1 Planning Engine（spec 先行人审）；编排联动 Q7-2/Q7-3 留 C7 v0.2。
-**Changelog**: v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Version**: v0.5.0
+**Last Updated**: 2026-06-11
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅**（C7 #47/#49+#50 + R2&锁 C2 v0.3.0 #52 + C1 #53 spec/#54 impl）。下一阶段: P1.4 P3 强化关键路径（C3 / C4 L3-L4 / C11 / C10 / R3）；零散联动 Q1-3 / Q7-1 / Q7-2。
+**Changelog**: v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。

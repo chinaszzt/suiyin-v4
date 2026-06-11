@@ -1,0 +1,43 @@
+# T-009 fixture — 同一批 task, 但去掉 modifies 声明 (退回 context_seeds fallback)
+#
+# 中间三个模块 (T-002/3/4) 都读 src/types.ts (共享类型) → context_seeds 重叠。
+# C1 在缺 modifies 时把 context_seeds 重叠当保守近似 (AC-4): 读同一文件 ≈ 可能写同一文件
+# → 把它们判成冲突、串行化。这是 I3 的 false-positive 行为 (过度串行, 安全但慢)。
+# 对比 login-core-r3.yaml (声明 modifies → phase 2 全并行) 凸显: 声明 modifies 才能拿回并行。
+schema_version: v0.1.0
+feature_name: login-credential-core-no-modifies
+tasks:
+  - task_id: T-001
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run --passWithNoTests
+    context_seeds: [specs/login-core/spec.md]
+    base_branch: claude/login-core-r3
+  - task_id: T-002
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [src/types.ts]
+    base_branch: claude/login-core-r3
+  - task_id: T-003
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [src/types.ts]
+    base_branch: claude/login-core-r3
+  - task_id: T-004
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [src/types.ts]
+    base_branch: claude/login-core-r3
+  - task_id: T-005
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-002, T-003, T-004]
+    context_seeds: [src/index.ts]
+    base_branch: claude/login-core-r3

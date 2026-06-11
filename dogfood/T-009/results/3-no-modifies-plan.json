@@ -1,0 +1,60 @@
+{
+  "schema_version": "v0.1.0",
+  "status": "written",
+  "phases_count": 5,
+  "tasks_count": 5,
+  "execution_plan": [
+    {
+      "phase": 1,
+      "parallel": [
+        "T-001"
+      ]
+    },
+    {
+      "phase": 2,
+      "parallel": [
+        "T-002"
+      ]
+    },
+    {
+      "phase": 3,
+      "parallel": [
+        "T-003"
+      ]
+    },
+    {
+      "phase": 4,
+      "parallel": [
+        "T-004"
+      ]
+    },
+    {
+      "phase": 5,
+      "parallel": [
+        "T-005"
+      ]
+    }
+  ],
+  "conflict_splits": [
+    {
+      "task_a": "T-002",
+      "task_b": "T-003",
+      "reason": "context_seeds_overlap",
+      "evidence": "src/types.ts ∩ src/types.ts"
+    },
+    {
+      "task_a": "T-002",
+      "task_b": "T-004",
+      "reason": "context_seeds_overlap",
+      "evidence": "src/types.ts ∩ src/types.ts"
+    },
+    {
+      "task_a": "T-003",
+      "task_b": "T-004",
+      "reason": "context_seeds_overlap",
+      "evidence": "src/types.ts ∩ src/types.ts"
+    }
+  ],
+  "semantic_pass": null,
+  "written_to": "/private/var/folders/57/pxj5x4d52xvfsg8jhzwh0xlw0000gn/T/t009-475u_zvf/no-modifies.yaml"
+}

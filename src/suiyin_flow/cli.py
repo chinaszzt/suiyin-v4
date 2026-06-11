@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sys
 
+from suiyin_flow.c1_planning import cli as c1_cli
 from suiyin_flow.c2_executor import cli as c2_cli
 from suiyin_flow.c4_verify import cli as c4_cli
 from suiyin_flow.c5_reviewer import cli as c5_cli
@@ -22,9 +23,10 @@ from suiyin_flow.c6_gate import cli as c6_cli
 from suiyin_flow.c7_coordinator import cli as c7_cli
 
 _USAGE = """\
-usage: suiyin-flow {verify,task,review,gate,phase} ...
+usage: suiyin-flow {plan,verify,task,review,gate,phase} ...
 
 Subcommands:
+  plan     C1 Planning Engine (tasks.yaml → execution_plan 依赖分层 + 并行组, P1.3)
   verify   C4 Verify Contract (L1 lint + L2 tests)
   task     C2 Task Executor (单 task 自动从 spec 到 PR)
   review   C5 AI Reviewer (独立 session 审 PR, P1.2)
@@ -45,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     cmd = args[0]
+    if cmd == "plan":
+        return c1_cli.main(args)
     if cmd == "verify":
         return c4_cli.main(args)
     if cmd == "task":

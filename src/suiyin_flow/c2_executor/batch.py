@@ -56,6 +56,16 @@ class BatchTaskEntry(BaseModel):
         default_factory=list,
         description="P1.2.5 只用做顺序断言; 真正调度留 P1.3 C1",
     )
+    modifies: list[str] = Field(
+        default_factory=list,
+        description=(
+            "可选; 本 task 的写足迹 (文件路径 / glob, 例 'src/auth/**'). "
+            "C1 Planning Engine 联动需求 1 (c1 spec §7): 静态冲突检测据此把"
+            "会写同一文件的 task 拆到不同 phase; 缺省时 C1 fallback 用 "
+            "context_seeds 重叠当保守近似。batch / C7 不读此字段 (向后兼容, "
+            "schema_version 不 bump)。来源: /sy-tasks 声明 (Q1-3) 或人补"
+        ),
+    )
     max_retries: int = Field(default=3, ge=0, le=3)
     session_timeout_seconds: int = Field(default=7200, gt=0)
     base_branch: str = "main"
