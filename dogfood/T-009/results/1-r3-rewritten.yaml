@@ -1,0 +1,62 @@
+# T-009 fixture — r3 login-credential-core 5-task 依赖链 (modifies 声明版)
+#
+# 复刻第三轮真闭环 (todo.md「第三轮真闭环」) 跑通的那份依赖链:
+#   T-001 骨架 → T-002/3/4 三模块并行 → T-005 聚合
+# r3 手写的 execution_plan 是 3 phases (scope note 钉死「每文件恰好一个 task 拥有」)。
+# 本 fixture **故意不含 execution_plan** —— 交给 C1 重新生成, 验证是否复现 r3 的手写计划。
+# 每个 task 声明 modifies (= r3 scope note 的结构化版), 文件互不重叠 → phase 2 应全并行。
+schema_version: v0.1.0
+feature_name: login-credential-core-r3
+tasks:
+  - task_id: T-001
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run --passWithNoTests
+    context_seeds: [specs/login-core/spec.md]
+    modifies: ['package.json', 'tsconfig.json', 'vitest.config.ts']
+    base_branch: claude/login-core-r3
+  - task_id: T-002
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [specs/login-core/spec.md, src/types.ts]
+    modifies: ['src/validatePhone.ts', 'tests/validatePhone.test.ts']
+    base_branch: claude/login-core-r3
+  - task_id: T-003
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [specs/login-core/spec.md, src/types.ts]
+    modifies: ['src/hashPassword.ts', 'tests/hashPassword.test.ts']
+    base_branch: claude/login-core-r3
+  - task_id: T-004
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-001]
+    context_seeds: [specs/login-core/spec.md, src/types.ts]
+    modifies: ['src/selectEnterprise.ts', 'tests/selectEnterprise.test.ts']
+    base_branch: claude/login-core-r3
+  - task_id: T-005
+    spec_ref: specs/login-core/spec.md
+    plan_ref: specs/login-core/plan.md
+    verify_cmd: npx vitest run
+    depends_on: [T-002, T-003, T-004]
+    context_seeds: [src/validatePhone.ts, src/hashPassword.ts, src/selectEnterprise.ts]
+    modifies: ['src/index.ts', 'tests/integration.test.ts']
+    base_branch: claude/login-core-r3
+# --- execution_plan (C1 generated, do not hand-edit) ---
+execution_plan:
+- phase: 1
+  parallel:
+  - T-001
+- phase: 2
+  parallel:
+  - T-002
+  - T-003
+  - T-004
+- phase: 3
+  parallel:
+  - T-005

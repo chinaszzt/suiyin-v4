@@ -264,9 +264,10 @@ suiyin-flow plan run \
 
 ---
 
-**Version**: v0.1.0-draft
-**Last Updated**: 2026-06-10
-**Status**: draft — 待人审拍板（spec 先行，同 C7 PR #47 先例）；impl 等 spec 过审
+**Version**: v0.1.0
+**Last Updated**: 2026-06-11
+**Status**: accepted — spec PR #53 人审通过 + impl 落地（`suiyin-flow plan run`，5 模块 + AC-1..11 + T-009 dogfood 4 场景 ALL PASS）
 
 **Changelog**:
-- v0.1.0 (2026-06-10): 初稿。关键拍板：(1) 定位 = wall-clock 优化器非安全门（I3，把 Q1 精度降级为加速比问题，安全网 = C7 I10 reverify，r3 dogfood 已实证该兜底路径）；(2) 语义 pass 默认关 + 只收紧（I4）；(3) manifest 最小侵入 marker 写回（I5，保 sy-tasks 注释）；(4) 自检后落盘（I1，C7 校验函数当 oracle）。联动需求：batch `modifies` 可选字段 + sy-tasks cascade（Q1-3）。
+- v0.1.0 (2026-06-11): **impl 落地** — `src/suiyin_flow/c1_planning/{schema,planner,writer,semantic,cli}.py`；unified CLI 加 `plan` subcommand；联动需求 1 落地（`BatchTaskEntry` 加可选 `modifies`，batch schema 向后兼容不 bump）；I1 自检直接复用 C7 `_validate_plan` 当 oracle（AC-5）；环检测在 raw 图上先跑（绕开 batch 顺序断言把环误判 INVALID_MANIFEST，使 CYCLE_DETECTED 可达，AC-2）；语义 pass 骨架 + fallback-safe（AC-11）。**T-009 dogfood**：r3 5-task 依赖链去手写 plan → C1 确定性重生成同一 3-phase（AC-1 真实版）；场景 3 实证 I3 FP（缺 modifies → context_seeds fallback 把中间三模块从 3 phase 串到 5 phase，证明声明 modifies 才拿回并行，Q1-3 动机）。spec 内容不变，仅 status draft→accepted。
+- v0.1.0-draft (2026-06-10): 初稿。关键拍板：(1) 定位 = wall-clock 优化器非安全门（I3，把 Q1 精度降级为加速比问题，安全网 = C7 I10 reverify，r3 dogfood 已实证该兜底路径）；(2) 语义 pass 默认关 + 只收紧（I4）；(3) manifest 最小侵入 marker 写回（I5，保 sy-tasks 注释）；(4) 自检后落盘（I1，C7 校验函数当 oracle）。联动需求：batch `modifies` 可选字段 + sy-tasks cascade（Q1-3）。
