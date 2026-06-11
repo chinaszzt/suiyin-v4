@@ -217,7 +217,7 @@ properties:
 
 - **Q1**（从 toolchain.md 继承）: 语义冲突分析精度——false positive 过度串行化。**本 spec 的处置**：默认关 + I4 只收紧 + I3 把精度问题定位成加速比问题而非正确性问题。开闸条件：真 dogfood 实测（拿 v5 真 feature 的 tasks.yaml 对比开/关的 plan 差异 + C7 实跑 park 率）
 - **Q1-2**: 语义 pass 失败 fallback（§3.3）vs strict 模式（用户显式要了 AI pass，失败要不要硬报错）？v0.1.0 = fallback + 透明记录；等真实使用反馈再决定要不要 `--semantic-pass-strict`
-- **Q1-3**: `modifies` 字段谁来填？候选：(a) `/sy-tasks` 生成时让 AI 顺手声明（上游 skill 改造，cascade 到 `skills/sy-tasks` + `tasks-template.md`）；(b) 人补。倾向 (a)——AI 拆 task 时本来就知道每个 task 动哪些文件（r3 的 scope note 实践就是手工版 modifies）。**impl 后 cascade 项，不阻塞本 spec**
+- **Q1-3**（**已关，2026-06-11 cascade 落地**）: `modifies` 字段谁来填？拍 (a) `/sy-tasks` 生成时 AI 声明——AI 拆 task 时本来就知道每个 task 动哪些文件（r3 的 scope note 实践就是手工版 modifies）。cascade 已落：`skills/sy-tasks/SKILL.md` 输出契约 + 边界规则第 6 条（modifies 必声明 / execution_plan 不手写改跑 `plan run`）+ `runtime/templates/tasks-template.md`（schema / 字段语义表 / 生成原则第 7 条含反宽 glob 警告 / 示例 / 跑法三步）
 - **Q1-4**: phase 内并行度上限要不要进 execution_plan？**不**——那是 C7 的 runtime 资源参数（`max_parallel`），C1 只管静态结构。分层：C1 = 结构（谁能并行），C7 = 运行时（实际开几个）
 
 ## 7. Implementation Notes
@@ -269,5 +269,6 @@ suiyin-flow plan run \
 **Status**: accepted — spec PR #53 人审通过 + impl 落地（`suiyin-flow plan run`，5 模块 + AC-1..11 + T-009 dogfood 4 场景 ALL PASS）
 
 **Changelog**:
+- v0.1.0 (2026-06-11, 同日 PATCH 级注记): **Q1-3 关闭** — sy-tasks cascade 落地（SKILL.md + tasks-template.md 声明 modifies / execution_plan 改 C1 生成），契约无变化。
 - v0.1.0 (2026-06-11): **impl 落地** — `src/suiyin_flow/c1_planning/{schema,planner,writer,semantic,cli}.py`；unified CLI 加 `plan` subcommand；联动需求 1 落地（`BatchTaskEntry` 加可选 `modifies`，batch schema 向后兼容不 bump）；I1 自检直接复用 C7 `_validate_plan` 当 oracle（AC-5）；环检测在 raw 图上先跑（绕开 batch 顺序断言把环误判 INVALID_MANIFEST，使 CYCLE_DETECTED 可达，AC-2）；语义 pass 骨架 + fallback-safe（AC-11）。**T-009 dogfood**：r3 5-task 依赖链去手写 plan → C1 确定性重生成同一 3-phase（AC-1 真实版）；场景 3 实证 I3 FP（缺 modifies → context_seeds fallback 把中间三模块从 3 phase 串到 5 phase，证明声明 modifies 才拿回并行，Q1-3 动机）。spec 内容不变，仅 status draft→accepted。
 - v0.1.0-draft (2026-06-10): 初稿。关键拍板：(1) 定位 = wall-clock 优化器非安全门（I3，把 Q1 精度降级为加速比问题，安全网 = C7 I10 reverify，r3 dogfood 已实证该兜底路径）；(2) 语义 pass 默认关 + 只收紧（I4）；(3) manifest 最小侵入 marker 写回（I5，保 sy-tasks 注释）；(4) 自检后落盘（I1，C7 校验函数当 oracle）。联动需求：batch `modifies` 可选字段 + sy-tasks cascade（Q1-3）。

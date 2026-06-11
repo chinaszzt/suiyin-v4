@@ -28,41 +28,45 @@ disable-model-invocation: false
 >        constitution_ref: docs/sdd/constitution.md  # optional
 >        verify_cmd: "pytest tests/foo -q"    # C4 L1+L2 跑通的命令
 >        context_seeds: [src/foo/main.py]     # AI 必读文件清单
+>        modifies: ['src/foo/main.py', 'tests/foo/**']  # 写足迹 (glob OK); C1 分组依据
 >        ac_list: [AC-1]                      # spec.md 里的 AC 编号
 >        criticality: medium                  # low | medium | high
 >        depends_on: []                       # optional; C7 下指向更早 phase 的 task
 >        max_retries: 3                       # optional
 >        session_timeout_seconds: 7200        # optional
 >        base_branch: main                    # optional; 全部 task 必须一致 (C7)
->    execution_plan:                          # optional; C7 phase 分组 (建议给)
->      - phase: 1                             # 从 1 连续递增
->        parallel: [T-001]                    # 本 phase 可并行的 task (互不碰同文件)
->      - phase: 2
->        parallel: [T-002, T-003]
+>    # execution_plan 不要手写 —— 跑 `suiyin-flow plan run` 由 C1 从
+>    # depends_on + modifies 确定性生成 (marker 块追加, 见第 5/6 条)
 >    ```
 > 3. **schema 约束**（C2 batch 解析时强校验）：
 >    - `task_id` 在 `tasks[]` 内不可重复
 >    - `depends_on` 中每个 ID **必须早于本 task 出现**（违反 → `BATCH_ORDER_VIOLATION`）
 >    - `depends_on` 不可含自身
 > 4. **任务粒度**：单 task ≈ AI 一次 session 能改完 + verify 能跑过（一般 1-3 个文件 + 测试）
-> 5. **执行**：用户后续跑 `suiyin-flow phase run --tasks <path> --repo-root <p>`（C7，默认推荐）
->    或 `suiyin-flow task batch --tasks-yaml <path> --repo-root <p>`（仅限完全独立 task）
-> 6. **🔴 任务边界规则（C7 落地后版，2026-06-10 r3 dogfood 实证）**：C7 Phase Coordinator
+> 5. **执行**：用户后续先跑 `suiyin-flow plan run --tasks-yaml <path> --repo-root <p>`
+>    （C1 生成 execution_plan 并行分组），再 `suiyin-flow phase run --tasks <path>
+>    --repo-root <p>`（C7，默认推荐）；或 `suiyin-flow task batch --tasks-yaml <path>
+>    --repo-root <p>`（仅限完全独立 task，忽略 modifies/execution_plan）
+> 6. **🔴 任务边界规则（C1 落地后版，2026-06-11）**：C7 Phase Coordinator
 >    **逐 phase merge**——phase N 全部 task ff-merge 回 `base_branch` 后，phase N+1 的
 >    worktree 才分叉，**依赖链成立**（"T-002 用 T-001 建的文件" 现在能跑）。因此：
->    - **依赖链 OK**：按构建顺序拆 task，标 `depends_on`；建议同时给 `execution_plan`
->      （phase + parallel 分组；缺省时 C7 退化为每 task 一 phase 串行，依赖链照跑）
->    - **同 phase（并行组）内的 task 不可触碰同一文件** —— 并行 fork 后靠 rebase 整合，
->      改同文件 = rebase conflict = park。**每个共享文件恰好一个 task 拥有**；聚合类文件
->      （barrel / index / 注册表）单独给最后一个 task（r3 实证 pattern：src/index.ts 归
->      T-005，T-002/3/4 禁碰）。给每个 task 的 context_seeds 附 scope note 钉边界
+>    - **依赖链 OK**：按构建顺序拆 task，标 `depends_on`
+>    - **每 task 必须声明 `modifies`（写足迹，1:1 文件归属）**——这是 r3 scope note 的
+>      结构化版：**每个共享文件恰好一个 task 拥有**；聚合类文件（barrel / index / 注册表）
+>      归最后的聚合 task（r3 实证 pattern：src/index.ts 归 T-005，T-002/3/4 禁碰）。
+>      context_seeds 的 scope note 仍建议给（钉 session 行为边界），modifies 钉调度边界
+>    - **execution_plan 不手写**：C1 `suiyin-flow plan run` 从 depends_on + modifies
+>      确定性生成（分界拍板见 c1 spec §7：AI 声明事实，算法做规划）。**漏声明 modifies
+>      的代价**：C1 退化用 context_seeds 重叠近似 → 共读文件的 task 被过度串行
+>      （T-009 场景 3 实证：3 phase 串成 5 phase，安全但慢）
 >    - `depends_on` 边只能指向**更早 phase** 的 task（同 phase 内依赖 → C7 报 INVALID_PLAN）
 >    - **仅用 batch（不用 C7）时旧硬约束仍生效**：task 必须完全独立（不共享新建文件、
 >      verify 各自可跑），顺序构建塌缩成 1 个 self-contained task
 >    - 来源：P1.2.5 真闭环 dogfood 头号发现（batch 跑不动依赖链）→ C7 spec v0.1.0 +
->      r3 dogfood (2026-06-10, 5-task 依赖链 all_merged 实证)。见 todo.md
+>      r3 dogfood (2026-06-10, 5-task 依赖链 all_merged 实证) + C1 v0.1.0 (T-009,
+>      2026-06-11)。见 todo.md
 >
-> **不再生成的内容**：spec-kit 原 template 的 markdown checkbox 格式、`[P]` `[Story]` 标签、"Parallel Example" 节、"Implementation Strategy" 节 —— 这些信息**全部融入 yaml 字段语义**（顺序 = `tasks[]` 顺序；并行/phase 划分留给 P1.3 C1 Planning Engine）。
+> **不再生成的内容**：spec-kit 原 template 的 markdown checkbox 格式、`[P]` `[Story]` 标签、"Parallel Example" 节、"Implementation Strategy" 节 —— 这些信息**全部融入 yaml 字段语义**（顺序 = `tasks[]` 顺序；并行/phase 划分由 C1 Planning Engine 从 depends_on + modifies 算出，不再人写）。
 >
 > **完整模板**：见 `runtime/templates/tasks-template.md`（虽然文件名是 `.md` 但内容是 yaml schema 指引；resolver 暂时按 `.md` 后缀查）。
 >

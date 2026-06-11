@@ -336,7 +336,8 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **spec v0.1.0**（PR #53 人审通过）：[components/c1-planning-engine.md](components/c1-planning-engine.md)。关键拍板：定位 = wall-clock 优化器非安全门（I3，Q1 精度降级为加速比问题，安全网 = C7 I10 reverify）/ 语义 pass 默认关 + 只收紧（I4）/ marker 写回保 sy-tasks 注释（I5）/ C7 校验函数当自检 oracle（I1）
   - **impl v0.1.0**（PR #54）：`suiyin-flow plan run`，`c1_planning/{schema,planner,writer,semantic,cli}.py` 5 模块 + AC-1..11；联动需求 1 落地（`BatchTaskEntry` 加可选 `modifies`，batch schema 不 bump）；环检测在 raw 图上先跑（使 CYCLE_DETECTED 可达）；语义 pass 骨架 fallback-safe
   - **T-009 dogfood ✅**：r3 5-task 依赖链去手写 plan → C1 确定性重生成同一 3-phase（AC-1 真实版）；场景 3 实证 I3 FP（缺 modifies → 中间三模块从 3 phase 串到 5 phase，证明 Q1-3 动机：声明 modifies 才拿回并行）
-  - **留给后续**：Q1-3 `/sy-tasks` 生成时声明 `modifies`（cascade，让真 sy-tasks 输出能被 C1 精确分组，否则退 context_seeds fallback 过度串行）；Q1 语义 pass 精度实测（开 `--semantic-pass` 收 first data point）；Q7-1 C7 真并行开闸（C1 execution_plan 质量是前置）
+  - **Q1-3 cascade ✅ (2026-06-11, PR #55)**：`sy-tasks` SKILL.md + tasks-template.md —— 每 task 声明 `modifies`（1:1 文件归属 + 反宽 glob 警告），execution_plan 不再手写、改跑 `suiyin-flow plan run` 生成（AI 声明事实 / 算法做规划分界落到 skill 层）
+  - **留给后续**：Q1 语义 pass 精度实测（开 `--semantic-pass` 收 first data point）；Q7-1 C7 真并行开闸（C1 execution_plan 质量是前置）；下一轮 v5 真闭环顺带验 sy-tasks 真输出 modifies 的质量
 - [x] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）✅ **spec + impl + dogfood 全闭环 (2026-06-10)**
   - **spec v0.1.0**（PR #47，人审拍板通过）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows Q-table）
   - **impl v0.1.0**（PR #49）：`suiyin-flow phase run`，7 模块 + 18 AC test；C2 v0.2.0 加 `open_pr`（联动需求 1）。PR #50：C2 v0.2.1 输入校验基准修正（dogfood 发现 #9）
@@ -529,9 +530,9 @@ C7 Phase Coordinator (spec #47 / impl #49+#50 / r3 依赖链 dogfood all_merged)
 + C1 Planning Engine (spec #53 / impl #54 / T-009 dogfood)。
 真闭环 dogfood × 3 轮跑通 (r1 暴露错配 / r2 单 task 闭环 / r3 C7 依赖链)。
 
-先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 已收口；下一阶段
-P1.4 P3 强化关键路径: C3 Arbiter / C4 L3-L4 / C11 / C10 / R3 Codex。
-零散联动: Q1-3 sy-tasks 声明 modifies / Q7-1 真并行开闸 / Q7-2 parked→R2）。
+先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 已收口 + Q1-3 cascade 已落；
+下一阶段 P1.4 P3 强化关键路径: C3 Arbiter / C4 L3-L4 / C11 / C10 / R3 Codex。
+零散联动: Q7-1 真并行开闸 / Q7-2 parked→R2 / 下轮 v5 真闭环验 sy-tasks modifies）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
 我打算先做：__________
