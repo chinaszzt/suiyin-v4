@@ -332,6 +332,8 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - [x] **R2: C2 retry-with-feedback** ✅ (PR #52, 2026-06-10) — C2 v0.3.0 加 `--review-feedback`：C5 review_report 的 findings 注入 prompt「上次 Review 发现的问题」节（severity 降序 + `feedback_disputes` 出口），R2 复用既有 worktree 不从头重写；`review_feedback_applied` audit 字段 + `REVIEW_FEEDBACK_INVALID`。**Scope = C2 子能力半边**（Q5-5 的 C2 侧关闭）；retry budget / block 后自动重投的编排留 Q2-6 → Q7-2（C7 v0.2）。AC-10/AC-11 + T-008 dogfood 场景 1
 - [x] **C2 联动需求 2: worktree 活跃 session 锁** ✅ (PR #52, 2026-06-10) — 发现 #8 的 C2 半边：I8 `.suiyin/lock` pid 锁（同 C7 I9 pattern：O_EXCL + psutil 探活 + stale 接管），活跃持有者 → `WORKTREE_LOCKED` 拒跑，终态 finally 释放。AC-12..14 + T-008 场景 2/3。**发现 #8 两个半边至此全关**（C7 半边 = I9，PR #49）
 - [ ] **C1 Planning Engine** — task 依赖图 + 并行分组（toolchain.md C1，Q1）
+  - **spec v0.1.0-draft 已出，待人审拍板**（PR #53，同 C7 spec #47 先例）：[components/c1-planning-engine.md](components/c1-planning-engine.md)。关键拍板：定位 = wall-clock 优化器非安全门（I3，Q1 精度降级为加速比问题，安全网 = C7 I10 reverify）/ 语义 pass 默认关 + 只收紧（I4）/ marker 写回保 sy-tasks 注释（I5）/ C7 校验函数当自检 oracle（I1）
+  - **impl 等 spec 过审**：`suiyin-flow plan run` + batch `modifies` 可选字段（联动需求 1）+ AC-1..11；dogfood 件 = r3 5-task manifest 去掉手写 plan 让 C1 重生成对比
 - [x] **C7 Phase Coordinator** — phase 调度 + 逐 phase merge（C7，Q7）✅ **spec + impl + dogfood 全闭环 (2026-06-10)**
   - **spec v0.1.0**（PR #47，人审拍板通过）：[components/c7-phase-coordinator.md](components/c7-phase-coordinator.md)。4 条 invariant 锚点全数落地（I1 确定性状态机 / I2 路由集中 / I3 phase-state 落盘 / I4 harness 边界）；吸收发现 #头号（I5 逐 phase merge，degenerate plan 不等 C1）、#7（I6 task→feature 本地 ff-merge 不开 task PR，拍方向 b）、#8（I9 coordinator pid 锁 + C2 v0.2 worktree 锁列为联动需求）；关 Q7（I8 隔离不回滚）+ Q6-2 翻 (b)（cascade: c6 spec v0.1.4 / toolchain v0.3.2 / workflows Q-table）
   - **impl v0.1.0**（PR #49）：`suiyin-flow phase run`，7 模块 + 18 AC test；C2 v0.2.0 加 `open_pr`（联动需求 1）。PR #50：C2 v0.2.1 输入校验基准修正（dogfood 发现 #9）
@@ -496,6 +498,7 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 | **Q-Constitution-3** | 性能/安全/可观察性硬指标 | constitution Q3 |
 | **Q-Constitution-4** | 项目身份精确措辞 | constitution Q4 |
 | **Q-Role-1/2/3** | 自定义 profile / 跨 feature 不同 profile / profile 切换 ADR | role-profiles.md |
+| **Q-Model-1** | claude session 模型选择放哪层 —— 当前全链**零指定**（C2/C5 session cmd 无 `--model`，靠环境 `ANTHROPIC_MODEL` / `~/.claude/settings.json` / CLI 默认逐级解析，继承父进程环境同 proxy 通道）。候选: (a) role-profile.yml 按角色配（implementer vs reviewer 不同模型，倾向）/ (b) tasks.yaml 按 task / (c) criticality 分级（low 走便宜模型）。无真实需求前靠环境默认 | role-profiles.md / C2 §7 |
 
 **已关闭**:
 - Q2-1 (2h timeout, PR #21)
