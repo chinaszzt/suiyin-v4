@@ -40,7 +40,7 @@ properties:
     description: plan.md 路径
   constitution_ref:
     type: string
-    description: constitution.md 路径，默认 'docs/sdd/constitution.md'
+    description: constitution.md 路径，默认 '.specify/memory/constitution.md'
   context_seeds:
     type: array
     items:
@@ -504,11 +504,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.3.0-draft
-**Last Updated**: 2026-06-10
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁
+**Version**: v0.3.1-draft
+**Last Updated**: 2026-06-12
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目
 
 **Changelog**:
+- v0.3.1 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。**r4 真闭环发现 #1**：旧默认是 v4 自身的 constitution 路径，业务项目（v5）跑 C2 时校验「constitution_ref 在 base HEAD 可见」(v0.2.1) → `SPEC_NOT_FOUND` 阻断整个 phase run。v4 自身 dogfood 是特例（显式传 `docs/sdd/constitution.md`）；全部单元测试显式传 `constitution.md` → 零影响。cascade：C5 spec 同步（c5_reviewer 同源默认）+ `tasks-template.md` / `sy-tasks SKILL` schema 默认。
 - v0.3.0 (2026-06-10): **MINOR** — P1.3 R2 + C7 联动需求 2 双件落地。(1) **R2 retry-with-feedback**（C5 §7 Block Recovery R2 / Q5-5 的 C2 半边）：§2.1 加 `review_feedback`（C5 report 路径，文件系统校验语义），§4 加「上次 Review 发现的问题」渲染规则（severity 降序 + `feedback_disputes` 出口），§2.2 加 `review_feedback_applied` audit 字段，§2.3 加 `REVIEW_FEEDBACK_INVALID`；retry 编排留 caller（新 Q2-6 → Q7-2）。(2) **worktree 活跃 session 锁**（真闭环 dogfood 发现 #8 C2 半边）：§3.1 新 I8（`.suiyin/lock` pid 锁，同 C7 I9 pattern：O_EXCL 原子创建 + psutil 探活 + stale 接管），§2.3 加 `WORKTREE_LOCKED`。AC-10..AC-14。CLI 加 `--review-feedback`。
 - v0.2.1 (2026-06-10): **PATCH** — `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` 校验语义钉死为「在 `base_branch` HEAD 可见」（`git cat-file -e`；base 解析不了 fallback 文件系统）。**C7 dogfood r3 发现 #9**：旧版按 repo_root 当前 checkout 的文件系统校验，repo 主树与 base_branch 分支不一致时双向出错——feature 分支独有文件被误报 missing（r3 实测 fail-fast 在 T-001），盘上未提交文件被误判可用（session worktree 实际看不到）。错误码不变，仅校验基准修正；error message 带 `checked_against` 提示。
 - v0.2.0 (2026-06-10): **MINOR** — §2.1 加 `open_pr: bool`（default true 向后兼容）。C7 spec v0.1.0 §7 联动需求 1 落地（I6：C7 调度下 task→feature 本地 merge，不 push 不开 task PR，关 dogfood 发现 #7）。CLI 加 `--no-pr`。注：todo P1.3 的 R2 `--review-feedback` 留后续 MINOR；联动需求 2（worktree 活跃 session 锁，发现 #8 C2 半边）一并留待下一 bump。

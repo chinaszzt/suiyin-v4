@@ -47,7 +47,7 @@ class BatchTaskEntry(BaseModel):
     task_id: str = Field(pattern=r"^T-\d{3,}$")
     spec_ref: str
     plan_ref: str
-    constitution_ref: str = "docs/sdd/constitution.md"
+    constitution_ref: str = ".specify/memory/constitution.md"
     context_seeds: list[str] = Field(default_factory=list)
     verify_cmd: str
     criticality: Criticality = "medium"

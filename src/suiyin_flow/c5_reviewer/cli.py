@@ -153,7 +153,7 @@ def _make_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--spec", dest="spec_ref", required=True)
     run_p.add_argument("--plan", dest="plan_ref", required=True)
     run_p.add_argument(
-        "--constitution", dest="constitution_ref", default="docs/sdd/constitution.md"
+        "--constitution", dest="constitution_ref", default=".specify/memory/constitution.md"
     )
     run_p.add_argument("--verify-report", dest="verify_report_path", default=None)
     run_p.add_argument("--task-id", required=True, help="所有 PR 必走 task (v0.1.1)")

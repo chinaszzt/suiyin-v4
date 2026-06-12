@@ -44,7 +44,7 @@ tasks:                                  # list[BatchTaskEntry], 必须 ≥ 1
   - task_id: T-001                      # 全 repo 唯一; pattern ^T-\d{3,}$
     spec_ref: specs/001-feature/spec.md # spec.md 路径 (相对 repo_root)
     plan_ref: specs/001-feature/plan.md # plan.md 路径
-    constitution_ref: docs/sdd/constitution.md  # optional; 默认即此值
+    constitution_ref: .specify/memory/constitution.md  # optional; 默认即此值
     verify_cmd: "pytest tests/foo -q"   # C4 L1+L2 跑通的命令
     context_seeds:                      # list[str], 注入给 AI 的必读文件 (相对 repo_root)
       - src/foo/__init__.py

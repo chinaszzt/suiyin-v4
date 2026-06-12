@@ -23,7 +23,11 @@ from pydantic import BaseModel, Field
 #   1. review_feedback input + review_feedback_applied output + REVIEW_FEEDBACK_INVALID
 #      (R2 retry-with-feedback, C5 §7 Block Recovery R2 / Q5-5 的 C2 半边)
 #   2. WORKTREE_LOCKED + I8 worktree pid 锁 (dogfood 发现 #8 C2 半边)
-SCHEMA_VERSION: str = "v0.3.0"
+# v0.3.1 (2026-06-12): PATCH — constitution_ref 默认 docs/sdd/constitution.md →
+#   .specify/memory/constitution.md (业务项目 spec-kit 标准位置). r4 真闭环发现 #1:
+#   旧默认是 v4 自身路径, 业务项目跑 C2 校验 base HEAD 可见性时 SPEC_NOT_FOUND 阻断
+#   (v4 自身 dogfood 显式传 docs/sdd/...; 全部测试显式传 → 零影响).
+SCHEMA_VERSION: str = "v0.3.1"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -42,7 +46,7 @@ class TaskInput(BaseModel):
     spec_ref: str = Field(description="spec.md 路径 (相对 repo_root)")
     plan_ref: str = Field(description="plan.md 路径")
     constitution_ref: str = Field(
-        default="docs/sdd/constitution.md",
+        default=".specify/memory/constitution.md",
         description="constitution.md 路径",
     )
     context_seeds: list[str] = Field(
