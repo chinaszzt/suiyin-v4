@@ -229,6 +229,9 @@ def test_AC_6_reverify_failed_parks(
     t2 = _task(out, "T-002")
     assert t2.state == "parked" and t2.park_reason == "REVERIFY_FAILED"
     assert t2.rebased is True and t2.reverify_pass is False
+    # 发现 #3: park 时 reverify_output 被赋值 (从默认 None) 供诊断;
+    # VERIFY_FAIL 是静默 SystemExit(1) 故内容为空, 但字段已填 (非 None)
+    assert t2.reverify_output is not None
     assert "T-002: mock impl" not in git(fixture_repo, "log", "--oneline", "main")
 
 
