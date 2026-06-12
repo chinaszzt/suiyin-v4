@@ -53,7 +53,7 @@ class ReviewInput(BaseModel):
     spec_ref: str = Field(description="spec.md 路径 (相对 repo_root 或绝对)")
     plan_ref: str = Field(description="plan.md 路径")
     constitution_ref: str = Field(
-        default="docs/sdd/constitution.md",
+        default=".specify/memory/constitution.md",
         description="constitution.md 路径",
     )
     verify_report_path: str | None = Field(

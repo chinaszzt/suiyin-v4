@@ -381,7 +381,7 @@ def _make_parser() -> argparse.ArgumentParser:
     run_p.add_argument(
         "--constitution",
         dest="constitution_ref",
-        default="docs/sdd/constitution.md",
+        default=".specify/memory/constitution.md",
     )
     run_p.add_argument(
         "--context-seed",

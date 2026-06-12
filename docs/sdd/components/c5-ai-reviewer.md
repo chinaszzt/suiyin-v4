@@ -32,7 +32,7 @@ properties:
     description: plan.md 路径
   constitution_ref:
     type: string
-    description: constitution.md 路径，默认 'docs/sdd/constitution.md'
+    description: constitution.md 路径，默认 '.specify/memory/constitution.md'
   verify_report_path:
     type: string
     description: |
@@ -415,11 +415,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.1-draft
-**Last Updated**: 2026-05-24
+**Version**: v0.1.2-draft
+**Last Updated**: 2026-06-12
 **Status**: draft — P1.2 起步 spec, 待 spike 验证 Q5 / Q5-5 (R2 retry-with-feedback) 后转 v0.2
 
 **Changelog**:
+- v0.1.2 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。跟 C2 v0.3.1 同源修正（r4 真闭环发现 #1）：C5 在业务项目 review 时同样校验 ref 存在，旧默认是 v4 自身路径会误报 `SPEC_NOT_FOUND`。CONTRACT_VERSION 不变（review_report schema 未变，仅 input 默认值）。
 - v0.1.1 (2026-05-24): **PR #29 review 反馈修订** (user 审 v0.1.0 后):
   - §2.1 `task_id` 进 required (所有 PR 必走 task, 含 hotfix / Initiative)
   - §2.2 verdict enum 简化 `{approve, request_changes, block}` → `{approve, block}` (v4 D-autonomous "人只干 spec/plan/deploy" → 没 request_changes 缓冲)

@@ -25,7 +25,7 @@ disable-model-invocation: false
 >      - task_id: T-001                       # ^T-\d{3,}$, 唯一
 >        spec_ref: specs/<feature>/spec.md    # 相对 repo_root
 >        plan_ref: specs/<feature>/plan.md
->        constitution_ref: docs/sdd/constitution.md  # optional
+>        constitution_ref: .specify/memory/constitution.md  # optional
 >        verify_cmd: "pytest tests/foo -q"    # C4 L1+L2 跑通的命令
 >        context_seeds: [src/foo/main.py]     # AI 必读文件清单
 >        modifies: ['src/foo/main.py', 'tests/foo/**']  # 写足迹 (glob OK); C1 分组依据
