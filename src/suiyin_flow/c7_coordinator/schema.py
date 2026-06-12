@@ -68,6 +68,14 @@ class TaskRecord(BaseModel):
     reverify_pass: bool | None = Field(
         default=None, description="rebased=true 时必填 (I10)"
     )
+    reverify_output: str | None = Field(
+        default=None,
+        description=(
+            "conditional (park REVERIFY_FAILED 时填); reverify verify_cmd 的 "
+            "stdout+stderr 尾部, 供诊断 (发现 #3: 旧版失败只留 bool, 排查靠人去 "
+            "worktree 手动复现)"
+        ),
+    )
     worktree_path: str | None = None
     c2_output: TaskOutput | None = None
     c2_error: TaskError | None = None

@@ -342,8 +342,8 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 ##### r4 发现（5 项）
 
 - [x] **#1 🔴 `constitution_ref` v4-centric 默认路径错配** ✅ 已修（本 PR）: `tasks-template` / `sy-tasks SKILL` / C2 schema+batch+cli / C5 contract+cli 的默认 `docs/sdd/constitution.md`（**v4 自身路径**）→ 业务项目 spec-kit 标准 `.specify/memory/constitution.md`。机器生成 tasks.yaml 套用旧默认 → 业务项目（v5）跑 C2 校验 base HEAD 可见性 → `SPEC_NOT_FOUND` 阻断整个 phase run。**r1-r3 没踩**（手写 tasks.yaml 没设或设对）。C2 spec v0.3.1 / C5 spec v0.1.2 PATCH。v4 自身 dogfood 显式传 → 不受影响。
-- [ ] **#2 🟠 C7 reverify 把联网 `npm install` 算进 verify_cmd → proxy 不稳时系统性误 park 健康 task**: 需 rebase 的 task（phase 内非首个）rebase 后跑 `npm install && typecheck && vitest`，`npm install` 即使 cache 暖也 fetch metadata + audit，proxy 7897 对 npm registry 抖 → install 非 0 → 拖垮 `&&` → `REVERIFY_FAILED`（代码全绿，手动 verify 过）。r4 靠 `npm_config_prefer_offline=true` workaround 跑通。**修法候选**: (a) C7 reverify 跳过 install（worktree node_modules 已在则不重装）/ (b) sy-tasks 生成 verify_cmd 用 `npm install --prefer-offline --no-audit` / (c) C7 区分 install 失败 vs verify 失败（install 失败重试而非 park）。**优先级 P1**（C7 v0.x，下次动 C7 时修）。
-- [ ] **#3 🟡 C7 reverify 失败只存 `reverify_pass` 布尔、无 stderr**: park `REVERIFY_FAILED` 时 state file 不留 reverify 的命令输出，诊断全靠人去 parked worktree 手动复现。可观测性 gap。**修法**: integrate.py reverify 失败时把 verify_cmd stdout/stderr tail 存进 TaskRecord（同 C2 SESSION_CRASHED 的 stderr_tail）。跟 #2 一起做。
+- [x] **#2 🔴 C7 reverify 用 `shell=False` 跑含 `&&` 的复合 verify_cmd → 必失败误 park** ✅ 已修（C7 v0.1.1）。**真根因（初判误诊后纠正）**：`run_verify` 用 `shlex.split + shell=False`，`&&` 被当**字面参数**（实测 `echo a && echo b` → `a && echo b`）→ 复合 verify_cmd（`npm install && typecheck && vitest`）必失败。**不是**初判的"npm install 网络瞬态"——retry "过" 实为 task 已 rebase 到位 ff 直接可达**跳过了 reverify**（`npm_config_prefer_offline` 是安慰剂）。严重性升级：任何 verify_cmd 含 `&&`/`|` 的项目 C7 reverify 必挂（r3 verify_cmd 是单命令故没踩）。**修法**：`run_verify` 改 `shell=True`（verify_cmd 是用户 shell 命令，本就该 shell 跑；跨平台 POSIX→sh/Windows→cmd）。防回归测试（复合 `&&`/`|` + 第二段 FAIL 断言改回 shell=False 必挂）。
+- [x] **#3 🟡 C7 reverify 失败只存 `reverify_pass` 布尔、无 stderr** ✅ 已修（C7 v0.1.1）：`run_verify` 返回 `(bool, output_tail)`，`TaskRecord` 加 `reverify_output`，park REVERIFY_FAILED 时存命令 stdout+stderr 尾部供诊断（不再靠人去 worktree 手动复现）。
 - [ ] **#4 🟡 auto-commit 不一致**: `/sy-specify` 没 auto-commit（specs/ 留 untracked），`/sy-plan`+`/sy-tasks` 触发了（plan 把 specify 产物一起带上，净结果 base HEAD 可见没踩发现 #2）。早期发现 #2 的复现/细化——各 `/sy-*` 的 `after_*` hook 触发条件不齐。**修法**: 统一各 sy-* 的 after-commit hook 行为，或 harness 在 plan/phase run 前确保 spec/plan/tasks 已提交。低优先（净结果目前没坏）。
 - [ ] **#5 ⚪ `/sy-specify` 输出英语 spec**: 用户中文输入 feature 描述，spec.md 全英文。语言一致性——理想跟随用户输入/项目语言。用户接受当英语练习，**低优先**。**修法候选**: sy-* skill 加"输出语言跟随用户输入语言"约束。
 
@@ -553,8 +553,8 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 
 先读 docs/sdd/todo.md 了解全貌和下一步选项（P1.3 已收口 + Q1-3 r4 实证；
 下一阶段 P1.4 P3 强化关键路径: C3 Arbiter / C4 L3-L4 / C11 / C10 / R3 Codex。
-近期可做: r4 发现 #2/#3（C7 reverify 经济性 + 可观测性，下次动 C7 一起修）/
-Q7-1 真并行开闸 / Q7-2 parked→R2）。
+近期可做: Q7-1 真并行开闸 / Q7-2 parked→R2 / r4 发现 #4 auto-commit 不一致）。
+r4 发现 #1/#2/#3 已修（#1 constitution_ref 默认 / #2 reverify shell && / #3 reverify 诊断）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
 我打算先做：__________
@@ -581,7 +581,7 @@ Q7-1 真并行开闸 / Q7-2 parked→R2）。
 
 ---
 
-**Version**: v0.5.1
+**Version**: v0.5.2
 **Last Updated**: 2026-06-12
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + 5 发现，#1 已修）。下一阶段: P1.4 P3 强化关键路径（C3 / C4 L3-L4 / C11 / C10 / R3）；近期 r4 发现 #2/#3（C7 reverify）/ Q7-1 / Q7-2。
-**Changelog**: v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + 5 发现，#1/#2/#3 已修）。下一阶段: P1.4 P3 强化关键路径（C3 / C4 L3-L4 / C11 / C10 / R3）；近期 Q7-1 真并行 / Q7-2 parked→R2 / r4 #4 auto-commit。
+**Changelog**: v0.5.2 (2026-06-12) **r4 发现 #2/#3 修复（C7 v0.1.1）** — #2 reverify `run_verify` 改 `shell=True`（真根因：`shell=False` 不解释 verify_cmd 的 `&&` → 含 `&&` 复合命令必失败误 park；初判网络瞬态已纠正）+ #3 `reverify_output` 诊断字段；防回归测试 + spec v0.1.1。v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。

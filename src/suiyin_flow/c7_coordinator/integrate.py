@@ -5,12 +5,12 @@ spec §3.2 + §7:
   update-ref CAS (带 old-value) 前进 base ref. base_branch 几乎必然被某个
   worktree checkout, 一切 checkout 路径禁用.
 - rebase 在 task 自己的 worktree 内; conflict → rebase --abort 还原.
-- verify_cmd: shlex.split + shell=False, cwd=worktree (同 NC-5 工程约定).
+- verify_cmd: shell=True, cwd=worktree (用户 shell 命令含 && 等, 必须 shell 跑;
+  发现 #2 根因 — shlex.split + shell=False 不解释 &&).
 """
 
 from __future__ import annotations
 
-import shlex
 import subprocess
 from pathlib import Path
 
@@ -73,21 +73,36 @@ def rebase_onto(worktree: Path, base_branch: str) -> bool:
     return False
 
 
-def run_verify(worktree: Path, verify_cmd: str) -> bool:
-    """rebase 后重跑 task 的 verify_cmd (I10). 绿 = True."""
+def run_verify(worktree: Path, verify_cmd: str) -> tuple[bool, str]:
+    """rebase 后重跑 task 的 verify_cmd (I10). 返回 (绿?, 输出尾部).
+
+    **shell=True 跑 verify_cmd 字符串**（不 shlex.split）——verify_cmd 是
+    用户 / sy-tasks 定义的 shell 命令, 常含 `&&` / `|` 等操作符（例
+    `npm install && npm run typecheck && npx vitest`）。C2 阶段由 AI 在 bash 内
+    跑, C7 reverify 必须等价用 shell 跑；否则 shlex.split + shell=False 会把
+    `&&` 当**字面参数**（实测 `echo a && echo b` → 输出 `a && echo b`）→ 复合
+    命令必失败 → REVERIFY_FAILED 误 park 健康代码（**r4 真闭环发现 #2 根因**）。
+    与 C2 §7「shell=False + list args」约定不冲突：那约定针对 C7 自己构造的固定
+    args（git / claude CLI），verify_cmd 是用户 shell 字符串, 性质不同。跨平台:
+    shell=True POSIX 走 /bin/sh、Windows 走 cmd, `&&` 两边都支持。
+
+    返回 output tail（发现 #3）: park REVERIFY_FAILED 时存进 TaskRecord 供诊断,
+    不再只留 bool（旧版失败只能人去 worktree 手动复现）。
+    """
     try:
         result = subprocess.run(
-            shlex.split(verify_cmd),
+            verify_cmd,
             cwd=str(worktree),
             capture_output=True,
             text=True,
             encoding="utf-8",
-            shell=False,
+            shell=True,  # verify_cmd 是受信 shell 命令 (见 docstring)
             check=False,
         )
-    except (OSError, ValueError):
-        return False
-    return result.returncode == 0
+    except OSError as e:
+        return False, f"reverify failed to start: {e}"
+    tail = ((result.stdout or "") + (result.stderr or ""))[-2000:]
+    return result.returncode == 0, tail
 
 
 def cleanup_merged(repo: Path, task_id: str) -> None:

@@ -366,9 +366,10 @@ def _integrate(
             if not g.rebase_onto(wt, base_branch):
                 _park(ph, t, "REBASE_CONFLICT", state, store)
                 return
-            ok = g.run_verify(wt, entry.verify_cmd)  # I10: rebase 后必重 verify
+            ok, reverify_out = g.run_verify(wt, entry.verify_cmd)  # I10: rebase 后必重 verify
             t.reverify_pass = ok
             if not ok:
+                t.reverify_output = reverify_out  # 发现 #3: 存诊断输出
                 _park(ph, t, "REVERIFY_FAILED", state, store)
                 return
 

@@ -145,6 +145,9 @@ properties:
               reverify_pass:
                 type: boolean
                 description: 'conditional（rebased=true 时必填）；rebase 后重跑 verify_cmd 的结果'
+              reverify_output:
+                type: string
+                description: 'conditional（park REVERIFY_FAILED 时填）；reverify verify_cmd 的 stdout+stderr 尾部，供诊断（发现 #3）'
   stopped_at_phase:
     type: integer
     description: 'conditional（status=stopped 时必填）；首个 parked phase 编号'
@@ -254,7 +257,7 @@ properties:
 - 经 C2 产生其全部副作用（worktree 创建 / session / commits）——属 C2 §3.2 域，C7 透传 `claude_cmd` 等注入
 - **base_branch ref 本地前进**（每 task merge 一次）：refs-direct ff（实现建议见 §7，学 C6 v0.1.3 零 checkout 教训）
 - task worktree 内执行 `git rebase <base_branch>`（requeue 路径）；conflict 时 `git rebase --abort` 还原现场再 park
-- task worktree 内重跑 `verify_cmd`（I10）
+- task worktree 内重跑 `verify_cmd`（I10）—— **`shell=True` 跑命令字符串**（verify_cmd 是用户 / sy-tasks 定义的 shell 命令，常含 `&&` / `|`；必须 shell 跑才解释，否则 `shlex.split + shell=False` 把 `&&` 当字面参数 → 复合命令必失败，**r4 发现 #2 根因**）。失败时把 stdout+stderr 尾部存进 `reverify_output`（发现 #3）
 - merged task：`git worktree remove` + `git branch -d task/<id>`（I11）
 - phase-state 落盘（versioned + latest，§2.2）
 - lock file 创建 / 释放（I9）
@@ -275,7 +278,7 @@ properties:
 | `TASK_FAILED` | C2 返回 `status=failed`（重试是 C2 内政，到 C7 手里已 RETRY_EXHAUSTED） | park task；worktree 保留；phase parked → 后续 phase skipped → run stopped |
 | `TASK_ERROR` | C2 抛 Error（TIMEOUT / SESSION_CRASHED / SPEC_NOT_FOUND …） | 同上；C2 Error 原样进 state file `details` |
 | `REBASE_CONFLICT` | requeue rebase 出 conflict | `git rebase --abort` 还原 worktree → park；人解完 conflict 后 `--retry-parked` 重入整合 |
-| `REVERIFY_FAILED` | rebase 干净但重跑 verify_cmd 非绿（并行 task 语义冲突实锤） | park，不 merge；v0.2 候选接 R2 retry-with-feedback（Q7-2） |
+| `REVERIFY_FAILED` | rebase 干净但重跑 verify_cmd 非绿（并行 task 语义冲突实锤） | park，不 merge；`reverify_output` 存命令输出尾部供诊断（发现 #3）；v0.2 候选接 R2 retry-with-feedback（Q7-2）。**注**：reverify 用 `shell=True`（发现 #2）——含 `&&` 的复合 verify_cmd 此前会被 `shell=False` 误判失败 |
 | `MERGE_NOT_FF` | requeue 重试超 `max_requeue` 仍非 ff（防御性；串行整合队列下理论不可达） | park；git 事实写入 state `details` |
 
 **(b) Error cases**（run 级，§2.3）：发生即 abort（exit 2）；除 `COORDINATOR_LOCKED` / `STATE_CORRUPTED` 外都发生在取锁前的校验段，零副作用。
@@ -400,9 +403,10 @@ git -C <repo_root> update-ref refs/heads/<base_branch> <task_head_sha> <expected
 
 ---
 
-**Version**: v0.1.0-draft
-**Last Updated**: 2026-06-10
-**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)
+**Version**: v0.1.1-draft
+**Last Updated**: 2026-06-12
+**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)；v0.1.1 reverify shell + 诊断输出（r4 发现 #2/#3）
 
 **Changelog**:
+- v0.1.1 (2026-06-12): **PATCH** — reverify（I10 重跑 verify_cmd）修正：(1) 发现 #2 §3.2/§3.3 `shell=True` 跑 verify_cmd —— 旧版 `shlex.split + shell=False` 把含 `&&` 的复合命令的 `&&` 当字面参数 → 复合 verify_cmd（如 `npm install && npm run typecheck && npx vitest`）必失败 → REVERIFY_FAILED 误 park 健康代码（r4 真闭环实证；此前 r3 verify_cmd 是单命令故没踩，retry "过" 实为 task 已 rebase 到位 ff 跳过 reverify 的假象）。(2) 发现 #3 §2.2 TaskRecord 加 `reverify_output`，park REVERIFY_FAILED 时存命令 stdout+stderr 尾部供诊断（旧版只留 bool，排查靠人去 worktree 手动复现）。`run_verify` 返回 `(bool, output)`。impl + 防回归测试（复合 `&&` / `|` + 第二段 FAIL 断言）。
 - v0.1.0 (2026-06-10): 初稿。来源：2026-05-28 session 讨论沉淀（4 invariant 锚点）+ 2026-06-08~10 两轮真闭环 dogfood 实测（todo.md【真闭环 dogfood 实测发现】+【第二轮真闭环】）
