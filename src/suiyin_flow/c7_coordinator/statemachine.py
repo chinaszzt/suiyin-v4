@@ -9,6 +9,7 @@ rebase 退出码 / verify 退出码), (c) spec 枚举的配置. routing path 零
 from __future__ import annotations
 
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from suiyin_flow.c2_executor.batch import (
     precheck_refs_on_base,
 )
 from suiyin_flow.c2_executor.cli import execute_task
-from suiyin_flow.c2_executor.schema import TaskExecutorError
+from suiyin_flow.c2_executor.schema import TaskExecutorError, TaskOutput
 from suiyin_flow.c2_executor.worktree import ensure_worktree
 from suiyin_flow.c7_coordinator import integrate as g
 from suiyin_flow.c7_coordinator.lock import acquire_lock, release_lock
@@ -47,7 +48,7 @@ class CoordinatorConfig:
     dry_run: bool = False
     resume: bool = True
     retry_parked: list[str] = field(default_factory=list)  # task_id 列表或 ["all"]
-    max_parallel: int = 1  # v0.1.0 MVP 串行; 契约并行安全 (spec Q7-1)
+    max_parallel: int = 1  # 1 = 确定性串行 (默认); >1 = 并发 dispatch (Q7-1, 整合仍串行)
     max_requeue: int = 3
     claude_cmd: list[str] | None = None
 
@@ -242,18 +243,10 @@ def _run_phases(
                 _log(f"[phase {ph.phase}] {t.task_id}: parked (TASK_ERROR @prefork)")
         store.write(state)
 
-        for t in ph.tasks:
-            park_in_phase = any(x.state == "parked" for x in ph.tasks)
-            if t.state in ("merged", "skipped", "parked"):
-                continue
-            if park_in_phase and t.state == "pending":
-                t.state = "skipped"  # phase 已出 park, 不再起新 session
-                store.write(state)
-                continue
-            if t.state in ("pending", "executing"):
-                _dispatch(cfg, ph, t, entries[t.task_id], state, store)
-            if t.state in ("awaiting_merge", "integrating"):
-                _integrate(cfg, repo_root, ph, t, entries[t.task_id], state, store)
+        if cfg.max_parallel > 1:
+            _execute_phase_parallel(cfg, repo_root, ph, entries, state, store)
+        else:
+            _execute_phase_serial(cfg, repo_root, ph, entries, state, store)
 
         if any(t.state == "parked" for t in ph.tasks):
             ph.status = "parked"
@@ -270,33 +263,105 @@ def _run_phases(
         store.write(state)
 
 
-def _dispatch(
+def _execute_phase_serial(
     cfg: CoordinatorConfig,
+    repo_root: Path,
     ph: PhaseRecord,
-    t: TaskRecord,
-    entry: BatchTaskEntry,
+    entries: dict[str, BatchTaskEntry],
     state: CoordinatorState,
     store: StateStore,
 ) -> None:
-    """pending/executing → C2 session → awaiting_merge | parked."""
-    t.state = "executing"
-    store.write(state)
-    _log(f"[phase {ph.phase}] {t.task_id}: dispatch C2")
+    """max_parallel=1: dispatch+integrate 交替, 早 park 则 phase 内剩余 pending skip.
 
-    # I6: C7 调度下 task→feature 是本地 merge 语义 — 不 push / 不开 task PR
+    确定性串行 (默认; AC-9 determinism / AC-4 rebased 归属都依赖此序)。
+    """
+    for t in ph.tasks:
+        park_in_phase = any(x.state == "parked" for x in ph.tasks)
+        if t.state in ("merged", "skipped", "parked"):
+            continue
+        if park_in_phase and t.state == "pending":
+            t.state = "skipped"  # phase 已出 park, 不再起新 session
+            store.write(state)
+            continue
+        if t.state in ("pending", "executing"):
+            _dispatch(cfg, ph, t, entries[t.task_id], state, store)
+        if t.state in ("awaiting_merge", "integrating"):
+            _integrate(cfg, repo_root, ph, t, entries[t.task_id], state, store)
+
+
+def _execute_phase_parallel(
+    cfg: CoordinatorConfig,
+    repo_root: Path,
+    ph: PhaseRecord,
+    entries: dict[str, BatchTaskEntry],
+    state: CoordinatorState,
+    store: StateStore,
+) -> None:
+    """max_parallel>1 (Q7-1): dispatch 并发 (≤max_parallel), integrate 严格串行.
+
+    - **dispatch 并发**: C2 session 是阻塞 subprocess, 线程并发省 wall-clock。
+      execute_task 在 worker 线程跑 (无 C7 state 副作用); 所有 state mutation +
+      store.write 留主线程 (as_completed 循环), 单线程改 state → 无 race。
+    - **integrate 串行**: ff / rebase-requeue 推进 base 必须串行 (spec §3.3 整合
+      队列 + I7); 按完成序 (merge_queue) dequeue。
+    - **非确定边界**: dispatch 完成序非确定 → "谁先 merge / 谁 rebase" 随之变
+      (wall-clock 层), 但 routing 逻辑确定 (I2) + 结局正确 (all_merged / park 集合
+      一致)。phase 内全部 pending 都跑 (不像串行早 park 即 skip), 符合并行语义。
+    """
+    pending = [t for t in ph.tasks if t.state in ("pending", "executing")]
+    for t in pending:
+        t.state = "executing"
+    store.write(state)
+    _log(f"[phase {ph.phase}] dispatch {len(pending)} task(s), max_parallel={cfg.max_parallel}")
+
+    if pending:
+        with ThreadPoolExecutor(max_workers=cfg.max_parallel) as ex:
+            fut_to_task = {ex.submit(_run_c2, cfg, entries[t.task_id]): t for t in pending}
+            for fut in as_completed(fut_to_task):
+                t = fut_to_task[fut]
+                try:
+                    out = fut.result()
+                except TaskExecutorError as e:
+                    _apply_dispatch_result(ph, t, None, e, state, store)
+                    continue
+                _apply_dispatch_result(ph, t, out, None, state, store)
+
+    # 串行整合: 完成序 (merge_queue) dequeue (spec §3.3 整合子流程)
+    for tid in list(state.merge_queue):
+        mt = next((x for x in ph.tasks if x.task_id == tid), None)
+        if mt is not None and mt.state in ("awaiting_merge", "integrating"):
+            _integrate(cfg, repo_root, ph, mt, entries[mt.task_id], state, store)
+
+
+def _run_c2(cfg: CoordinatorConfig, entry: BatchTaskEntry) -> TaskOutput:
+    """纯 C2 调用 (无 C7 state 副作用 → 可在 worker 线程并发跑, Q7-1).
+
+    I6: C7 调度下 task→feature 是本地 merge 语义 — 不 push / 不开 task PR.
+    worktree 已由 phase 预 fork 建好, execute_task 内 ensure_worktree 复用。
+    Raises TaskExecutorError (caller 主线程接住转 park).
+    """
     task_input = entry.to_task_input(repo_root=str(cfg.repo_root.resolve()))
     task_input = task_input.model_copy(update={"open_pr": False})
+    return execute_task(task_input, claude_cmd=cfg.claude_cmd)
 
-    try:
-        out = execute_task(task_input, claude_cmd=cfg.claude_cmd)
-    except TaskExecutorError as e:
+
+def _apply_dispatch_result(
+    ph: PhaseRecord,
+    t: TaskRecord,
+    out: TaskOutput | None,
+    err: TaskExecutorError | None,
+    state: CoordinatorState,
+    store: StateStore,
+) -> None:
+    """主线程串行处理 dispatch 结果 → awaiting_merge | parked (state mutation 单线程)."""
+    if err is not None:
         t.state = "parked"
         t.park_reason = "TASK_ERROR"
-        t.c2_error = e.error
+        t.c2_error = err.error
         store.write(state)
-        _log(f"[phase {ph.phase}] {t.task_id}: parked (TASK_ERROR {e.error.code})")
+        _log(f"[phase {ph.phase}] {t.task_id}: parked (TASK_ERROR {err.error.code})")
         return
-
+    assert out is not None
     t.c2_output = out
     t.worktree_path = out.worktree_path
     if out.status != "success":
@@ -305,11 +370,30 @@ def _dispatch(
         store.write(state)
         _log(f"[phase {ph.phase}] {t.task_id}: parked (TASK_FAILED)")
         return
-
     t.state = "awaiting_merge"
     if t.task_id not in state.merge_queue:
-        state.merge_queue.append(t.task_id)
+        state.merge_queue.append(t.task_id)  # 完成序入队 (spec §3.3)
     store.write(state)
+
+
+def _dispatch(
+    cfg: CoordinatorConfig,
+    ph: PhaseRecord,
+    t: TaskRecord,
+    entry: BatchTaskEntry,
+    state: CoordinatorState,
+    store: StateStore,
+) -> None:
+    """pending/executing → C2 session → awaiting_merge | parked (串行路径)."""
+    t.state = "executing"
+    store.write(state)
+    _log(f"[phase {ph.phase}] {t.task_id}: dispatch C2")
+    try:
+        out = _run_c2(cfg, entry)
+    except TaskExecutorError as e:
+        _apply_dispatch_result(ph, t, None, e, state, store)
+        return
+    _apply_dispatch_result(ph, t, out, None, state, store)
 
 
 def _integrate(
