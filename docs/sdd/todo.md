@@ -558,6 +558,20 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 已完成: r4 #1/#2/#3（constitution_ref / reverify shell && / reverify 诊断）+ Q7-1 真并行开闸（C7 v0.1.2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
+【推荐下一步】Q7-2 parked→R2 自动重投 —— C2 v0.3.0 的 --review-feedback 已就绪,
+差 C7 编排把 REVERIFY_FAILED/TASK_FAILED 的 findings 注入重投 (最小增量闭环动作);
+或转 P1.4 开新组件 (C3 Arbiter / C11 / C10)。低优先: r4 #4 auto-commit 不一致 /
+#5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
+
+【接力环境注意】(都是踩过的坑)
+- venv 唯一在主仓 .venv (editable 指 main src); dogfood 部署 = 主仓 git pull
+  (现已同步到含全部修复); worktree 测代码用 PYTHONPATH=src 遮蔽
+- v5 dogfood 留在 claude/login-core-r4 分支 (未合 main, 供下次 r5 实验); 下次跑 v5
+  前重装工具链 `bash bin/init.sh /Users/zhangtuo/suiyin-v5` 拿最新 sy-tasks 默认值
+- 跑 phase/batch/起 claude session 前: `export HTTPS_PROXY=http://127.0.0.1:7897`
+  + curl 探活 API (claude alias 内嵌 proxy 已死, 见发现 #10); 真二进制 ~/.local/bin/claude
+- 改代码只在 worktree; PR merge 后主仓 + worktree 都 git pull --ff-only 同步
+
 我打算先做：__________
 ```
 
