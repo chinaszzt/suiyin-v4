@@ -42,7 +42,7 @@ properties:
     type: integer
     minimum: 1
     default: 1
-    description: phase 内同时在跑的 C2 session 上限。v0.1.0 MVP = 1（串行）；契约写成并行安全（I5/I7/I10 保证串行是并行的合法实现），真并行开闸条件见 Q7-1
+    description: phase 内并发 dispatch 的 C2 session 上限。**1 = 确定性串行（默认）**；**>1 = 真并发 dispatch**（v0.1.2 Q7-1 开闸）——并发起 C2 session 写代码，**整合（ff/rebase-requeue）仍严格串行**（I7/§3.3）。线程模型：execute_task 在 worker 线程跑（无 C7 state 副作用），所有 state mutation 留主线程。**非确定边界**：>1 时 dispatch 完成序非确定 → "谁先 merge / 谁 rebase" 随之变（wall-clock 层），但 routing 逻辑确定（I2）+ 结局正确（all_merged / park 集合一致）。默认 1 保完全确定（determinism AC）
   max_requeue:
     type: integer
     minimum: 0
@@ -322,11 +322,13 @@ phase barrier：本 phase 全部 task `merged` → phase `merged` → 进下一 
 - **AC-11 exit code + dry_run 边界（I4，§3.2）**：`all_merged`→0 / `stopped`→1 / Error→2；dry_run：不取锁、不建 worktree、base_branch ref 不动、latest 镜像不动，versioned state（`dry_run:true`）+ 完整 phase 计划照常产出，exit 0。
 - **AC-12 INVALID_PLAN（§2.1 校验）**：(a) execution_plan 漏列 task；(b) 同 phase 内出现 depends_on 边；(c) task 间 base_branch 不一致——三者各自 → Error `INVALID_PLAN`，零副作用。
 - **AC-13 生命周期（I11）**：merged task → worktree 已删 + `task/<id>` 分支已删；parked task → 双双保留。
+- **AC-14 真并行全成功（Q7-1，max_parallel>1）**：phase 内 3 task `max_parallel=3` 并发 dispatch → 全 merged，整合串行保持 ff（零 merge commit），3 task commit 全在；只断言最终态（不依赖 dispatch 完成序）。
+- **AC-15 真并行 fail-stop（max_parallel>1）**：phase 内一 task fail → 同 phase 成功者仍 merge（隔离不回滚，I8），phase parked + 下 phase skip（fail-stop 在 phase 边界，并行语义下成立）。
 
 ## 6. Open Questions
 
 - **Q7**（从 `toolchain.md` C7 节继承）：phase 内某 task 卡住、其他已 merge——回滚还是隔离？**已拍，本 spec 关闭：隔离（I8）**。理由：已 merge 的 task 是 verify 过的 ff 增量，回滚 = 改写 feature 历史 + 销毁已验证工作 + 违 I7；park + 现场保留给人的信息量远大于回滚。**cascade：toolchain.md C7 节 + 附录 Q-table、workflows.md Q-table 本 PR 同步**（ADR-0001 governance）。
-- **Q7-1**：phase 内真并行（`max_parallel > 1`）何时开闸？契约已并行安全（I5/I7/I10 下串行是并行的合法实现，差异仅 wall-clock），开闸前置：C1 execution_plan 实际质量（Q1 语义冲突精度）+ 多 claude session 资源占用实测。v0.1.0 默认 1。
+- **Q7-1（已开闸，v0.1.2 关闭）**：phase 内真并行（`max_parallel > 1`）。开闸前置已满足：C1 execution_plan 质量（r4 真闭环实证 sy-tasks→C1 生成对的并行分组）。**实现**：dispatch 并发（`ThreadPoolExecutor(max_parallel)`，execute_task 在 worker 线程，state mutation 留主线程）+ **整合严格串行**（merge_queue 完成序，ff/rebase-requeue 不变）。默认 1 保完全确定；>1 dispatch 完成序非确定（"谁先 merge/rebase" 变，结局正确不变——routing 逻辑仍确定，I2 边界 = routing path 非调度时序）。资源（核数 + API rate limit）由用户按机器调 `--max-parallel`。AC-14（并发全成功 all_merged + ff 保持）/ AC-15（并发 fail-stop 隔离不回滚）。
 - **Q7-2**：parked 的自动恢复——`REVERIFY_FAILED` / `TASK_FAILED` 是否接 R2 retry-with-feedback（把 verify 失败上下文注入 C2 重 dispatch）？v0.1.0 = 一律 park 等人（D 档哲学：异常即人出场）；R2 联动留 C7 v0.2 + C2 v0.2（todo P1.3 R2 项）。
 - **Q7-3**：feature→main 收口——所有 phase merge 完后，C7 是否继续负责 push base_branch + 开 feature→main PR + 调 C4/C5/C6（全链无人）？v0.1.0 终点 = base_branch 聚合完成，收口留人 / 后续编排。此决策牵动 C6 caller 拓扑与 Q6-5（gate 触发时机），留 P1.3 末拍。
 - **Q7-4**：state key 取 `base_branch`——同一 feature 先后跑**不同** manifest 会共享 latest 镜像（manifest_sha256 不符 → 现行为 STATE_CORRUPTED，需 `--no-resume` 显式绕过）。要不要 key 里加 manifest hash？倾向不加（PC-1：同 feature 多 manifest 本身就是该被喊停的状态）。
@@ -403,10 +405,11 @@ git -C <repo_root> update-ref refs/heads/<base_branch> <task_head_sha> <expected
 
 ---
 
-**Version**: v0.1.1-draft
+**Version**: v0.1.2-draft
 **Last Updated**: 2026-06-12
-**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)；v0.1.1 reverify shell + 诊断输出（r4 发现 #2/#3）
+**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)；v0.1.1 reverify shell + 诊断（r4 #2/#3）；v0.1.2 真并行开闸（Q7-1）
 
 **Changelog**:
+- v0.1.2 (2026-06-12): **MINOR** — Q7-1 真并行开闸。`max_parallel > 1` 时 phase 内 dispatch 并发（`ThreadPoolExecutor`，execute_task 在 worker 线程、state mutation 留主线程），**整合严格串行**（merge_queue 完成序 + ff/rebase-requeue 不变，I7/§3.3）。默认 1 保完全确定（determinism AC）；>1 dispatch 完成序非确定（"谁先 merge/rebase" 变，结局正确不变——I2 边界澄清为 routing path 非调度时序）。§2.1 max_parallel 描述更新 + §6 Q7-1 关闭 + AC-14/AC-15。前置满足：r4 真闭环实证 C1 生成对的并行分组。
 - v0.1.1 (2026-06-12): **PATCH** — reverify（I10 重跑 verify_cmd）修正：(1) 发现 #2 §3.2/§3.3 `shell=True` 跑 verify_cmd —— 旧版 `shlex.split + shell=False` 把含 `&&` 的复合命令的 `&&` 当字面参数 → 复合 verify_cmd（如 `npm install && npm run typecheck && npx vitest`）必失败 → REVERIFY_FAILED 误 park 健康代码（r4 真闭环实证；此前 r3 verify_cmd 是单命令故没踩，retry "过" 实为 task 已 rebase 到位 ff 跳过 reverify 的假象）。(2) 发现 #3 §2.2 TaskRecord 加 `reverify_output`，park REVERIFY_FAILED 时存命令 stdout+stderr 尾部供诊断（旧版只留 bool，排查靠人去 worktree 手动复现）。`run_verify` 返回 `(bool, output)`。impl + 防回归测试（复合 `&&` / `|` + 第二段 FAIL 断言）。
 - v0.1.0 (2026-06-10): 初稿。来源：2026-05-28 session 讨论沉淀（4 invariant 锚点）+ 2026-06-08~10 两轮真闭环 dogfood 实测（todo.md【真闭环 dogfood 实测发现】+【第二轮真闭环】）

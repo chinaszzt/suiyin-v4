@@ -581,3 +581,61 @@ def test_AC_13_lifecycle_cleanup(
     # parked → 双双保留
     assert (fixture_repo / "worktrees" / "T-002").exists()
     assert "task/T-002" in git(fixture_repo, "branch", "--list", "task/T-002")
+
+
+# -------------------------------------------------------------------
+# AC-14 / AC-15: Q7-1 真并行 (max_parallel>1)
+# 只断言最终态 (integrate 串行后确定); 不依赖 dispatch 完成序 (>1 非确定)
+# -------------------------------------------------------------------
+
+
+def test_AC_14_parallel_dispatch_all_merged(
+    fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """max_parallel=3: phase 内 3 task 并发 dispatch + 串行整合 → all_merged, ff 保持."""
+    mp = write_manifest(
+        fixture_repo,
+        [task_entry("T-001"), task_entry("T-002"), task_entry("T-003")],
+        execution_plan=[{"phase": 1, "parallel": ["T-001", "T-002", "T-003"]}],
+    )
+    record: dict[str, Any] = {}
+    out = _run(fixture_repo, mp, monkeypatch, record=record, max_parallel=3)
+
+    assert out.status == "all_merged"
+    assert all(_task(out, t).state == "merged" for t in ("T-001", "T-002", "T-003"))
+    # 整合串行 → ff-only 保持 (零 merge commit, I7)
+    assert _merge_commit_count(fixture_repo) == 0
+    log = git(fixture_repo, "log", "--oneline", "main")
+    for t in ("T-001", "T-002", "T-003"):
+        assert f"{t}: mock impl" in log
+    # 3 个 task 都被 dispatch (完成序不定, 故比集合)
+    assert set(record["calls"]) == {"T-001", "T-002", "T-003"}
+
+
+def test_AC_15_parallel_failstop_no_rollback(
+    fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """max_parallel=2 phase 内一 task fail → 同 phase 成功者仍 merge (隔离不回滚),
+    phase parked + 下 phase skip (fail-stop 在 phase 边界, 并行语义下仍成立)."""
+    mp = write_manifest(
+        fixture_repo,
+        [task_entry("T-001"), task_entry("T-002"), task_entry("T-003")],
+        execution_plan=[
+            {"phase": 1, "parallel": ["T-001", "T-002"]},
+            {"phase": 2, "parallel": ["T-003"]},
+        ],
+    )
+    out = _run(
+        fixture_repo, mp, monkeypatch,
+        behaviors={"T-002": ("fail", {})}, max_parallel=2,
+    )
+
+    assert out.status == "stopped"
+    assert out.stopped_at_phase == 1
+    # 同 phase 成功者整合 merge (隔离不回滚, I8/Q7)
+    assert _task(out, "T-001").state == "merged"
+    assert _task(out, "T-002").state == "parked"
+    assert _task(out, "T-002").park_reason == "TASK_FAILED"
+    # 下 phase skip
+    assert _task(out, "T-003").state == "skipped"
+    assert _merge_commit_count(fixture_repo) == 0

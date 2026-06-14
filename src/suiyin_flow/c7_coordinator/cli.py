@@ -58,7 +58,11 @@ def _make_parser() -> argparse.ArgumentParser:
         "--max-parallel",
         type=int,
         default=1,
-        help="phase 内并行上限; v0.1.0 MVP 串行执行 (>1 行为等价, 仅 wall-clock 差异未实现)",
+        help=(
+            "phase 内并发 dispatch 上限 (Q7-1). 默认 1 = 确定性串行; >1 = 并发起 "
+            "C2 session (整合仍串行 ff), 提速但 dispatch 完成序非确定 (谁先 merge/rebase "
+            "随之变, 结局正确不变). 按机器核数 + claude API rate limit 调"
+        ),
     )
     run_p.add_argument("--max-requeue", type=int, default=3)
     return parser
@@ -78,8 +82,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.max_parallel > 1:
         print(
-            "phase: note: v0.1.0 executes serially; --max-parallel > 1 is "
-            "contract-equivalent (wall-clock only, see C7 spec Q7-1)",
+            f"phase: note: --max-parallel={args.max_parallel} → 并发 dispatch "
+            "(整合仍串行 ff); dispatch 完成序非确定 (C7 spec Q7-1)",
             file=sys.stderr,
         )
 
