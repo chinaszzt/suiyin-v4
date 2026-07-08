@@ -16,6 +16,7 @@ import pytest
 
 from suiyin_flow.c4_verify.contract import VerifyContractError
 from suiyin_flow.c4_verify.runners._subprocess import require_tool
+from tests.fixtures.mock_cli import write_mock_cli
 
 
 def test_require_tool_finds_venv_binary_when_path_excludes_venv(
@@ -62,12 +63,13 @@ def test_require_tool_prefers_path_over_venv_fallback(
     tmp_path: Path,
 ) -> None:
     """v0.1.2 优先级: PATH 上找到的优先, fallback 只在 PATH miss 时启用."""
-    # 在 tmp_path 造一个 'fake-ruff' 可执行
-    fake_tool = tmp_path / "ruff"
-    fake_tool.write_text("#!/bin/sh\necho fake\n")
-    fake_tool.chmod(0o755)
+    # 造一个假 ruff 可执行 (跨平台: POSIX shebang 脚本 / Windows .bat shim —
+    # 见 tests/fixtures/mock_cli.py, shutil.which 在 Windows 上按 PATHEXT
+    # 匹配扩展名, 无扩展名的 bare 文件不会被命中).
+    bin_dir = tmp_path / "fakebin"
+    fake_tool = write_mock_cli(bin_dir, "ruff", "#!/bin/sh\necho fake\n")
 
-    # PATH 优先含 tmp_path → 应该找到 fake, 不走 fallback
-    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
+    # PATH 优先含 bin_dir → 应该找到 fake, 不走 fallback
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
     found = require_tool("ruff")
     assert Path(found).resolve() == fake_tool.resolve()

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -367,7 +369,10 @@ def test_AC_8c_retry_parked_reintegrates_without_redispatch(
     )
     (wt / "conflict.txt").write_text("from T-001\nfrom T-002\n", encoding="utf-8")
     git(wt, "add", "conflict.txt")
-    env = dict(os.environ, GIT_EDITOR="true")
+    # GIT_EDITOR="true" 是 POSIX-only (Windows 无内置 true.exe) —— 用
+    # `python -c pass` 达到同样效果 (确定成功退出、不弹交互式编辑器)。
+    noop_editor = f"{shlex.quote(sys.executable)} -c pass"
+    env = dict(os.environ, GIT_EDITOR=noop_editor)
     subprocess.run(
         ["git", "-C", str(wt), "rebase", "--continue"],
         capture_output=True, text=True, shell=False, check=True, env=env,
