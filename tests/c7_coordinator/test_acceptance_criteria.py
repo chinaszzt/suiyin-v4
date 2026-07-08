@@ -533,7 +533,7 @@ def test_AC_11c_dry_run_boundaries(
 def test_AC_12_invalid_plan(
     fixture_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    cases = [
+    cases: list[dict[str, Any]] = [
         # (a) 覆盖集不符 (漏 T-002)
         dict(
             tasks=[task_entry("T-001"), task_entry("T-002")],
