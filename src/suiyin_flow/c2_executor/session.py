@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -251,6 +252,22 @@ def run_session(
             encoding="utf-8",
             shell=False,
             bufsize=1,  # line-buffered
+            # encoding="utf-8" 只管 *这个* Popen 对象 (父进程) 怎么编解码
+            # 管道两端的字节, 完全不影响子进程自己的 sys.stdin/stdout 用什么
+            # 编码 —— 子进程是独立解释器, 默认走 locale.getpreferredencoding()。
+            # Windows 非 UTF-8 locale (常见如 cp1252) 下, 子进程读入父进程写
+            # 的 UTF-8 prompt (含中文) 时, 遇到该 locale 解不出的字节会用
+            # surrogateescape 静默转换成孤立代理项 (不当场报错) —— 直到
+            # 子进程后面把这段字符串再编码回 UTF-8 (比如落盘写文件) 才炸
+            # UnicodeEncodeError（surrogates not allowed）。这里给子进程环境
+            # 强制 UTF-8 I/O, 从根上避免这个"父写 UTF-8、子按本地 codepage
+            # 读"的编解码不对齐 (issue #60 windows-latest CI 实测: c2 mock
+            # claude 脚本把收到的 prompt 落盘复现, 4 次 retry 全部因
+            # UnicodeEncodeError 崩溃; 只丢弃 prompt 不落盘的 mock 不触发,
+            # 因为 surrogateescape 造出的畸形字符串从没被重新编码过)。
+            # 对真 claude CLI (非 Python 进程) 这两个环境变量是无害的
+            # no-op —— 不认识的话直接忽略。
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
         )
 
         # 写 prompt 到 stdin, 关闭让 Claude 开始
