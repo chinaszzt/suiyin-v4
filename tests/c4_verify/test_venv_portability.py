@@ -22,24 +22,37 @@ from tests.fixtures.mock_cli import write_mock_cli
 def test_require_tool_finds_venv_binary_when_path_excludes_venv(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """收窄 PATH 不含 venv bin/ 时, require_tool 应 fallback 到 sys.executable.parent."""
+    """收窄 PATH 不含 venv bin/ 时, require_tool 应 fallback 到 sys.executable 同级目录.
+
+    Windows 上解释器所在目录不一定就是工具所在目录 —— CI runner (setup-python
+    产物, "base install" 布局) 里解释器在根目录、pip 装的 console script 在
+    根目录下的 Scripts\\ 子目录; 真 venv (`python -m venv`) 则两者同目录。两种
+    布局都要接受, 断言按 fallback candidate 集合校验 (而非死等于 sys.executable
+    的 parent), 见 _venv_bin_candidates 的两层布局说明。
+    """
     venv_bin = Path(sys.executable).parent
+    scripts_dir = venv_bin / "Scripts"  # Windows base-install 布局才有意义
     sep = os.pathsep  # ':' on Unix, ';' on Windows
 
-    # 排除 venv bin from PATH, 保留其他系统目录
+    # 排除 venv bin (以及 Windows base-install 布局下的 Scripts 子目录) from
+    # PATH, 保留其他系统目录 —— 否则 Scripts\\ 仍在 PATH 上时 shutil.which
+    # 会在 require_tool 走到 fallback 分支之前就直接命中, 测试没验到 fallback 本身。
+    exclude = {venv_bin.resolve(), scripts_dir.resolve()}
     original_path = os.environ.get("PATH", "")
     filtered_paths = [
-        p for p in original_path.split(sep) if Path(p).resolve() != venv_bin.resolve()
+        p for p in original_path.split(sep) if Path(p).resolve() not in exclude
     ]
     monkeypatch.setenv("PATH", sep.join(filtered_paths))
 
-    # shutil.which 当前 PATH 找不到 ruff (因为 PATH 不含 venv)
-    # require_tool 应该走 fallback 找到 venv_bin/ruff
+    # shutil.which 当前 PATH 找不到 ruff (因为 PATH 不含 venv bin / Scripts)
+    # require_tool 应该走 fallback 找到 venv_bin (或其 Scripts 子目录) 下的 ruff
     ruff_path = require_tool("ruff")
     resolved = Path(ruff_path).resolve()
     assert resolved.is_file()
-    assert resolved.parent == venv_bin.resolve(), (
-        f"Expected fallback to venv bin {venv_bin}, got {resolved.parent}"
+    expected_dirs = {venv_bin.resolve(), scripts_dir.resolve()}
+    assert resolved.parent in expected_dirs, (
+        f"Expected fallback to venv bin {venv_bin} (or its Scripts/ subdir "
+        f"{scripts_dir} on Windows base installs), got {resolved.parent}"
     )
 
 
