@@ -11,7 +11,31 @@ Bug 2 (同 spike):
 
 from __future__ import annotations
 
+import shutil
+
+import pytest
+
 from suiyin_flow.c2_executor.session import _resolve_claude_cmd
+
+
+@pytest.fixture(autouse=True)
+def _fake_claude_on_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """这几个 test 只断言 default cmd 附带的 flag, 不需要真 claude 可执行文件。
+
+    `_resolve_claude_cmd(None, ...)` 走 `shutil.which("claude")` 探测路径 ——
+    没装 Claude Code CLI 的机器 (CI runner 首当其冲) 上这个恒为 None, 会在
+    断言 flag 之前就先 raise SESSION_CRASHED。之前这几个 test 只在本机 (刚好
+    装了 Claude Code CLI) 跑得过, 是"没有真 CI 之前测不出的环境依赖" 的一个
+    实例, mock 掉探测这步让断言只关注 flag 本身。
+    """
+    real_which = shutil.which
+
+    def _fake_which(name: str) -> str | None:
+        if name == "claude":
+            return "/usr/bin/claude"
+        return real_which(name)
+
+    monkeypatch.setattr(shutil, "which", _fake_which)
 
 
 def test_default_cmd_includes_bypass_permissions_flag() -> None:

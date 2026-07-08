@@ -508,8 +508,9 @@ def test_AC_B7_real_run_batch_two_tasks_success(
         assert r.output.pr_created is False
         assert r.output.pr_url_or_branch is not None
         assert r.output.pr_url_or_branch.startswith(("task/", "http"))
-        # worktree 真创建
-        assert r.output.worktree_path.endswith(f"worktrees/{r.task_id}")
+        # worktree 真创建 —— Path.match 按 path segment 比较 (跨平台: Windows
+        # 上 worktree_path 是反斜杠分隔, 字面 endswith("worktrees/...") 恒 False)
+        assert Path(r.output.worktree_path).match(f"worktrees/{r.task_id}")
 
 
 # =============================================================================

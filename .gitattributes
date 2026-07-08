@@ -1,0 +1,5 @@
+# NC-5 (跨平台) — 统一仓库文本文件的换行符为 LF, 不管 checkout 到哪个 OS。
+# 没有这条, windows-latest runner 上 git 的 core.autocrlf 默认行为可能把
+# 仓库里的 .py / .md / .yml 等文本文件 checkout 成 CRLF, 制造跟 macOS/Linux
+# runner 不一致的源文件字节内容 (issue #60 Phase 0 CI 加固时预防性加上)。
+* text=auto eol=lf

@@ -8,13 +8,13 @@ REVERIFY_FAILED 误 park 健康代码。修法: shell=True 跑 verify_cmd 字符
 
 from __future__ import annotations
 
-import shlex
 import sys
 from pathlib import Path
 
 from suiyin_flow.c7_coordinator.integrate import run_verify
+from tests.fixtures.shell_quote import quote_for_shell
 
-_PY = shlex.quote(sys.executable)
+_PY = quote_for_shell(sys.executable)
 _OK = f"{_PY} -c pass"
 _FAIL = f'{_PY} -c "raise SystemExit(1)"'
 
