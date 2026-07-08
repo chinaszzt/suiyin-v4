@@ -25,11 +25,26 @@ DEFAULT_TIMEOUT_SECONDS = 600.0
 
 
 def _venv_bin_candidates(name: str) -> list[Path]:
-    """当前 Python 解释器的 bin/Scripts 目录下的工具候选路径 (跨平台)."""
+    """当前 Python 解释器的 bin/Scripts 目录下的工具候选路径 (跨平台).
+
+    Windows 上解释器跟 pip 装的 console script 不一定同目录, 两种布局都要覆盖:
+    - venv (`python -m venv`) 创建的解释器: `<venv>\\Scripts\\python.exe` ——
+      工具也装在同一个 Scripts\\ (sys.executable 的 parent 本身)。
+    - "base install" 布局 (系统 Python / CI runner 的 setup-python 产物,
+      没走 `python -m venv`): 解释器在根目录 (`<root>\\python.exe`), 工具装
+      在根目录下的 `Scripts\\` 子目录 —— parent 本身摸不到, 必须再探
+      `parent/Scripts`。CI 加固时 (issue #60) windows-latest 首跑在这里
+      实测踩到: setup-python 装的解释器是这种布局, 漏检 Scripts\\ 子目录
+      导致 require_tool 在 PATH 不含 Scripts\\ 时误报 TOOLCHAIN_NOT_FOUND。
+    """
     bin_dir = Path(sys.executable).parent
     candidates = [bin_dir / name]
     if os.name == "nt":  # Windows
         candidates.extend([bin_dir / f"{name}.exe", bin_dir / f"{name}.bat"])
+        scripts_dir = bin_dir / "Scripts"
+        candidates.extend(
+            [scripts_dir / name, scripts_dir / f"{name}.exe", scripts_dir / f"{name}.bat"]
+        )
     return candidates
 
 

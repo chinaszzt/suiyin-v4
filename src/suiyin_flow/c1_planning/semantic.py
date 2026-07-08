@@ -10,6 +10,7 @@ prompt 调优等真 dogfood 数据 (Q1); v0.1.0 先把骨架 + fallback 路径�
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -130,6 +131,12 @@ def run_semantic_pass(
             shell=False,
             timeout=timeout_seconds,
             check=False,
+            # 同 C2/C5 session.py 的坑: encoding="utf-8" 只管父进程这端的编解码,
+            # 子进程自己的 sys.stdin 默认走 locale 编码 —— Windows 非 UTF-8
+            # locale 下读入含中文的 prompt 会静默产生畸形字符串, 子进程后面
+            # 重新编码时才炸 UnicodeEncodeError。强制子进程 UTF-8 I/O; 对真
+            # claude CLI 是无害 no-op。
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
         )
     except subprocess.TimeoutExpired:
         return frozenset(), SemanticPassResult(

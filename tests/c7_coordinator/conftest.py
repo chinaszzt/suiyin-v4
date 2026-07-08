@@ -10,7 +10,6 @@ Mock 策略:
 
 from __future__ import annotations
 
-import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -27,9 +26,11 @@ from suiyin_flow.c2_executor.schema import (
     TaskOutput,
 )
 from suiyin_flow.c2_executor.worktree import ensure_worktree
+from tests.fixtures.shell_quote import quote_for_shell
 
-VERIFY_OK = f"{shlex.quote(sys.executable)} -c pass"
-VERIFY_FAIL = f"{shlex.quote(sys.executable)} -c \"raise SystemExit(1)\""
+_PY = quote_for_shell(sys.executable)
+VERIFY_OK = f"{_PY} -c pass"
+VERIFY_FAIL = f'{_PY} -c "raise SystemExit(1)"'
 
 
 def git(cwd: Path, *args: str) -> str:

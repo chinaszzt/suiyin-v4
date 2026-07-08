@@ -17,6 +17,8 @@ from typing import Any
 
 import pytest
 
+from tests.fixtures.mock_cli import mock_cli_on_path
+
 
 def _git(repo: Path, *args: str) -> str:
     res = subprocess.run(
@@ -261,9 +263,6 @@ def mock_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                                   (Bug 2 retry 测试用), 计数文件 C6_MOCK_GH_LABELS_COUNTER
       C6_MOCK_GH_LOG       — 调用 log 文件路径
     """
-    bin_dir = tmp_path / "mock_bin"
-    bin_dir.mkdir()
-    gh_path = bin_dir / "gh"
     script = textwrap.dedent(
         """\
         #!/usr/bin/env python3
@@ -331,9 +330,7 @@ def mock_gh_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         sys.exit(2)
         """
     )
-    gh_path.write_text(script, encoding="utf-8")
-    gh_path.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    mock_cli_on_path(tmp_path, monkeypatch, "gh", script)
     # 默认空 labels
     monkeypatch.setenv("C6_MOCK_GH_LABELS", "")
     log_file = tmp_path / "gh.log"

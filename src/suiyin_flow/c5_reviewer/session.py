@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -232,6 +233,13 @@ def run_session(
             encoding="utf-8",
             shell=False,
             bufsize=1,
+            # 跟 C2 session.py 同一个坑: encoding="utf-8" 只管父进程这端的
+            # 管道编解码, 子进程自己的 sys.stdin 默认走 locale 编码 ——
+            # Windows 非 UTF-8 locale 下读入含中文的 prompt 会用
+            # surrogateescape 静默吞掉解不出的字节, 直到子进程后面把它重新
+            # 编码 (如落盘) 才炸 UnicodeEncodeError。强制子进程 UTF-8 I/O
+            # 从根上避免编解码不对齐; 对真 claude CLI 是无害 no-op。
+            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
         )
 
         if proc.stdin is not None:

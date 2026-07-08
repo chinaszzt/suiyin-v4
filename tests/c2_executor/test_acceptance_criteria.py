@@ -71,7 +71,9 @@ def test_AC_1_success_with_valid_input(
     # 无 remote → pr_created=False, pr_url_or_branch fallback 到 branch 名
     assert output.pr_url_or_branch is not None
     assert output.pr_url_or_branch.startswith(("task/", "http"))
-    assert output.worktree_path.endswith("worktrees/T-001")
+    # Path.match 按 path segment 比较 (跨平台: Windows 上 worktree_path 是
+    # 反斜杠分隔, 字面 endswith("worktrees/T-001") 在 Windows 上恒 False).
+    assert Path(output.worktree_path).match("worktrees/T-001")
 
 
 # =============================================================================
