@@ -99,13 +99,35 @@ def _mock_claude_dump_prompt(tmp_path: Path) -> list[str]:
 # =============================================================================
 
 
+def _dump_session_logs_on_crash(repo: Path, task_id: str) -> str:
+    """诊断用: 读 worktree 下所有 attempt-N.log, 拼成一段文本供失败信息带上.
+
+    SESSION_CRASHED 只在 TaskExecutorError.details 里留 last_error 字符串,
+    不带子进程 stdout/stderr —— 这里直接读落盘的 session log (session.py
+    始终 stderr=STDOUT 合并写入), 定位 windows-latest CI 专属 crash 用。
+    """
+    sessions_dir = repo / "worktrees" / task_id / ".suiyin" / "sessions"
+    if not sessions_dir.is_dir():
+        return f"(no sessions dir at {sessions_dir})"
+    chunks = []
+    for log_path in sorted(sessions_dir.glob("attempt-*.log")):
+        chunks.append(f"--- {log_path.name} ---\n{log_path.read_text(encoding='utf-8')}")
+    return "\n".join(chunks) if chunks else f"(no attempt-*.log under {sessions_dir})"
+
+
 def test_AC_10_feedback_injected_into_prompt_and_flagged(
     fixture_repo: Path, tmp_path: Path
 ) -> None:
     report = _write_review_report(tmp_path / "report.json", _FINDINGS_SAMPLE)
     task_input = _make_input(fixture_repo, review_feedback=str(report))
 
-    output = execute_task(task_input, claude_cmd=_mock_claude_dump_prompt(tmp_path))
+    try:
+        output = execute_task(task_input, claude_cmd=_mock_claude_dump_prompt(tmp_path))
+    except TaskExecutorError as exc:
+        pytest.fail(
+            f"execute_task raised {exc.error.code}: {exc.error.message}\n"
+            f"session logs:\n{_dump_session_logs_on_crash(fixture_repo, 'T-001')}"
+        )
 
     assert output.status == "success"
     assert output.review_feedback_applied is True
@@ -125,7 +147,13 @@ def test_AC_10_no_feedback_no_section_flag_false(
 ) -> None:
     task_input = _make_input(fixture_repo)
 
-    output = execute_task(task_input, claude_cmd=_mock_claude_dump_prompt(tmp_path))
+    try:
+        output = execute_task(task_input, claude_cmd=_mock_claude_dump_prompt(tmp_path))
+    except TaskExecutorError as exc:
+        pytest.fail(
+            f"execute_task raised {exc.error.code}: {exc.error.message}\n"
+            f"session logs:\n{_dump_session_logs_on_crash(fixture_repo, 'T-001')}"
+        )
 
     assert output.review_feedback_applied is False
     prompt = (Path(output.worktree_path) / "prompt_dump.txt").read_text(
