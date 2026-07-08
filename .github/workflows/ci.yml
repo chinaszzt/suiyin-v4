@@ -1,0 +1,71 @@
+name: CI
+
+# NC-5 (跨平台) 关门 — issue #60 Phase 0。
+#
+# 此前 pytest / ruff / mypy 全靠本地 lefthook 把关 (可绕、单机、单平台) ——
+# 加这个 workflow 把它升级成 runtime enforcement, 3-OS matrix 覆盖。
+#
+# matrix 用 include 列表精确控制成 4 个 job (省私有仓 macOS/Windows 计费, 不用
+# `os × python-version` 的全笛卡尔积):
+#   - ubuntu-latest  + 3.11 (ADR-0002 下限)
+#   - ubuntu-latest  + 3.14 (本地开发版本)
+#   - windows-latest + 3.11
+#   - macos-latest   + 3.14
+#
+# ci-ok 是唯一给 branch protection required status check 用的 context ——
+# 后续改这个 job id / matrix 组合数量时同步检查 repo settings 里的引用。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.11"
+          - os: macos-latest
+            python-version: "3.14"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - run: pip install -e ".[dev]"
+
+      - run: ruff check src tests
+
+      - run: mypy
+
+      - run: pytest tests -q
+
+  ci-ok:
+    name: ci-ok
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all matrix legs passed
+        run: |
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix result: ${{ needs.test.result }}"
+            exit 1
+          fi
