@@ -293,7 +293,7 @@ P0 MVP 先实现 Python + Dart（v4 自身 + v5 业务）。其他语言 P1+ 按
 
 **P0 阶段**：macOS + Linux 必跑通；Windows spike 时手测一次确认无致命问题，Windows CI 进 P1+。
 
-### Venv portability — `require_tool` fallback（PR #22 实证）
+### Venv portability — `require_tool` fallback（PR #22 + PR #62 实证）
 
 `shutil.which('ruff')` 在 dev 没 activate venv 时找不到工具（subprocess 默认 PATH 不含 venv binary），导致 `suiyin-flow verify run` 在 `.venv/bin/suiyin-flow` 直接调用时报 `TOOLCHAIN_NOT_FOUND`。
 
@@ -308,7 +308,14 @@ def require_tool(name: str) -> str:
     # 2. Fallback: 当前 Python 解释器的 bin/Scripts 目录
     #    (subprocess 默认 PATH 不含 venv binary 时兜底)
     bin_dir = Path(sys.executable).parent
-    for candidate in [bin_dir / name, bin_dir / f"{name}.exe", bin_dir / f"{name}.bat"]:
+    candidates = [bin_dir / name]
+    if os.name == "nt":  # Windows
+        candidates += [bin_dir / f"{name}.exe", bin_dir / f"{name}.bat"]
+        # base-install 布局 (系统 Python / CI setup-python): 解释器在根目录,
+        # 工具装在 <root>\Scripts\ 子目录 (venv 布局则同目录) —— 两种都要探
+        scripts_dir = bin_dir / "Scripts"
+        candidates += [scripts_dir / name, scripts_dir / f"{name}.exe", scripts_dir / f"{name}.bat"]
+    for candidate in candidates:
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate)
     raise VerifyContractError("TOOLCHAIN_NOT_FOUND", ...)
@@ -317,6 +324,7 @@ def require_tool(name: str) -> str:
 **关键**:
 - `Path(sys.executable).parent` 跨平台映射到 venv `bin/` (macOS/Linux) 或 `Scripts/` (Windows)
 - Windows 还要加 `.exe` / `.bat` 后缀 (因为 Windows 没"无后缀可执行")
+- **Windows 两种布局都要覆盖（PR #62）**：venv（`python -m venv`）的解释器与工具同在 `Scripts\`；base install（系统 Python / CI `setup-python` 产物）的解释器在根目录、工具在 `<root>\Scripts\` **子目录**——漏检子目录会在 PATH 不含它时误报 `TOOLCHAIN_NOT_FOUND`（issue #60 windows-latest 首跑实测）
 - 找不到时 error 含 `searched_path` + `searched_venv_bin` 帮 dev debug
 
 ### 模块拆分建议
@@ -359,11 +367,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.2-draft
-**Last Updated**: 2026-05-24
+**Version**: v0.1.3-draft
+**Last Updated**: 2026-07-09
 **Status**: draft — P0 阶段 L1+L2 已实现 (PR #20+22)；P3 阶段补 L3/L4
 
 **Changelog**:
+- v0.1.3 (2026-07-09): **PATCH** — §7 Venv portability：`require_tool` fallback 候选链补 Windows base-install 布局（解释器在根目录、工具在 `<root>\Scripts\` 子目录——CI `setup-python` 即此布局；旧版只探解释器同目录，漏检导致误报 `TOOLCHAIN_NOT_FOUND`）。issue #60 windows-latest CI 首跑实证。impl: PR #62
 - v0.1.2 (2026-05-24): **P1.1.2 反推** — §7 跨平台节加 NC-5 reference；§7 加 "Venv portability — require_tool fallback" 节（PR #22 实证）；§7 跟 constitution 关系加 NC-5
 - v0.1.1 (2026-05-20): §0 实现谱系简化为"(a) 唯一首选，其他业务项目自决"；§2.1 Input 加 optional `task_id`；§2.2 verify_report 加 optional `task_id`；§7 加"跨平台兼容性"节
 - v0.1.0 (2026-05-20): 初稿

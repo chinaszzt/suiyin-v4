@@ -462,11 +462,12 @@ suiyin-flow = "suiyin_flow.cli:main"
 | 进程 kill | 用 `psutil.Process(pid).kill()` —— 它跨平台映射到对的 signal/API | `os.kill(pid, signal.SIGKILL)` ❌（Windows 没 SIGKILL） |
 | 进程树 kill | `psutil.Process(pid).children(recursive=True)` 拿子进程再批量 kill；**不要**用 `os.killpg`（POSIX only） | — |
 | subprocess 调用 | `shell=False` + `list[str]` args | `shell=True` ❌（Windows cmd 语义不同，引号转义陷阱） |
+| 子进程 Python I/O 编码 | spawn 子进程（claude session 等）时 env = **继承父环境** + 叠加 `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`——父端 Popen 的 `encoding="utf-8"` 只管父侧管道编解码，不改变子进程自身的 locale 默认 | 只设父端 encoding ❌（Windows 非 UTF-8 locale 下子进程读含中文的 prompt 被 surrogateescape 静默损坏，直到重编码才炸 `UnicodeEncodeError`——issue #60 Windows CI 实证） |
 | worktree 命名 | 只用 ASCII (`task_id` pattern 已限制 `T-\d+`) | 非 ASCII 路径在 Windows NTFS / Git for Windows 下 quirks |
 | 换行 | 文件读写 binary 模式或 explicit `encoding='utf-8', newline=''` | text 模式默认 newline 转换在 Windows 上会改写 CRLF |
 | gh / git CLI | 用 `shutil.which('gh')` 探测，找不到降级 | hardcode `/usr/local/bin/gh` ❌ |
 
-**测试要求**：CI matrix 跑 macOS + Linux + Windows（GitHub Actions 矩阵或本地 lefthook 至少手测 Windows 1 次）。**P0 阶段**：macOS + Linux 必跑通，Windows 在 spike 时手测一次确认无致命问题，正式 Windows CI 进 P1+。
+**测试要求**：CI matrix 跑 macOS + Linux + Windows（GitHub Actions 矩阵或本地 lefthook 至少手测 Windows 1 次）。**P0 阶段**：macOS + Linux 必跑通，Windows 在 spike 时手测一次确认无致命问题，正式 Windows CI 进 P1+。**已落地（2026-07-09，issue #60 / PR #62）**：`.github/workflows/ci.yml` 3-OS matrix（ubuntu×py3.11/3.14 + windows×py3.11 + macos×py3.14），branch protection required check = `ci-ok`。
 
 ### 模块拆分建议
 
@@ -504,11 +505,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.3.1-draft
-**Last Updated**: 2026-06-12
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目
+**Version**: v0.3.2-draft
+**Last Updated**: 2026-07-09
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目；v0.3.2 子进程 UTF-8 I/O 强制（Windows CI 实证）
 
 **Changelog**:
+- v0.3.2 (2026-07-09): **PATCH** — §7 跨平台表加「子进程 Python I/O 编码」行：spawn 子进程时 env 继承父环境并叠加 `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`。**issue #60 Windows CI 首跑实证**：父端 `Popen(encoding="utf-8")` 只管父侧管道，Windows 非 UTF-8 locale 的子进程读中文 prompt 会 surrogateescape 静默损坏、重编码时才炸（AC-10 retry 4 连崩现场）。C5 session / C1 semantic 同源同修（其 spec 跨平台节均为「继承 C2 §7 表」引用式，不另 bump）。§7 测试要求标注 Windows CI 已落地（3-OS matrix + `ci-ok` required check）。impl: PR #62
 - v0.3.1 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。**r4 真闭环发现 #1**：旧默认是 v4 自身的 constitution 路径，业务项目（v5）跑 C2 时校验「constitution_ref 在 base HEAD 可见」(v0.2.1) → `SPEC_NOT_FOUND` 阻断整个 phase run。v4 自身 dogfood 是特例（显式传 `docs/sdd/constitution.md`）；全部单元测试显式传 `constitution.md` → 零影响。cascade：C5 spec 同步（c5_reviewer 同源默认）+ `tasks-template.md` / `sy-tasks SKILL` schema 默认。
 - v0.3.0 (2026-06-10): **MINOR** — P1.3 R2 + C7 联动需求 2 双件落地。(1) **R2 retry-with-feedback**（C5 §7 Block Recovery R2 / Q5-5 的 C2 半边）：§2.1 加 `review_feedback`（C5 report 路径，文件系统校验语义），§4 加「上次 Review 发现的问题」渲染规则（severity 降序 + `feedback_disputes` 出口），§2.2 加 `review_feedback_applied` audit 字段，§2.3 加 `REVIEW_FEEDBACK_INVALID`；retry 编排留 caller（新 Q2-6 → Q7-2）。(2) **worktree 活跃 session 锁**（真闭环 dogfood 发现 #8 C2 半边）：§3.1 新 I8（`.suiyin/lock` pid 锁，同 C7 I9 pattern：O_EXCL 原子创建 + psutil 探活 + stale 接管），§2.3 加 `WORKTREE_LOCKED`。AC-10..AC-14。CLI 加 `--review-feedback`。
 - v0.2.1 (2026-06-10): **PATCH** — `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` 校验语义钉死为「在 `base_branch` HEAD 可见」（`git cat-file -e`；base 解析不了 fallback 文件系统）。**C7 dogfood r3 发现 #9**：旧版按 repo_root 当前 checkout 的文件系统校验，repo 主树与 base_branch 分支不一致时双向出错——feature 分支独有文件被误报 missing（r3 实测 fail-fast 在 T-001），盘上未提交文件被误判可用（session worktree 实际看不到）。错误码不变，仅校验基准修正；error message 带 `checked_against` 提示。
