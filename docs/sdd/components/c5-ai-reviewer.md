@@ -100,7 +100,7 @@ properties:
             - ac_uncovered                     # spec AC 缺对应 test
             - nc_violation                     # 违反 constitution NC-1..NC-5
             - pc_violation                     # 违反 PC-1..PC-3
-            - cross_platform                   # NC-5 跨平台违规（路径手拼 / shell=True / 等）
+            - cross_platform                   # NC-5 跨平台违规（路径手拼等；shell=True 对用户命令字符串是例外不 flag——ADR-0005）
             - security                         # 安全问题（hardcoded secret / injection / 等）
             - reusable_knowledge_not_captured  # C12: spike 学到的知识没沉淀到 spec/constitution
         location:
@@ -236,7 +236,7 @@ properties:
 4. 逐项检查：
    - **AC coverage**: spec §5 每条 AC 在 diff 中是否有对应 test
    - **NC/PC 违规**: diff 是否违反 NC-1..NC-5 / PC-1..PC-3
-   - **cross_platform**: 是否有 `os.sep` 手拼 / `shell=True` / 等 Windows 不兼容写法
+   - **cross_platform**: 是否有 `os.sep` 手拼 / 等 Windows 不兼容写法（**例外**：对用户提供的整串 shell 命令如 verify_cmd 用 `shell=True` 是正确写法，不 flag——NC-5 v0.2.3 / ADR-0005）
    - **security**: hardcoded secret / SQL injection / 等
    - **spec_drift**: PR diff 是否引入 spec 未声明的能力 / 漏实现 spec 声明的能力
    - **reusable_knowledge_not_captured** (C12): spike 学到的 invariant 是否回流到 spec / constitution
@@ -415,11 +415,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.2-draft
-**Last Updated**: 2026-06-12
+**Version**: v0.1.3-draft
+**Last Updated**: 2026-07-09
 **Status**: draft — P1.2 起步 spec, 待 spike 验证 Q5 / Q5-5 (R2 retry-with-feedback) 后转 v0.2
 
 **Changelog**:
+- v0.1.3 (2026-07-09): **PATCH** — §2.2 category 注释 + §4 checklist：cross_platform 的 `shell=True` 判定加"用户命令字符串"例外（ADR-0005，constitution v0.2.3 cascade；C7 v0.1.1 reverify 即该例外的合法使用）。`prompt.py` 同句同步。CONTRACT_VERSION 不变（report schema 未动）。
 - v0.1.2 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。跟 C2 v0.3.1 同源修正（r4 真闭环发现 #1）：C5 在业务项目 review 时同样校验 ref 存在，旧默认是 v4 自身路径会误报 `SPEC_NOT_FOUND`。CONTRACT_VERSION 不变（review_report schema 未变，仅 input 默认值）。
 - v0.1.1 (2026-05-24): **PR #29 review 反馈修订** (user 审 v0.1.0 后):
   - §2.1 `task_id` 进 required (所有 PR 必走 task, 含 hotfix / Initiative)
