@@ -203,7 +203,7 @@ v4 工具链（CLI / runner / installer / 任何 imperative 组件）必须在 *
 **Test**:
 - 路径处理：`pathlib.Path`，**不**手拼 `/` 或 `os.sep`
 - 进程管理：`psutil.Process.kill()`（跨平台），**不**用 `os.kill(SIGKILL)`（Windows 没 SIGKILL）
-- subprocess：`shell=False` + `list[str]` args（避免 Windows shell 语义差异）
+- subprocess：默认 `shell=False` + `list[str]` args（避免 Windows shell 语义差异）；**例外**：执行用户提供的整串 shell 命令（如 verify_cmd）必须 `shell=True`（POSIX→`/bin/sh`、Windows→`cmd`）——`shlex.split` 后 `shell=False` 会把 `&&` 当字面参数，反而破坏跨平台正确性（ADR-0005，r4 发现 #2）
 - 文件读写：显式 `encoding="utf-8"`（避免 Windows 默认 cp936/cp1252）
 - 工具探测：`shutil.which` + venv binary fallback（PR #22 修过 venv PATH bug）
 - 任何 POSIX-only 调用必须有 Windows fallback → 否则 C5 finding `severity: high` → block
@@ -353,9 +353,10 @@ constitution 的"AC"是**跨 PR 维度的 invariants 校验**，不是单点 AC�
 | v0.2.0 | 2026-05-18 | **重大重构**：去 SDD 通用内容、加 v4 项目独有约束（NC-1/2/3 + PC-1/2/3）；明确 extends methodology.md；保留 PR #6 引入的 role-profile 边界章节 |
 | v0.2.1 | 2026-05-24 | PATCH: 关闭 Q-C-2 open question (v4 技术栈 = Python 3.11+, 见 ADR-0002) |
 | v0.2.2 | 2026-05-24 | **MINOR**: NC v1.0 — 加 NC-4 (worktree 隔离安全边界) + NC-5 (跨平台支持); 关 Q-C-1 (NC-1..NC-5 + PC-1..PC-3); 见 ADR-0003 |
+| v0.2.3 | 2026-07-09 | PATCH: NC-5 Test subprocess 条目加"用户命令字符串 `shell=True`"例外（r4 发现 #2 的宪法 cascade，见 ADR-0005；C5 spec v0.1.3 + prompt.py 同 PR 同步）。附：NC-6 候选（"所有 PR 必须来自 task"）三问法评审**不立**，见 ADR-0006，宪法文本无变更 |
 
 ---
 
-**Version**: v0.2.2
-**Last Updated**: 2026-05-24
+**Version**: v0.2.3
+**Last Updated**: 2026-07-09
 **Status**: NC v1.0 完整（5 NC + 3 PC），待 Q-C-3/Q-C-4 解决后整体稳态

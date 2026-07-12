@@ -77,15 +77,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
 - 关 Q-C-1 (NC v1.0 集合宣告完成 = NC-1..NC-5 + PC-1..PC-3)
 - constitution v0.2.1 → v0.2.2 (MINOR)
 
-### P0.5 NC-6 候选 review（待 user 拍）
+### P0.5 NC-6 候选 review ✅ (2026-07-09, ADR-0006: 不立)
 
 **起因**：C5 spec v0.1.1 §2.1 description 暗示"所有 PR 必须来自 task（含 hotfix / Initiative）"，这其实是隐性 NC 候选。
 
-- [ ] 跑三问法验证 NC-6 候选："所有 PR 必须来自 task"
-- [ ] 如成立 → ADR-0004 + constitution v0.2.2 → v0.2.3 (MINOR)
-- [ ] 如不成立 → 保留为 PC 或仅工作流约定
-
-预估：15-30 分钟讨论 + 30-45 分钟 ADR PR（如要立）
+- [x] 跑三问法验证 NC-6 候选 — **2/3 不过**：非 v4 独有（SDD 通用工作流规则，进宪法重蹈 ADR-0001 层次混淆）；非稳定原则（v4 自身 #44-#59 全部非 task PR，立即违宪 + 豁免清单必然 churn 违 I6）
+- [x] 裁决：**不立 NC 也不立 PC**（与 C5 §2.1 task_id required 执行面强制重复，违 I2）；维持工作流语义。复评触发点 = Phase 1 自举成熟（自家 PR 天然带 task_id）时零成本再议。见 ADR-0006
+- **附带发现**：governance §8.1 step 3 要求 C5 审宪法 PR，但 C5 §2.1 required `spec_ref/plan_ref/task_id` 使宪法类 PR 无法构造合法输入——C5 审宪法/meta PR 的输入形态记为 open gap，下次动 C5 时定（ADR-0005 Negative 有记录）
 
 ---
 
@@ -596,7 +594,7 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 
 ---
 
-**Version**: v0.5.3
-**Last Updated**: 2026-06-12
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + #1/#2/#3 已修）+ **Q7-1 真并行开闸 ✅**（C7 v0.1.2）。下一阶段: P1.4 P3 强化关键路径（C3 / C4 L3-L4 / C11 / C10 / R3）；近期 Q7-2 parked→R2 / Q7-3 feature→main 收口 / r4 #4 auto-commit。
-**Changelog**: v0.5.3 (2026-06-12) **Q7-1 真并行开闸（C7 v0.1.2 MINOR）** — `max_parallel>1` phase 内 dispatch 并发（ThreadPoolExecutor，execute_task 在 worker 线程 / state mutation 留主线程）+ 整合严格串行（ff/rebase-requeue 不变）；默认 1 保完全确定，>1 dispatch 完成序非确定但结局正确（I2 边界 = routing path 非调度时序）；AC-14/15。v0.5.2 (2026-06-12) **r4 发现 #2/#3 修复（C7 v0.1.1）** — #2 reverify `run_verify` 改 `shell=True`（真根因：`shell=False` 不解释 verify_cmd 的 `&&` → 含 `&&` 复合命令必失败误 park；初判网络瞬态已纠正）+ #3 `reverify_output` 诊断字段；防回归测试 + spec v0.1.1。v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Version**: v0.5.4
+**Last Updated**: 2026-07-09
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + #1/#2/#3 已修）+ **Q7-1 真并行开闸 ✅**（C7 v0.1.2）。**当前: Phase 0 关门（issue #60）** — 3-OS CI + branch protection + constitution v0.2.3；后续 Phase 1 v4 自举（复活 001-sy-role 走完整自家链 + 自家 PR 默认 C5/C6）/ Phase 2 todo 拆分 + doc-lint / Phase 3 dogfood 升真实度 + P1.4（C4 L3 先于 C3）。
+**Changelog**: v0.5.4 (2026-07-09) **Phase 0 关门（issue #60）** — 2026-07-08 流程评估（自家 PR 绕自家链 / 无 CI 违 NC-5 / todo 单体 drift / dogfood 重放平台期）→ 3-OS CI（独立 PR）+ constitution v0.2.2 → v0.2.3（ADR-0005: NC-5 subprocess 条目加"用户命令字符串 shell=True"例外，r4 #2 cascade；C5 spec v0.1.3 + prompt.py 同步）+ ADR-0006: NC-6 候选三问法**不立**（P0.5 关账）；附带发现 C5 无法审宪法类 PR（input 形态 open gap）。v0.5.3 (2026-06-12) **Q7-1 真并行开闸（C7 v0.1.2 MINOR）** — `max_parallel>1` phase 内 dispatch 并发（ThreadPoolExecutor，execute_task 在 worker 线程 / state mutation 留主线程）+ 整合严格串行（ff/rebase-requeue 不变）；默认 1 保完全确定，>1 dispatch 完成序非确定但结局正确（I2 边界 = routing path 非调度时序）；AC-14/15。v0.5.2 (2026-06-12) **r4 发现 #2/#3 修复（C7 v0.1.1）** — #2 reverify `run_verify` 改 `shell=True`（真根因：`shell=False` 不解释 verify_cmd 的 `&&` → 含 `&&` 复合命令必失败误 park；初判网络瞬态已纠正）+ #3 `reverify_output` 诊断字段；防回归测试 + spec v0.1.1。v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。

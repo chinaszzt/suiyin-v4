@@ -38,7 +38,7 @@ implementer 视角污染, 从 spec/plan 意图独立判断.
 4. 逐项检查:
    - **AC coverage**: spec §5 每条 AC 在 diff 中是否有对应 test
    - **NC/PC 违规**: diff 是否违反 NC-1..NC-5 / PC-1..PC-3
-   - **cross_platform**: 是否有 `os.sep` 手拼 / `shell=True` / 等 Windows 不兼容写法
+   - **cross_platform**: 是否有 `os.sep` 手拼 / 等 Windows 不兼容写法 (例外: 对用户提供的整串 shell 命令如 verify_cmd 用 `shell=True` 是正确写法, 不 flag——ADR-0005)
    - **security**: hardcoded secret / SQL injection / 等
    - **spec_drift**: PR diff 是否引入 spec 未声明的能力 / 漏实现 spec 声明的能力
    - **reusable_knowledge_not_captured** (C12): spike 学到的 invariant 是否回流到 spec / constitution
