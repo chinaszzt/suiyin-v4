@@ -1,27 +1,32 @@
 # Gen-4 计划 — 三代合流（v4 底盘 + desk 尺子 + goal-control 遗产）
 
-> **来源**：2026-08-07/08 与用户的三代复盘对话 + 002·T001 A/B 回放实验（见 §一）。
-> 本文是那场对话的**拍板落盘**：§二每条都是用户口头拍板过的，不是提案。
-> **读者**：接手 v4 下一阶段的 session。读完本文 + `todo.md` 即可开工。
+> **来源**：2026-08-07/08 与用户的三代复盘对话 + 002·T001 A/B 回放实验（§一）+
+> codex gpt-5.6-sol ultra 外部审稿（BLOCK，全文存档 `reviews/gen4-plan-review-codex-20260808.md`，
+> 本版已消化其修正；未采纳处见 §三"P0 规模裁定"）。
+> §二每条都是用户拍板过的，不是提案。**读者**：接手 v4 下一阶段的 session，读完本文 + todo.md 即可开工。
 
 ## 〇、定位与总结论
 
-三个全自动开发项目的时间线与遗产（注意真实顺序，勿按"代际"直觉）：
+三个全自动开发项目的时间线与遗产（真实顺序，勿按"代际"直觉）：
 
 | 项目 | 时间 | 遗产 | 死因/现状 |
 |---|---|---|---|
 | **suiyin-v4** | 2026-05~07 | 骨架：编排=确定性进程、LLM 只在叶子、状态可 kill -9 | 没死——被遗忘（无场景验证，v5 没空继续） |
 | **goal-control** | 2026-07 末 | 信息对称原则（接缝两侧不该靠人传话） | 控制面计费实体=模型，一天烧 codex 周额度 50% |
-| **suiyin-desk 流程** | 2026-08 | 尺子：闭集判据、mutation 探针、机械闸、裁决通道 | 现役，中等效率；其收敛方向（脚本主干控制器）именно v4 起点 |
+| **suiyin-desk 流程** | 2026-08 | 尺子：闭集判据、mutation 探针、机械闸、归因纪律 | 现役；其收敛方向（脚本主干控制器）即 v4 起点 |
 
-**总结论（用户 8-08 拍板）**：gen-4 = **v4 底盘不动 + desk 尺子移植 + goal-control 遗产以"合并会话"而非"通道"形式继承**。
-实验品 = **suiyin-desk 产品（非流程）**。价值排序：**文档 > 测试 > 代码**——迁移即"spec 与 AC 层进，代码可重生成"。
+**总结论（用户 8-08 拍板）**：gen-4 = v4 底盘 + desk 尺子移植 + goal-control 遗产以"合并会话"
+而非"通道"形式继承。实验品 = **suiyin-desk 产品（非流程）**，v5 不整了。价值排序：
+**文档 > 测试 > 代码**——迁移即"spec 与 AC 层进，代码可重生成"。
 
-**核心定理**（三代共同指认）：控制面的强度不是问题，**计费实体**才是问题——闸由脚本过=零 token，
-由模型过=入场税×fresh 数×全上下文费率。以及本轮实验补充的第二定理：**审查质量是尺子的函数，
-不是审查器的函数**（同一 C5，无契约=零发现，有契约=E4 级 finding）。
+**"底盘不动"的准确含义**（codex 修正）：不动的是**架构 invariant**（C7 唯一路由权威、routing 零 AI、
+task→feature 本地 ff / feature→main 才 C5/C6、worktree 隔离、C4/C5 报告结构化且绑定当前 tree、
+C6 fail-closed、C1 只排序不改 task）；C2/C4/C5/C6/C7 的组件契约与 methodology/role-profiles/
+workflows 的相应条款**都要修订**——修订清单见 §三。
 
-## 一、实验证据（002·T001 沙盒回放，2026-08-07 深夜）
+**两条定理**：控制面的计费实体决定生死；审查质量是尺子的函数，不是审查器的函数。
+
+## 一、实验证据（002·T001 沙盒回放 + 交叉审查）
 
 沙盒 `~/suiyin-desk-v4lab`（desk clone，origin 指本地裸仓），基线=T001 首次 claim 前（228fb1e）。
 对照组=desk 真实战绩（v5 尺 12 轮 + v6 尺 2 轮，41 文件 +7011 行）。
@@ -30,111 +35,166 @@
 |---|---|---|
 | attempts / 耗时 | 2 / 47min | 3 / 83min |
 | 产出 | 13 文件 +1588，make test 绿 | 23 文件 +3219，make test 绿 |
-| 契约接缝 | 4 处关键缺失（Transition 不写库/无 Count/无装配骨架/无 ScratchState） | **全闭合**，契约 §五 闭集验收被译成测试 |
-| C5 verdict | approve，0 findings（对缺失全盲） | **block**：high=Registry 未接 FakeClock 致契约验收物理不可达（行号级）；low=Transition 硬编码 time.Now |
+| 契约接缝 | 4 处关键缺失 | 全闭合，契约 §五 被译成测试 |
+| C5 verdict | approve，0 findings | block：1 high + 1 low |
 
-三条实证：①尺子决定审查质量；②契约外挂即插即用（B 只多两个 seed）；③desk 的"他人包 flaky
-烧轮次"在 v4 原样复发（B attempt-1 被基线代码的 TestCallTimeout 烧掉，v4 无 FOREIGN 归因）。
-另：53min 单发 headless（--print stream-json）会话稳定完成——"单次大响应必断线"是交互形态特有。
-**交叉审查（desk E4 审 B 产物，2026-08-08 补录）**：BLOCKED，8 blocker（std 档拦 3 放 5，
-分档"判定与处置分离"在陌生工件上照常工作）。E4 相对 C5-带尺子的**独有增量**：
-① **5 条 mutation 实证的"测试空心化"**——B 把契约 §五 译成了测试，但探针实跑证明其中五处是纸甲
-（schema tag 改名仍绿/接口方法改名仍绿/审计断言缺 before-after 字段/只追加扫描器条件重绑定逃逸/
-ScratchState 浅拷贝可反向篡改）；② 1 条 spec 行为级违例（done→merged 被当合法正例，spec 明令先还原）
-——C5 拿着同一份 spec 没挖到；③ 1 条 seam 缺失（ExitReason 枚举整个不存在，下游 T004/T008 无从声明）。
-另 1 条 floor（会话日志被提交入 git）系实验搭建者的 `git add -A` 误伤，非 v4 管线之过——但 E4 抓到了。
-**结论**：mutation 探针不可省，且强度须为 desk 级（不止 AC 断言翻转）——"AC 冻结=契约"成立的前提
-是 AC 测试有证伪力，而自写测试的空心率实测 5/8。首跑另录一条 fail-closed 佳话：E4 新鲜度门把自家
-lane 工具产物当工作区漂移拦下退 3（工具时代错配），宁可不判也不出说不清的票。
+**交叉审查**（desk E4 审 B 产物）：BLOCKED，8 blocker（std 档拦 3 放 5）。
+**证据→机制归因表**（codex 修正：8 条增量分属四种机制，不许再说"mutation 唯一残余"）：
 
-## 二、拍板集（2026-08-07/08 对话，均已定案）
+| E4 独有发现 | 条数 | 责任机制（gen-4 承接者） |
+|---|---|---|
+| 自写测试空心（tag 改名仍绿/方法改名仍绿/审计断言缺字段/扫描器 taint 逃逸/浅拷贝可篡改） | 5 | **mutation 探针**（P0） |
+| spec 行为违例（done→merged 当合法正例） | 1 | **独立语义审查**（C5 residual，不可裁撤） |
+| 接缝缺失（ExitReason 枚举整个不存在） | 1 | **seam 完备性检查**（seam manifest + lint） |
+| 会话日志被提交入 git（系实验者 `git add -A` 误伤） | 1 | **机械 hygiene 闸**（静态检查） |
 
-1. **测试三层 = 契约层的 v4 形态**。AC 测试=行为契约本体（spec 衍生，**冻结**——改它=改 spec，
-   走 Bug Type B/C 通道带 ADR）；实现测试=脚手架，后任自由改；**mutation 探针=唯一对抗残余**，
-   只验"AC 测试仍有证伪力"（desk E4 的瘦身版，落点 C4 L3 工位）。
-   依据：两次重构故事 A/B（issue 附 AC+验收改打钩 → 从"磕绊能用"到"一把过"）——
-   **规划工件的精度是第一生产力，审查只是精度的验收器**。
-2. **E5（越界审计）溶解**。"越界"概念被"后任可改前任、AC 测试保全"替代；不可溶解残余
-   （生产库只读、危险集合白名单）归宪法 NC + 机械闸，不设 LLM 审计席。
-3. **plan 人审放弃，改机检化**。目标用户不懂技术，几十页 plan 人审"效果不如模型"。
-   desk 契约层按"plan 的机检化+闭集化"移植（契约⊆spec 矩阵、lint、闭集验收判据），
-   人审面收缩为 clarify 的后果化拍板题（既有 decider-adjudicable 规范不变）。
-4. **恢复阶梯增设 R1.5 = park 分诊器**（用户 8-08 否决了裁决席整体移植——契约层溶解后
-   "尺子争议"这个案源不存在了："尺子错"="spec 错"=Type C 通道，终点是给用户出后果题，
-   属 clarify 形状非裁决形状；retry 耗尽主因是断网/抖动/flaky 级 infra，机械可分类）。
-   形态：**机械分类先行**（infra 瞬态→退避自动重试；foreign 包红→不吃 attempt；自家红→R2），
-   不可机判的才起廉价会话把问题**翻译成后果化拍板题**上交。从 desk 裁决席只借两条纪律：
-   判例先读（防翻面）、fail-closed（解析不了≠任何裁决）。
-5. **接缝三则**（替代一切"会话沟通"设计）：
-   - 能不拆就不拆——1M 上下文吃得下就单会话跨栈干完，接缝消失（接缝是人类上下文限制的产物）；
-   - 拆则规划钉形状 + **接缝中心先行**（串行做核心）+ 两侧并行，预算内接受 70% 可用 + 30% 胶水/回改
-     （**修补是常态不是失败**）；接缝特重→合并成一个 task，或做成持续演进；
-   - 会话互聊出局（群聊回错回漏实证；单聊能解决的恰证明该合并成单会话）。
-6. **成本记账补课**。desk cost.tsv 式：每次 agent/审查调用一行（tokens/时长/角色），只记录不调度。
-7. **C5 输入面契约化**。凡影响 verdict 的输入必须显式声明进调用（契约/failure-modes/README），
-   不许靠审查会话自己翻仓考古（B 条件的 E4 级 finding 有"自己翻到契约"的运气成分）。
-8. **强模型假设显式化**。v4 全部轻量化设计押注"sonnet/opus 级模型 TDD+AC 即有不错产出"——
-   写进 constitution 当**可撤销假设**，模型换代/降级时触发审查栈重估。
-9. **P1.6 重定位**。运行时防护以**机械 pattern 闸**为主（授权面从 AC/契约机械生成，零 token），
-   语义小模型闸只兜 pattern 判不了的残余——避免重蹈 goal-control 计费实体错误。
-10. **独立性开支阶梯**（用户 8-08："想过，没找到好实现"——本条记录共识与候选实现）。
-    单会话既写实现又写测试=盲区共享（E4 交叉审查实测自写测试空心率 5/8）。独立性按性价比
-    分三档：**独立测试作者**（便宜，常开）→ **R3 跨厂商审**（中，block 争议/高危时——8-08
-    交叉审查实证：同一产物 codex 抓 8 条 vs claude 2 条，视角差是真实信号）→ **C3 双实现**
-    （贵，最后手段）。C3 的定位修正：尺子是"固定成本高、边际零、跨 task 复利"曲线，
-    双实现是"零固定、每次 2x、不复利"曲线——只有"一次性高危且正确性难枚举成 AC"的 task
-    （微妙并发/算法正确性）才轮到 C3；desk 的教训同时提醒尺子固定成本真实存在
-    （散文尺子需要自己的评审回路），gen-4 用"尺子=可执行 AC 测试"压这项固定成本。
-    人类对照物：TDD + pair programming 的模型版。
+其余实证：A 条件"凡 seeds 写明的全对、凡契约独有的按比例缺失"；desk 的"他人包 flaky 烧轮次"
+在 v4 原样复发（B attempt-1 被基线代码 TestCallTimeout 烧掉）；53min 单发 headless 会话稳定完成
+（"单次大响应必断线"是交互形态特有）；E4 新鲜度门在陌生环境 fail-closed 正确（宁退 3 不出脏票）。
+**新管线回放时须对这 8 条逐条声明"哪个机制抓到"，不许只报总数。**
 
-## 三、移植清单（desk → v4，按优先级）
+## 二、拍板集（用户 2026-08-07/08，v0.4 含 codex 修正后定稿）
 
-**P0（下一阶段就做）**
-- **AC 冻结机制**：AC 命名测试的"改动=改 spec"通道接线（diff 里 AC 测试被弱化/删除 → 拦下走 Type B/C）
-- **mutation 探针**（C4 L3 工位）：只针对 AC 测试；**触发时机=AC 测试首次落地或变更时跑一次**
-  （用户 8-08 拍板），不逐轮跑——证伪力是测试的属性，测试没变就不必复验
-- **成本记账**（拍板 6）
-- **C5 输入面显式化**（拍板 7，改动极小：seeds 进 review 调用）
+1. **测试分类：三类测试 + 一个验证维度**（原"测试三层"修正——spec 是唯一真相，测试永远是投影）：
+   - ①**行为测试**（spec AC 衍生，**冻结**）：`spec AC（权威）→ AC 测试（可执行投影）→ mutation
+     attestation（投影证伪力证据）`；冲突时 spec 胜。修改通道三条：Type B（spec 漏行为：补 spec+AC，
+     不强制 ADR）、Type C（意图变更：改 spec+ADR）、**projection_fix**（spec 未变、测试翻译错：
+     修测试并留新旧 oracle 证据，不伪造修宪）。
+   - ②**seam/guard 测试**（plan/宪法衍生，**同受冻结保护**）：内部接缝形状、写权守卫、27017 禁令类
+     ——不是外部行为，也绝不是"后任可随意改"的实现测试。
+   - ③**实现测试**：脚手架，后任自由改。
+   - **mutation = 对①②的 adequacy 验证**。触发键（用户 8-08 批）：AC/守卫测试变更 ∪ mutant 目录
+     变更 ∪ **被测包导出面变更**（廉价近似）；完整 reachable-slice 键待验证。零适用 mutant/目标缺失/
+     解析失败一律 fail-closed。
+2. **E5 退役是目标不是事实**。退役门 = 历史 E5 blocker 语料经"typed authorization + 静态守卫 +
+   C5 residual"回放，seam/floor 逃逸为零。在此之前 E5 义务由迁移矩阵逐条指定临时承接者。
+   安全边界三条（测试禁 27017 / bzds 只读 / 凭证禁入库）**不等迁移**，P0 就上机械闸
+   ——注意它们现居 desk CLAUDE.md 而非宪法（codex 发现）。
+3. **plan 人审退役有前置链**。前置齐之前旧 plan gate 有效：methodology/role-profiles/runtime 配置
+   逐档改定（四档各自的 plan/review/merge/park 行为）+ plan 机检就位（seam manifest、
+   authorization manifest、lint）。"取消人审"的准确表述：前置满足后 D 档可自动 pin 纯技术 plan。
+4. **Execution Failure Triage**（原"park 分诊器"更名并钉边界）：分类器只输出
+   `class/evidence/retryable/charge_owned_attempt`，**不得输出下一节点——C7 是唯一路由权威**。
+   UNKNOWN → park → 生成后果化拍板题工件，用户答案作为 typed event 回灌 C7。
+   feature 级 C5 block → 新建 feature-repair task/worktree（task worktree 已在整合后删除，不复用）。
+5. **接缝三则**：①能不拆就不拆——1M 上下文吃得下就单会话跨栈干完（接缝是人类上下文限制的产物）；
+   但"装得下"非充分条件，还须过：2h timeout 内可完成、verify 单次可执行、资源可隔离、变更有原子
+   审查边界——**粒度决策落在 /sy-tasks，C1 只排序**；②拆则规划钉形状 + 接缝中心先行 + 两侧并行，
+   预算内接受 70% 可用 + 30% 胶水——**胶水必须是预声明的 integration task 或 C5 block 后生成的
+   repair task**（产生新 manifest hash/run），不许执行会话临场越界；接缝特重→合并成一个 task
+   或做成持续演进；③会话互聊出局（群聊回错回漏实证；单聊能解决的恰证明该合并成单会话）。
+6. **成本记账**：每次模型调用一行——`invocation_id/run_id/feature/task/role/model/attempt/
+   start/end/status/input_tokens/cache_tokens/output_tokens/error`；失败、timeout、kill -9 也必须
+   有记录；解析失败留显式 `cost_log_error` 不静默；只观测不参与 routing。
+7. **C5 输入面契约化**：`review_input_manifest[]`（kind/path/authority/required/content_sha256），
+   权威序 `NC > spec/AC > plan/seam > failure-modes > advisory`；required 缺失/hash 漂移 fail-closed；
+   **任何 NC 命中一律输出 nc_violation**（专用类别只作 subtype——修 C5 现役 cross_platform 归
+   approve 类与 NC-5 的冲突）。legacy 契约只能作迁移期输入，不得成为第二套永久契约。
+8. **模型能力假设哪都不写**（用户 8-08）：实际执行就是 sonnet 5 / opus 5 / GPT 5.6；
+   重估触发条件 = 代码反复过不了验收。不建 benchmark 基建，不进宪法。
+9. **P1.6 重写**：`plan/constitution → typed authorization manifest → 机械 path/command/network/DB
+   闸 → 极少语义残余`。机械可判路径的模型调用数为零；manifest 缺失/失效 fail-closed。
+10. **独立性开支阶梯**：**独立测试作者**（便宜，常开；候选实现=测试先行顺序双会话，执行闸复用
+    AC 冻结机制）→ **R3 跨厂商审**（block 争议/高危；8-08 交叉审查实证 codex 8 vs claude 2）→
+    **C3 双实现**（最后手段；成本曲线：尺子=高固定/零边际/跨 task 复利，双实现=零固定/每次 2x/
+    不复利；仅"一次性高危且正确性难枚举成 AC"的 task 轮到它）。人类对照物：TDD + pair programming。
+
+## 三、移植与建设清单（v0.4 按 codex 顺序修正重排）
+
+**P0 规模裁定**（用户 8-08："先最小化，跑起来"）：codex 的 P0-0..P0-9 十件套按"审稿完备性"排列，
+照单全收=先建笼子再干活（goal-control 死法，违 desk"暴露驱动"与 v4 PC-1）。**P0 取最小可信链，
+其余挂 M3 工具就绪门**（desk 代码重生成前机械拦，见 §四）——门会拦住，不需要预建。
+
+**P0 · 最小可信链**（顺序即依赖序）
+1. **身份与基线**：canonical key = `feature_id + local_task_id`（worktree/branch/state/review/cost
+   同键；实验中 T-001B 被 schema 拒收即此坑预演）；r4 auto-commit 缺口收口（产物不在 base HEAD
+   即 fail-fast）。
+2. **AC 迁移与冻结**：desk FR/GWT/成功指标 → 稳定 AC-N 映射（002 先行）；Go verify 接线走
+   verify_cmd（结构化 Go runner 后补）；**AC/守卫测试冻结闸**（diff 拦截：删除/skip/改名/弱化且
+   spec 未变 → 阻断；配 AC manifest：ac_id/spec_hash/test_hash/baseline_ref；机械可判闭集之外
+   的"弱化"标 UNKNOWN 不放行）。
+3. **最小隔离 + mutation**：throwaway worktree + lane mongo（C4"只读"invariant 与 mutation 相撞的
+   解法，desk E4 现成模式）；五类 desk mutant；验收=B 产物五处空心全杀、原 worktree 前后
+   byte-identical、零适用 mutant 不算 pass。
+4. **feature 收口 harness**：确定性脚本串"feature HEAD 全量 C4 → C5（subject=feature，含
+   task_ids[]）→ C6"；`human:block` 做成本地 versioned 状态（GitHub label 只是可选 adapter）；
+   Q7-3 完整实现前由 harness 串接，**不宣称端到端全自动**。
+5. **安全闸三条**：任何测试命令指向 27017、bzds 写操作、凭证入 git——模型调用前机械阻断。
+6. **成本记账最小版**（拍板 6 字段集）。
+
+**M3 门内（desk 代码重生成前必须齐，P0 不预建）**：C5 typed inputs（拍板 7）、C4/C5 报告新鲜度
+绑定（target_tree_sha/spec_hash，C6 先验票再评门）、完整 lane 隔离（DB/cache/port/tmp；全仓构建
+有限 semaphore——desk 实证仅 Mongo 隔离仍会 CPU 互踩团灭）、seam manifest + authorization
+manifest + plan lint、plan gate 分档修订（拍板 3 前置链）。
 
 **P1**
-- **独立测试作者**（拍板 10，与 P0 mutation 探针配对：探针验存量证伪力，独立作者管增量）。
-  候选实现=**测试先行顺序双会话**：①测试作者会话只读 spec/AC，产出红的 AC 测试并 commit；
-  ②C2 实现会话继承同一 worktree，把测试打绿，**机械禁改 AC 测试断言**——执行闸就是 P0 的
-  AC 冻结机制（同一个 diff 拦截器管两件事）；③verify 绿=完成。恰是人类 TDD 的机器版
-- **park 分诊器**（拍板 4 修订形态：机械分类为主，LLM 只做后果题翻译）
-- **desk spec + constitution 迁移映射**（用户 8-08 拍板"带过去"）：desk 宪法 P1-P9/E1-E11
-  逐条定归宿——溶解（E5 类）/保留为 NC（27017 禁令、bzds 只读等安全边界）/转 failure-modes
-  条目/转探针或 lint；spec（001-005）与契约集的 AC 资产提炼为 gen-4 输入
-- **verify 归因与隔离**：FOREIGN 归因（自家 diff 外的包红不吃 attempt，重跑一次再定）+
-  一 lane 一测试容器（desk E10/lib/testmongo.sh 模式）
-- **plan 机检 lint**（拍板 3：契约⊆spec 矩阵、闭集验收判据 lint，desk contract-lint 思路）
+- **Execution Failure Triage + 归因**（顺序：统一 failure envelope → base/head 对照 → C2 attempt
+  accounting 重构 → 分类器 → Q7-2 → 通用 repair_feedback.kind=review_findings|verify_failure|
+  reverify_failure）。判定：base 红=FOREIGN / base 绿 head 红=OWN / 同 commit 重跑翻转=INFRA /
+  无法归因=UNKNOWN park；FOREIGN/INFRA 不扣 owned attempt 但有独立有限预算。
+- **独立测试作者**（拍板 10 候选实现；与 mutation 配对：探针验存量，独立作者管增量）。
+- **desk 迁移 M0-M2**（见 §四）+ **C9 fixture**（迁移即 Initiative，至少产一次 `affected.yaml`）+
+  **C10 迁移期 overlap 一跑** + **C11 v0 评估**（candidate：包壳 codebase-memory-mcp——函数定义/
+  调用链/语义检索现成，自建仅剩 overlap% + plan 接线 + post-merge 增量）。
 
-**P2（按需）**
-- 巡检席（cron 文件证据核对，desk watchlist 模式）
-- C10/C11/C12 知识层（v4 原 roadmap，优先级让位于上面）
-- 上交措辞已有 decider-adjudicable，补 desk"四触发闭集+代决备案"对照即可
+**P2**：巡检席（只读、零模型、只告警不 merge/unpark，先拿 desk watchlist 历史回放测误报）、
+C12 收尾（C5 finding 半边已有，补 capture protocol）、领域词典 + /sy-role 恢复 backlog、
+spec-kit fork 反向指令清理（tasks.md/tests-optional/T001 编号残留——AC 冻结与身份键的隐患）、
+verify 证据分型（test/static/mutation/metric/runtime_guard/manual；manual 不满足自动 merge 硬门）。
 
-**明确不移植**：E5 席位（拍板 2）、契约文档层整体（拆进测试三层+plan）、role-gate 通配黑名单
-（v4 威胁模型不同；desk 自身保留）、会话通信通道（拍板 5）。
+**旧 roadmap 处置表**（逐项，不许悬空）：
 
-## 四、Dogfood 计划（用户 8-08 拍板收窄）
+| 旧项 | 处置 |
+|---|---|
+| C3 双实现 | 保留为最后手段（拍板 10）；C2 对 criticality=high 的硬拒**不动**——首个 high task 前实现 C3 或提供 fail-closed 人工替代，不得静默降 medium |
+| C4 L4 宪法合规 | 待拍：C5 吸收 vs 独立实现（E5 退役门评审时一起定） |
+| R3 codex 双审 | 保留，场景绑定（block 争议/高危）；Q5/Q5-6 并入该场景 |
+| C8 发布门 | 保留原 P4；C8 未建前 dogfood 终点=main，不触生产 |
+| C9 / C10 / C11 / C12 | 见 P1/P2（C9 fixture 先行、C10 迁移期一跑、C11 评估包壳、C12 收尾） |
+| P1.6 语义闸 | 已重写（拍板 9） |
+| Q7-2 / Q7-3 | Q7-2 并入 P1 Triage；Q7-3 = P0 harness → 完整实现 |
+| /sy-role、词典、r4 #5 输出语言 | backlog；r4 #4 auto-commit 并入 P0-1 |
 
-- **唯一实验品 = suiyin-desk 产品**（v5 不整了）：**把 desk 的 spec 和 constitution 整体带进
-  gen-4**，用 gen-4 管线跑通 desk 产品——不是 M2 试点，是主线迁移；"文档>测试>代码"，
-  spec 与 AC 资产进，代码层允许重生成。
-- **沙盒先行**：`~/suiyin-desk-v4lab` 模式已验证（clone+本地裸仓 origin+基线分支），继续用。
-- **验收标准**：desk 坑清单（process-evolution §七）逐条变成 gen-4 组件的 AC——
-  每条实翻过的坑都该有一个机械化的"不再翻"证明。
-- **首个校验点建议**：T003（归入引擎，业务逻辑型）A/B 再跑一轮——验证契约红利在非地基型
-  task 上的衰减曲线（T001 是 schema 型，最吃契约红利，样本有偏）。
+## 四、Dogfood 与迁移计划
+
+- **唯一实验品 = suiyin-desk 产品**（v5 不整了）：desk spec + constitution 整体带进 gen-4 当主线。
+- **迁移按 codex M0-M5 执行**（全文见审稿存档 §四，此处为纲）：
+  **M0** 冻结 desk 源 commit（迁移开工时的 main SHA）+ 生成 effective-constitution（把 8-06 附则、
+  005 临时豁免等叠层归一为单一现行语义，每条带稳定 source ID）+ exception-registry；
+  **M1** 原子迁移矩阵（每条：source_id/语义/scope/disposition/primary_target/enforcer/evidence；
+  验收 orphan=0、multiple_primary=0、对已退役 E4/E5/契约的活引用=0；"溶解"必须指向替代机制及其
+  验收）——codex 报告里的 P1-P9/E1-E11 逐条归宿表即矩阵初稿；desk 条款进 desk 项目的
+  `.specify/memory/constitution.md`，**不进 v4 宪法**（工具/业务分界）；
+  **M2** spec/契约资产拆分（US/FR→AC-N；接口/schema/error→seam manifest；写权→authorization
+  manifest；契约验收判据→behavior/seam/guard 测试+mutant ID；真实坑→desk failure-modes——
+  **业务坑进 desk failure-modes，gen-4 工具链缺陷进组件 regression AC，每条一个 primary owner**）；
+  **M3** 工具就绪门（见 §三；任一缺失，迁移停在文档 dry-run）；
+  **M4** 历史双轨回放（回放集：本次 8 条 E4 blocker、历史 E5 越界票、desk 坑清单、002·T001、
+  业务型 T003；验收：seam/floor 逃逸零、指定 mutant 全杀、FOREIGN 不耗 owned attempt）；
+  **M5** shadow 一轮 + T003 主线通过才 cut over；任一历史 seam/floor 病例漏检自动恢复旧 gate；
+  旧契约/review 历史只读归档不删除。**desk 现役流程的退役节奏 = 切换前置（M5 管），不再是
+  "不阻塞"项。**
+- **沙盒先行**：`~/suiyin-desk-v4lab` 模式继续用（clone + 本地裸仓 origin + 基线分支）。
+- **首个校验点**：T003（归入引擎，业务逻辑型）A/B 再跑一轮——T001 是 schema 型最吃契约红利，
+  样本有偏。
 
 ## 五、未决（不阻塞 P0）
 
-- ~~E4 交叉审查结果补录~~（已录 §一末，探针强度=desk 级）；~~探针触发时机~~（已拍：AC 落地/变更时）
-- criticality 由非技术用户如何定档——**遇到再说**（用户 8-08 延迟决策）
-- desk 现役 M1 流程的退役/共存节奏（spec+constitution 迁移后，desk 仓 scripts 体系如何收尾）
+- **tier vs criticality fork**（用户延迟）：P9/E11 迁移二选一——只迁 taxonomy+fix-forward 账，
+  或 C5 输出 raw findings + 确定性 disposition policy + C6 消费 policy 结果。两者不是同一维度
+  （criticality 定实现拓扑/C3，tier 定 finding 处置），禁止合并成一个字段。
+- criticality 由非技术用户定档——遇到再说（用户 8-08）。
+- mutation reachable-slice 全键的算法与成本；"弱化"的机械可判闭集边界。
+- multi-clone/多机是否在威胁模型内（在→pid 锁不够需 git CAS claim；不在→明写"单机单 clone"）。
+- 8-06 那批 desk 修宪（P7/P9/E10/E11）是否有正式修宪记录；bzds 账号只读是否数据库层强制——
+  M0 时逐条核实（待验证）。
+- 每个 backlog 项统一 DoD：组件 spec bump + schema + 至少一条失败型 AC + workflows/diagrams
+  cascade + todo 处置 + 真 dogfood 工件 + kill-9/resume 或明确"不适用"。
 
 ---
 
-**Version**: v0.1（2026-08-08，对话拍板落盘）
-**Changelog**: v0.1 初稿——三代合流定位、A/B 实验证据、拍板集 9 条、移植清单三档、dogfood 计划。
+**Version**: v0.4（2026-08-08）
+**Changelog**: v0.4 消化 codex ultra 审稿——证据→机制归因表（撤"mutation 唯一残余"）、测试分类
+三类+一维、E5 退役改目标+parity 门、plan 退役前置链、Triage 更名与路由边界、身份键、P0 重排为
+最小可信链+M3 门（用户裁定）、模型假设不落文档（用户裁定）、mutation 触发键折中（用户裁定）、
+旧 roadmap 处置表、M0-M5 迁移纲要。v0.3 拍板 10 独立性阶梯。v0.2 用户四拍板。v0.1 初稿。
