@@ -556,10 +556,10 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 已完成: r4 #1/#2/#3（constitution_ref / reverify shell && / reverify 诊断）+ Q7-1 真并行开闸（C7 v0.1.2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
-【推荐下一步】Q7-2 parked→R2 自动重投 —— C2 v0.3.0 的 --review-feedback 已就绪,
-差 C7 编排把 REVERIFY_FAILED/TASK_FAILED 的 findings 注入重投 (最小增量闭环动作);
-或转 P1.4 开新组件 (C3 Arbiter / C11 / C10)。低优先: r4 #4 auto-commit 不一致 /
-#5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
+【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）** —— 三代合流后 P2.0 优先级
+压过原 P1.4 推荐：P0 = AC 冻结机制 / mutation 探针 (C4 L3 工位) / 成本记账 / C5 输入面显式化。
+原推荐 (Q7-2 parked→R2 / C3 / C11 / C10) 降为 P1-P2,见 gen4-plan.md §三移植清单。
+低优先: r4 #4 auto-commit 不一致 / #5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
 
 【接力环境注意】(都是踩过的坑)
 - venv 唯一在主仓 .venv (editable 指 main src); dogfood 部署 = 主仓 git pull
