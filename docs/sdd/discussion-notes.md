@@ -544,6 +544,16 @@ C10/C11 都是 **post-merge trigger**。但很多 reusable 知识在**审 spec /
 
 ---
 
-**Version**: 0.3.1-WIP
-**Last Updated**: 2026-05-20
-**Status**: review 第一轮完成；待开 constitution.md v0.1 + 第一个 spec dogfood；C12 作为 post-MVP follow-up 记录在 §十
+## 十一、Gen-4 合流（2026-08-08，拍板已落正式文档）
+
+三个月后的三代复盘（v4 → goal-control → suiyin-desk 流程）+ 002·T001 沙盒 A/B 回放实验，
+产出 9 条拍板与移植清单，**直接落盘 [gen4-plan.md](gen4-plan.md)**（本节只留指针）。
+要点：v4 底盘不动；desk 尺子按"测试三层（AC 冻结=契约本体+mutation 探针）+ plan 机检化 +
+裁决席 R1.5"移植；E5/会话通信/契约文档层明确不引入；实验品=suiyin-desk 产品。
+两条定理：控制面的计费实体决定生死；审查质量是尺子的函数不是审查器的函数。
+
+---
+
+**Version**: 0.4.0-WIP
+**Last Updated**: 2026-08-08
+**Status**: §十一 Gen-4 合流拍板落盘（gen4-plan.md）；此前状态：review 第一轮完成；C12 作为 post-MVP follow-up 记录在 §十
