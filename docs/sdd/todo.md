@@ -394,7 +394,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - catalog 驱动确定性文本变异（语言无关）；每 mutant 独立 throwaway worktree（原树 byte-identical，AC-3）；lane 隔离靠 `--env` 注入
   - fail-closed：零适用 / catalog stale (apply_failed) / error 一律 fail；pass = ≥1 且全 killed
   - 10 AC（实心/空心对照 fixture：空心测试放跑 mutant → fail 逐个点名）
-  - **拍板验收（B 产物五处空心）= merge 后 v4lab dogfood**，desk 五类 mutant catalog 现场写
+  - **拍板验收 ✅ 达成 (2026-08-12, v4lab)**：v0.1.1（PR #69：`extra_edits` 多点替换 + baseline 健全性跑）后，desk 五类 mutant catalog 对 B 产物（ref v4lab/e4-cross + lane mongo 38027）——baseline 真绿，**5/5 survived 全检出**（tag_rename / method_rename 双点 / assert_field_drop / taint_escape / shallow_copy），机器零 token 复现 E4 全部五条 quality blocker。evidence: `dogfood/P0-3/`
+- [x] **P0-4 feature 收口 harness** ✅ (2026-08-12, 本 PR) — **P0 六件全部完成**
+  - 新组件 `src/suiyin_flow/close_harness/`（spec: [close-harness.md](components/close-harness.md) v0.1.0）：`suiyin-flow close {run,block,unblock,status}`
+  - 确定性步序 human_block → acgate → mutation(触发键) → verify(C4 全量, verify_cmd 兜底合成 report) → review(C5 subject=feature) → gate(C6 ff-merge)；任一步败即停 fail-closed；不宣称端到端全自动
+  - human:block 本地 versioned 状态（GitHub label 降级可选 adapter）；工件缺失 skipped_warning（M3 门内转强制）
+  - 联动：C5 v0.3.0 `task_ids[]`（关 ADR-0005 open gap 的 feature 半边）/ C4 task_id pattern 补 P0-1 cascade 漏 / safety v0.5.1 规则 4（`.suiyin/` 工件入 diff → 拦，E4 hygiene blocker 承接）
+  - 9 AC（真 git fixture + bare origin + mock claude；C6 真 ff-merge 实证）
 - [x] **P0-5 安全闸三条** ✅ (2026-08-12, PR #66, **codex 外包实现** + Claude review 收紧 diff-unavailable fail-closed)
   - `c2_executor/safety.py` 三规则（27017 数字边界 / bzds 写共现 / 凭证 pattern+占位符白名单）；挂 execute_task（session 前）+ _finalize_success（commit 采纳前）；C2 v0.5.0 `SAFETY_BLOCKED`
 - [x] **P0-6 成本记账最小版** ✅ (2026-08-12, PR #67, **codex 外包实现**)

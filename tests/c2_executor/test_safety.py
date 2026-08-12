@@ -174,3 +174,31 @@ def test_AC_S10_credential_commit_blocks_adoption_and_keeps_worktree(
     assert error.details["violations"][0]["rule_id"] == "SAFETY_CREDENTIAL_IN_DIFF"
     assert worktree.exists()
     assert (worktree / "credential.py").exists()
+
+
+# =============================================================================
+# AC-S11 (v0.5.1): .suiyin/ 运行时工件入 diff → 拦 (E4 floor blocker 承接)
+# =============================================================================
+
+
+def test_AC_S11_runtime_artifact_in_diff_blocks() -> None:
+    diff = (
+        "diff --git a/.suiyin/sessions/attempt-3.log b/.suiyin/sessions/attempt-3.log\n"
+        "--- /dev/null\n"
+        "+++ b/.suiyin/sessions/attempt-3.log\n"
+        "+session content with /Users/someone paths\n"
+    )
+    violations = check_diff(diff)
+    assert any(v.rule_id == "SAFETY_RUNTIME_ARTIFACT_IN_DIFF" for v in violations)
+
+
+def test_AC_S11b_normal_files_not_flagged() -> None:
+    diff = (
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "+x = 1\n"
+    )
+    assert not any(
+        v.rule_id == "SAFETY_RUNTIME_ARTIFACT_IN_DIFF" for v in check_diff(diff)
+    )

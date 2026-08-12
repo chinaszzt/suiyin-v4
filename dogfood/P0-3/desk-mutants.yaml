@@ -1,0 +1,53 @@
+schema_version: v0.1.0
+feature_id: 002-t001-replay
+default_test_cmd: go test ./internal/topic/...
+mutants:
+- mutant_id: M-bson-tag-rename
+  mutant_class: tag_rename
+  target_file: internal/store/schema.go
+  match: "\tDisplayName string        `bson:\"display_name\"`\n\tEnabled     bool\
+    \          `bson:\"enabled\"`\n\tUpdatedAt   time.Time     `bson:\"updated_at\"\
+    `"
+  replacement: "\tDisplayName string        `bson:\"display_name\"`\n\tEnabled   \
+    \  bool          `bson:\"enabled\"`\n\tUpdatedAt   time.Time     `bson:\"our_member_updated_at_broken\"\
+    `"
+  description: 'E4 空心 1: OurMember.UpdatedAt 落库 tag 改坏, TestTopicSchemas 全字段护栏漏断 →
+    仍绿'
+- mutant_id: M-iface-method-rename
+  mutant_class: method_rename
+  target_file: internal/topic/deps.go
+  match: ScanForCard(ctx context.Context, cardID string) error
+  replacement: ScanForCardRenamed(ctx context.Context, cardID string) error
+  extra_edits:
+  - target_file: internal/topic/deps.go
+    match: func (stubCrossGroup) ScanForCard(context.Context, string) error
+    replacement: func (stubCrossGroup) ScanForCardRenamed(context.Context, string)
+      error
+  description: 'E4 空心 2: CrossGroup.ScanForCard 接口+stub 同改名, TestContractShapes 不冻结方法集
+    → 仍绿'
+- mutant_id: M-audit-field-drop
+  mutant_class: assert_field_drop
+  target_file: internal/topic/registry.go
+  match: 'after := store.OurMember{WxID: m.WxID, DisplayName: m.DisplayName, Enabled:
+    m.Enabled, UpdatedAt: now}'
+  replacement: 'after := store.OurMember{WxID: m.WxID, DisplayName: m.DisplayName,
+    Enabled: m.Enabled}'
+  description: 'E4 空心 3: 审计 after.UpdatedAt 缺失, assertConfigOpFull 不读该字段 → 仍绿'
+- mutant_id: M-taint-escape
+  mutant_class: taint_escape
+  target_file: internal/topic/registry.go
+  match: // 存在则置 enabled=false，与 config_ops 留痕同事务提交。同 op_id 重放同 UpsertMember。
+  replacement: "// sweepEscape 探针注入 (E4 taint 逃逸复现): 条件重绑定清掉受限句柄 taint。\nfunc (r *registry)\
+    \ sweepEscape(ctx context.Context, safe bool) error {\n\tc := r.st.ConfigOps()\n\
+    \tif safe {\n\t\tc = r.st.Cards()\n\t}\n\t_, err := c.UpdateOne(ctx, bson.M{\"\
+    probe\": true}, bson.M{\"$set\": bson.M{\"x\": 1}})\n\treturn err\n}\n\n// 存在则置\
+    \ enabled=false，与 config_ops 留痕同事务提交。同 op_id 重放同 UpsertMember。"
+  description: 'E4 空心 4: 条件重绑定清 taint 后 UpdateOne config_ops, TestAppendOnlyCollections
+    扫描器漏检 → 仍绿'
+- mutant_id: M-scratch-shallow-copy
+  mutant_class: shallow_copy
+  target_file: internal/topic/deps.go
+  match: "\tout := make([]store.TopicCard, len(s.cards))\n\tcopy(out, s.cards)\n\t\
+    return out"
+  replacement: "\treturn s.cards"
+  description: 'E4 空心 5: ScratchState.Cards() 退化为直接共享底层数组, 无对抗测试 → 仍绿'

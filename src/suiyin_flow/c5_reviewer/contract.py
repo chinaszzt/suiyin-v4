@@ -17,7 +17,8 @@ from suiyin_flow.identity import LOCAL_ID_PATTERN
 # v0.2.0 (2026-08-12): MINOR — P0-1 canonical identity:
 #   task_id pattern 放宽 (LOCAL_ID_PATTERN, T-001B 合法) + 输入加 feature_id
 #   (可选) + 落盘 reviews/<uuid> → reviews/<review_key>/<uuid> (可按身份键定位)
-CONTRACT_VERSION: str = "v0.2.0"
+# v0.3.0 (2026-08-12): MINOR — P0-4: 输入加可选 task_ids[] (subject=feature 收口 review)
+CONTRACT_VERSION: str = "v0.3.0"
 
 # -------------------------------------------------------------------
 # Enums
@@ -82,6 +83,14 @@ class ReviewInput(BaseModel):
         description=(
             "canonical key 上半 (P0-1, 可选); 提供时 review 落盘键 = "
             "<safe_feature>-<task_id>, 缺省退化 task_id"
+        ),
+    )
+    task_ids: list[str] | None = Field(
+        default=None,
+        description=(
+            "v0.3.0 (P0-4): subject=feature 时的成员 task 清单; 提供时 "
+            "task_id 槽位放 feature_id, review 覆盖整个 feature diff。"
+            "单 task review (subject=task) 不传"
         ),
     )
     criticality: Criticality = Field(

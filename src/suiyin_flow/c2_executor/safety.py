@@ -15,6 +15,7 @@ class SafetyViolation(BaseModel):
         "SAFETY_MONGO_PROD_PORT",
         "SAFETY_BZDS_WRITE",
         "SAFETY_CREDENTIAL_IN_DIFF",
+        "SAFETY_RUNTIME_ARTIFACT_IN_DIFF",
     ]
     detail: str
     matched_text: str
@@ -119,11 +120,29 @@ def check_command(cmd: str) -> list[SafetyViolation]:
     return violations
 
 
+_RUNTIME_ARTIFACT_HEADER = re.compile(r"^\+\+\+ (?:b/)?\.suiyin/")
+
+
 def check_diff(diff_text: str) -> list[SafetyViolation]:
-    """只扫描 git diff 新增行，应用全部三条安全规则。"""
+    """扫描 git diff：新增行应用规则 1-3；文件头应用规则 4（运行时工件入库）。"""
     violations: list[SafetyViolation] = []
     for line in diff_text.splitlines():
-        if not line.startswith("+") or line.startswith("+++"):
+        if line.startswith("+++"):
+            # 规则 4 (v0.5.1, E4 floor blocker 承接): .suiyin/ 运行时工件
+            # (session log / report / state) 绝不入库
+            if _RUNTIME_ARTIFACT_HEADER.match(line):
+                violations.append(
+                    SafetyViolation(
+                        rule_id="SAFETY_RUNTIME_ARTIFACT_IN_DIFF",
+                        detail=(
+                            ".suiyin/ 运行时工件被提交入 git"
+                            "（session log 等含敏感路径与会话内容）。"
+                        ),
+                        matched_text=_truncate(line),
+                    )
+                )
+            continue
+        if not line.startswith("+"):
             continue
         violations.extend(_check_line(line[1:], include_credentials=True))
     return violations

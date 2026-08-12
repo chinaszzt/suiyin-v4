@@ -57,7 +57,7 @@ class VerifyInput(BaseModel):
     target: Target
     task_id: str | None = Field(
         default=None,
-        pattern=r"^T-\d{3,}$",
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",  # LOCAL_ID_PATTERN (P0-1 cascade)
         description="C2 闭环时透传；独立跑 C4 (CI / 人手动) 时可空",
     )
     spec_ref: str = Field(description="spec.md 路径，相对 repo_root 或绝对路径")
