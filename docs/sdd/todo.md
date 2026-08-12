@@ -405,6 +405,11 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - `c2_executor/safety.py` 三规则（27017 数字边界 / bzds 写共现 / 凭证 pattern+占位符白名单）；挂 execute_task（session 前）+ _finalize_success（commit 采纳前）；C2 v0.5.0 `SAFETY_BLOCKED`
 - [x] **P0-6 成本记账最小版** ✅ (2026-08-12, PR #67, **codex 外包实现**)
   - `costlog.py` 双行 JSONL（running + 终态，kill -9 留痕）；canonical key 身份；usage 缺失≠错误 / 结构异常 → cost_log_error 显式；写盘失败不抛；挂 C2/C5 run_session
+- [x] **P0 整链验收 — 8 条 E4 blocker 归因表** ✅ (2026-08-13, evidence: `dogfood/P0-attribution/`)
+  - **6 检出 / 1 未捕获 / 1 预期漏**：1-5 空心 → mutation 5/5；8 hygiene → safety 规则 4 ×3；7 seam → M3 未建如实记录
+  - **#6 (done→merged 行为违例) → C5 residual 未捕获 0/2**，含尺子对照实验：同 C5 同 diff，spec 输入 approve/0 → **契约输入 block/1 真 finding**（"审查质量是尺子的函数"方向性实证）；落点 = M3 C5 typed inputs（拍板 7）+ R3 场景绑定（拍板 10），均已排期
+  - 校准附注：P0-5 三条老规则对 desk 真 diff 误报 73 处（守卫断言/测试夹具）→ **M1 迁移必须处理误报面**，否则 desk 收口被安全闸卡死；规则 4 零误报
+  - **下一步 = desk 实操：M0（冻结源 commit + effective-constitution + exception-registry）**，见 gen4-plan §四
 
 ### P2.0.5 — 并行盲区三件（2026-08-12 expense-tracker 双变体实验 + desk 002·T001 复盘移植；Q7-2 的前置约束）
 
@@ -602,9 +607,10 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 已完成: r4 #1/#2/#3（constitution_ref / reverify shell && / reverify 诊断）+ Q7-1 真并行开闸（C7 v0.1.2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
-【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）** —— 三代合流后 P2.0 优先级
-压过原 P1.4 推荐。P0 最小可信链进度见 todo §P2.0：**P0-1 身份与基线已完成
-(2026-08-12, canonical key + precheck v2)，下一件 = P0-2 AC 冻结闸**。
+【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）+ todo §P2.0** ——
+**P0 六件已全部完成 (2026-08-12~13) + 整链验收归因表达成 (dogfood/P0-attribution/)**。
+下一步 = **desk 实操 M0**（冻结 desk 源 commit + effective-constitution + exception-registry，
+gen4-plan §四）；M1 时必须处理安全闸对 desk 的 73 处误报面（归因表校准附注）。
 原推荐 (Q7-2 parked→R2 / C3 / C11 / C10) 降为 P1-P2,见 gen4-plan.md §三移植清单。
 低优先: r4 #4 auto-commit 不一致 / #5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
 

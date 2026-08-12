@@ -1,0 +1,10 @@
+rule hits on main...v4lab/e4-cross:
+SAFETY_RUNTIME_ARTIFACT_IN_DIFF: 3
+SAFETY_BZDS_WRITE: 22
+SAFETY_MONGO_PROD_PORT: 33
+SAFETY_CREDENTIAL_IN_DIFF: 18
+
+rule-4 matches:
+SAFETY_RUNTIME_ARTIFACT_IN_DIFF: +++ b/.suiyin/sessions/attempt-1.log
+SAFETY_RUNTIME_ARTIFACT_IN_DIFF: +++ b/.suiyin/sessions/attempt-2.log
+SAFETY_RUNTIME_ARTIFACT_IN_DIFF: +++ b/.suiyin/sessions/attempt-3.log
