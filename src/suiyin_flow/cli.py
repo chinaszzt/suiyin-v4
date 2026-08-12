@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import sys
 
+from suiyin_flow.acgate import cli as acgate_cli
 from suiyin_flow.c1_planning import cli as c1_cli
 from suiyin_flow.c2_executor import cli as c2_cli
 from suiyin_flow.c4_verify import cli as c4_cli
@@ -23,7 +24,7 @@ from suiyin_flow.c6_gate import cli as c6_cli
 from suiyin_flow.c7_coordinator import cli as c7_cli
 
 _USAGE = """\
-usage: suiyin-flow {plan,verify,task,review,gate,phase} ...
+usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate} ...
 
 Subcommands:
   plan     C1 Planning Engine (tasks.yaml → execution_plan 依赖分层 + 并行组, P1.3)
@@ -32,6 +33,7 @@ Subcommands:
   review   C5 AI Reviewer (独立 session 审 PR, P1.2)
   gate     C6 Gate Contract (自动 merge gate, P1.2 阶段 3.2)
   phase    C7 Phase Coordinator (逐 phase 调度 + ff-merge 回 feature, P1.3)
+  acgate   AC 冻结闸 (行为/守卫测试 diff 拦截, gen4-plan P0-2)
 
 详细帮助: `suiyin-flow <subcommand> --help`
 """
@@ -59,6 +61,8 @@ def main(argv: list[str] | None = None) -> int:
         return c6_cli.main(args)
     if cmd == "phase":
         return c7_cli.main(args)
+    if cmd == "acgate":
+        return acgate_cli.main(args)
 
     print(f"suiyin-flow: error: unknown subcommand: {cmd}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)
