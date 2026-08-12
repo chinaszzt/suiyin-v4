@@ -41,12 +41,19 @@ properties:
       缺失 → C5 仅基于 spec/plan/diff review（仍 work，但 AC 覆盖判断变弱）
   task_id:
     type: string
-    pattern: '^T-\d{3,}$'
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'   # v0.2.0 LOCAL_ID_PATTERN (P0-1)
     description: |
       **required (v0.1.1)**：所有 PR 必须来自 task（含 hotfix / Initiative），
       C5 强制要求 task_id 关联回 origin task。让 finding 可回链 task、跨 attempt
       audit、verify_report 关联。设计上 C5 不审"非 task PR"（这种情况应当先
       把任务 task 化, 而非走 C5 ad-hoc review）。
+      v0.2.0：local id（feature 内唯一），全局身份 = feature_id + task_id。
+  feature_id:
+    type: string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+    description: |
+      optional (v0.2.0, P0-1)：canonical key 上半。提供时 review 落盘键 =
+      `<safe_feature>-<task_id>`；缺省退化 task_id（兼容旧调用方）。
   criticality:
     enum: [low, medium, high]
     description: |
@@ -118,7 +125,7 @@ properties:
     description: 'always；本次 review session 唯一 ID（UUID）'
   task_id:
     type: string
-    pattern: '^T-\d{3,}$'
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
     description: 'conditional（when input.task_id 非空）；透传'
   pr_ref:
     type: string
@@ -184,11 +191,11 @@ properties:
 
 ### 3.2 Side Effects
 
-- 创建临时 review dir（默认 `<repo_root>/.suiyin/reviews/<session_id>/`），存 session log + finding 中间产物
+- 创建 review dir（v0.2.0：`<repo_root>/.suiyin/reviews/<review_key>/<session_id>/`，`review_key = <safe_feature>-<task_id>`，feature 缺省退化 task_id——P0-1 按 canonical key 可定位，旧裸 uuid 目录与身份脱钩），存 session log + finding 中间产物
 - 调用 `claude` CLI headless（同 C2 §7 "Session 调用模式" 4 个必需 flag）
 - 调用 `gh pr diff <pr_ref>` 或 `git diff <base_branch>...<pr_ref>` 拉 PR diff
 - `complexity` 类 finding 触发时调用 **C11 query 接口**（Fork L: embedding 语义查重 + jscpd 语法兜底），P1.2 阶段 C11 未落地时降级为只跑 jscpd
-- 写 `review_report.json` 到 `<repo_root>/.suiyin/reviews/<session_id>/report.json`
+- 写 `review_report.json` 到 `<repo_root>/.suiyin/reviews/<review_key>/<session_id>/`（versioned + latest.json）
 - **不**修改源码、**不** commit、**不** push（C5 是只读审查）
 
 ### 3.3 Failure Modes
@@ -415,11 +422,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.3-draft
-**Last Updated**: 2026-07-09
-**Status**: draft — P1.2 起步 spec, 待 spike 验证 Q5 / Q5-5 (R2 retry-with-feedback) 后转 v0.2
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-08-12
+**Status**: draft — P1.2 起步 spec；v0.2.0 canonical identity（gen4-plan P0-1）；Q5 / Q5-5 spike 待续
 
 **Changelog**:
+- v0.2.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) §2.1 加 `feature_id`（可选）；(2) `task_id` pattern 放宽为 LOCAL_ID_PATTERN（`T-001B` 合法，002·T001 实验拒收案例转正）；(3) §3.2 落盘 `reviews/<session_id>` → `reviews/<review_key>/<session_id>`（`review_key = <safe_feature>-<task_id>`，缺省退化 task_id）——review 可按身份键定位，为 P0-6 成本台账同键铺路。CONTRACT_VERSION → v0.2.0。
 - v0.1.3 (2026-07-09): **PATCH** — §2.2 category 注释 + §4 checklist：cross_platform 的 `shell=True` 判定加"用户命令字符串"例外（ADR-0005，constitution v0.2.3 cascade；C7 v0.1.1 reverify 即该例外的合法使用）。`prompt.py` 同句同步。CONTRACT_VERSION 不变（report schema 未动）。
 - v0.1.2 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。跟 C2 v0.3.1 同源修正（r4 真闭环发现 #1）：C5 在业务项目 review 时同样校验 ref 存在，旧默认是 v4 自身路径会误报 `SPEC_NOT_FOUND`。CONTRACT_VERSION 不变（review_report schema 未变，仅 input 默认值）。
 - v0.1.1 (2026-05-24): **PR #29 review 反馈修订** (user 审 v0.1.0 后):

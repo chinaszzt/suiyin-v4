@@ -127,7 +127,10 @@ def make_fake_execute(
         record.setdefault("calls", []).append(tid)
         record.setdefault("open_pr_seen", {})[tid] = task_input.open_pr
         wt = ensure_worktree(
-            Path(task_input.repo_root), tid, task_input.base_branch
+            Path(task_input.repo_root),
+            task_input.feature_id,
+            tid,
+            task_input.base_branch,
         )
         record.setdefault("visible_at_dispatch", {})[tid] = sorted(
             p.name for p in wt.iterdir() if p.suffix == ".txt"

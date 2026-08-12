@@ -10,21 +10,22 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from suiyin_flow.c7_coordinator.schema import CoordinatorAbort, CoordinatorState
+from suiyin_flow.identity import safe_ref
 
-# 同 C6 §3.2 转义规则 (跨平台文件名安全, NC-5)
-_UNSAFE_CHARS = re.compile(r'[/\\:?"<>|\s]+')
-
-
-def safe_ref(name: str) -> str:
-    """分支名 → 文件名安全字符串. 例 'claude/login-core-r2' → 'claude-login-core-r2'."""
-    return _UNSAFE_CHARS.sub("-", name).strip("-") or "unknown"
+__all__ = [
+    "StateStore",
+    "latest_path_for",
+    "load_latest",
+    "make_run_id",
+    "phase_state_dir",
+    "safe_ref",  # P0-1: 权威实现移居 suiyin_flow.identity, 此处 re-export 兼容
+]
 
 
 def make_run_id() -> str:

@@ -78,6 +78,7 @@ def execute_task(
     # 创建/复用 worktree (raises WORKTREE_CONFLICT if mismatch)
     wt_path = ensure_worktree(
         repo_root=repo_root,
+        feature_id=task_input.feature_id,
         task_id=task_input.task_id,
         base_branch=task_input.base_branch,
     )
@@ -201,9 +202,9 @@ def _finalize_success(
 ) -> TaskOutput:
     """成功后 commit + push + (best effort) 开 PR. 返回 TaskOutput.
 
-    open_pr=False (C7 调度, C7 spec I6): 跳过 push + PR, 只留本地 task/<id> 分支.
+    open_pr=False (C7 调度, C7 spec I6): 跳过 push + PR, 只留本地 task 分支.
     """
-    branch = worktree_branch_name(task_input.task_id)
+    branch = worktree_branch_name(task_input.feature_id, task_input.task_id)
     diff_stats = _compute_diff_stats(wt_path, task_input.base_branch)
     pr_url_or_branch: str | None = None
     if task_input.open_pr:
@@ -376,6 +377,14 @@ def _make_parser() -> argparse.ArgumentParser:
 
     run_p = task_sub.add_parser("run", help="跑一个 task")
     run_p.add_argument("--task-id", required=True)
+    run_p.add_argument(
+        "--feature-id",
+        default="",
+        help=(
+            "canonical key 上半 (P0-1); 约定 = spec-kit feature 目录名。"
+            "缺省从 base_branch 派生"
+        ),
+    )
     run_p.add_argument("--spec", dest="spec_ref", required=True)
     run_p.add_argument("--plan", dest="plan_ref", required=True)
     run_p.add_argument(
@@ -467,6 +476,7 @@ def _cmd_task_run(args: argparse.Namespace) -> int:
     try:
         task_input = TaskInput(
             task_id=args.task_id,
+            feature_id=args.feature_id,
             spec_ref=args.spec_ref,
             plan_ref=args.plan_ref,
             constitution_ref=args.constitution_ref,
@@ -527,6 +537,7 @@ def _cmd_task_batch(args: argparse.Namespace) -> int:
             manifest,
             repo_root=str(repo_root),
             dry_run=args.dry_run,
+            manifest_path=Path(args.tasks_yaml),
         )
     except BatchAdapterError as e:
         # 例: precheck_refs_on_base 发现 spec_ref/plan_ref 未提交到 base_branch

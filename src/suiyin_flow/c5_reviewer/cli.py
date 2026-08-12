@@ -31,6 +31,7 @@ from suiyin_flow.c5_reviewer.report import (
     write_report,
 )
 from suiyin_flow.c5_reviewer.session import run_session
+from suiyin_flow.identity import review_key
 
 
 def execute_review(
@@ -50,9 +51,17 @@ def execute_review(
     validate_repo_root(repo_root)
     validate_refs(review_input)
 
-    # Temporary review dir (per spec §3.2 + NC-4 隔离)
+    # Review dir (per spec §3.2 + NC-4 隔离)
+    # P0-1: reviews/<review_key>/<session_id> — 按 canonical key 可定位
+    # (旧 reviews/<uuid> 与 task 身份完全脱钩); session_id 保留为 run 维度
     session_id = str(uuid.uuid4())
-    review_dir = repo_root / ".suiyin" / "reviews" / session_id
+    review_dir = (
+        repo_root
+        / ".suiyin"
+        / "reviews"
+        / review_key(review_input.feature_id, review_input.task_id)
+        / session_id
+    )
 
     # 1. Pull PR diff
     pr_diff_path = review_dir / "pr_diff.patch"
@@ -158,6 +167,11 @@ def _make_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--verify-report", dest="verify_report_path", default=None)
     run_p.add_argument("--task-id", required=True, help="所有 PR 必走 task (v0.1.1)")
     run_p.add_argument(
+        "--feature-id",
+        default=None,
+        help="canonical key 上半 (P0-1, 可选); 落盘键 <feature>-<task_id>",
+    )
+    run_p.add_argument(
         "--criticality", choices=["low", "medium", "high"], default="medium"
     )
     run_p.add_argument("--repo-root", required=True)
@@ -184,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
             constitution_ref=args.constitution_ref,
             verify_report_path=args.verify_report_path,
             task_id=args.task_id,
+            feature_id=args.feature_id,
             criticality=args.criticality,
             repo_root=str(Path(args.repo_root).resolve()),
             session_timeout_seconds=args.session_timeout_seconds,

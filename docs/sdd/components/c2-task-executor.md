@@ -30,8 +30,18 @@ required: [task_id, spec_ref, plan_ref, context_seeds, verify_cmd, criticality, 
 properties:
   task_id:
     type: string
-    pattern: '^T-\d{3,}$'
-    description: 全 repo 唯一，例 'T-042'
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'   # LOCAL_ID_PATTERN (identity.py)
+    description: >
+      feature 内唯一 (local id)，例 'T-042' / 'T-001B'（v0.4.0 放宽——旧
+      ^T-\d{3,}$ 在 002·T001 沙盒实验中拒收 T-001B，gen4-plan P0-1 转正）。
+      全局身份 = feature_id + task_id (canonical key)
+  feature_id:
+    type: string
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+    description: >
+      optional; canonical key 上半（P0-1），约定 = spec-kit feature 目录名
+      （例 '001-login-core'）。缺省从 base_branch 派生
+      （identity.derive_feature_id，safe_ref 转义），向后兼容旧调用方
   spec_ref:
     type: string
     description: spec.md 路径（相对 repo_root），例 '.specify/specs/003-login/spec.md'
@@ -76,7 +86,7 @@ properties:
     type: boolean
     default: true
     description: |
-      false 时跳过 push + gh pr create，只留本地 task/<id> 分支
+      false 时跳过 push + gh pr create，只留本地 task/<feature_id>/<id> 分支
       （pr_created=false，pr_url_or_branch=分支名）。
       C7 Phase Coordinator 调度时传 false —— task→feature 是本地 merge 语义，
       PR 只在 feature→main 层（C7 spec §3.1 I6，真闭环 dogfood 发现 #7 决议）。
@@ -126,7 +136,7 @@ properties:
     description: |
       conditional（when status=success）；success 时必填：
       gh 可用 + remote 配置 → PR URL（如 'https://github.com/o/r/pull/42'）；
-      gh 不可用 / 无 remote → 本地分支名（如 'task/T-042'）。
+      gh 不可用 / 无 remote → 本地分支名（如 'task/004-auth/T-042'）。
       status=failed 时此字段为 null（应同时看 pr_created 字段）。
   pr_created:
     type: boolean
@@ -178,13 +188,13 @@ properties:
   "task_id": "T-042",
   "status": "success",
   "attempts": 2,
-  "worktree_path": "/Users/u/repo/worktrees/T-042",
+  "worktree_path": "/Users/u/repo/worktrees/004-auth/T-042",
   "pr_url_or_branch": "https://github.com/o/r/pull/77",
   "pr_created": true,
-  "verify_report_path": "/Users/u/repo/worktrees/T-042/.suiyin/verify/latest.json",
+  "verify_report_path": "/Users/u/repo/worktrees/004-auth/T-042/.suiyin/verify/latest.json",
   "session_logs": [
-    {"attempt": 1, "log_path": "/Users/u/repo/worktrees/T-042/.suiyin/sessions/attempt-1.log", "duration_seconds": 421.5, "verify_pass": false},
-    {"attempt": 2, "log_path": "/Users/u/repo/worktrees/T-042/.suiyin/sessions/attempt-2.log", "duration_seconds": 287.3, "verify_pass": true}
+    {"attempt": 1, "log_path": "/Users/u/repo/worktrees/004-auth/T-042/.suiyin/sessions/attempt-1.log", "duration_seconds": 421.5, "verify_pass": false},
+    {"attempt": 2, "log_path": "/Users/u/repo/worktrees/004-auth/T-042/.suiyin/sessions/attempt-2.log", "duration_seconds": 287.3, "verify_pass": true}
   ],
   "diff_stats": {"files_changed": 4, "insertions": 156, "deletions": 23}
 }
@@ -197,10 +207,10 @@ properties:
   "task_id": "T-042",
   "status": "failed",
   "attempts": 4,
-  "worktree_path": "/Users/u/repo/worktrees/T-042",
+  "worktree_path": "/Users/u/repo/worktrees/004-auth/T-042",
   "pr_url_or_branch": null,
   "pr_created": false,
-  "verify_report_path": "/Users/u/repo/worktrees/T-042/.suiyin/verify/latest.json",
+  "verify_report_path": "/Users/u/repo/worktrees/004-auth/T-042/.suiyin/verify/latest.json",
   "session_logs": [
     {"attempt": 1, "log_path": "...attempt-1.log", "duration_seconds": 380.0, "verify_pass": false},
     {"attempt": 2, "log_path": "...attempt-2.log", "duration_seconds": 412.1, "verify_pass": false},
@@ -244,25 +254,25 @@ properties:
 
 ### 3.1 Invariants
 
-- **I1**: 每个 task 对应**唯一** worktree `worktrees/<task_id>`。同 task_id 复跑必须先清理或复用旧 worktree（按 `--clean` flag）。
+- **I1**: 每个 task 对应**唯一** worktree `worktrees/<feature_id>/<task_id>`。同 task_id 复跑必须先清理或复用旧 worktree（按 `--clean` flag）。
 - **I2**: AI session 在 worktree 内启动，**严禁在主仓库工作树跑**。**这是 constitution NC-4（隔离 worktree 是自动化执行的安全边界）的具体实现** — `--permission-mode bypassPermissions` 模型的安全边界即 worktree 边界。
 - **I3**: `verify_cmd` 在 worktree 内绿才 push；非绿不 push、不开 PR。
 - **I4**: 每次 attempt 都跑独立 session（fresh context），不继承上一轮 stdout/stderr，但**继承代码变更**（同 worktree）—— 让 AI 在已有半成品上继续。
 - **I5**: `criticality=high` 直接报 `HIGH_CRITICALITY_REJECT`，调度责任在 C3，不在 C2。
 - **I6**: PR 描述里必须包含 `spec_ref` + `ac_list` + `attempts`，便于 C5 Reviewer 关联回 spec。
 - **I7**: 单 session 超 `session_timeout_seconds` 强制 `kill -9`，**不允许优雅退出超时**（避免假活）。
-- **I8**: 同一 worktree 同时至多一个活跃 C2 run。run 起步（worktree 创建/复用后、session 启动前）在 `worktrees/<task_id>/.suiyin/lock` 写 pid 锁（`O_CREAT|O_EXCL` 原子创建），终态（success / RETRY_EXHAUSTED 等一切退出路径）释放；已存在且持有者 pid 存活（`psutil.pid_exists`）→ `WORKTREE_LOCKED` 拒跑，不动 worktree 内容；pid 已死或锁内容损坏 = stale → 确定性接管。**真闭环 dogfood 发现 #8 的 C2 半边** —— C7 的 I9 coordinator 锁挡「同 manifest 双 coordinator」，本锁挡「coordinator 在跑 + 人又直跑单 task」的交叉竞态（C7 spec §7 联动需求 2）。锁文件与 C7 coordinator 锁同 pattern（pid + task_id + start_ts JSON）。
+- **I8**: 同一 worktree 同时至多一个活跃 C2 run。run 起步（worktree 创建/复用后、session 启动前）在 `worktrees/<feature_id>/<task_id>/.suiyin/lock` 写 pid 锁（`O_CREAT|O_EXCL` 原子创建），终态（success / RETRY_EXHAUSTED 等一切退出路径）释放；已存在且持有者 pid 存活（`psutil.pid_exists`）→ `WORKTREE_LOCKED` 拒跑，不动 worktree 内容；pid 已死或锁内容损坏 = stale → 确定性接管。**真闭环 dogfood 发现 #8 的 C2 半边** —— C7 的 I9 coordinator 锁挡「同 manifest 双 coordinator」，本锁挡「coordinator 在跑 + 人又直跑单 task」的交叉竞态（C7 spec §7 联动需求 2）。锁文件与 C7 coordinator 锁同 pattern（pid + task_id + start_ts JSON）。
 
 ### 3.2 Side Effects
 
-- 创建 `worktrees/<task_id>/`（git worktree add）
+- 创建 `worktrees/<feature_id>/<task_id>/`（git worktree add）
 - worktree 内产生 commits（每 attempt 至少 1 个 commit，便于 review）
-- push 到 remote `origin/task/<task_id>`（remote 配置时），否则停在本地分支
+- push 到 remote `origin/task/<feature_id>/<task_id>`（remote 配置时），否则停在本地分支
 - 调用 `gh pr create`（gh CLI 可用时），否则只输出分支名
 - 跑 `verify_cmd` 期间可能调用业务项目 toolchain（dart / pnpm / pytest / ...）
 - 写 `verify_report.json`（C4 输出，C2 透传路径，不解析内容）
-- 写 session log 到 `worktrees/<task_id>/.suiyin/sessions/attempt-{N}.log`
-- 写/删 `worktrees/<task_id>/.suiyin/lock` pid 锁（I8；run 起步创建，终态释放；`.suiyin/` gitignored 不入库）
+- 写 session log 到 `worktrees/<feature_id>/<task_id>/.suiyin/sessions/attempt-{N}.log`
+- 写/删 `worktrees/<feature_id>/<task_id>/.suiyin/lock` pid 锁（I8；run 起步创建，终态释放；`.suiyin/` gitignored 不入库）
 - 计算 `diff_stats` 时跑 `git diff --shortstat <base_ref>...HEAD`：**fallback 链** = 先试 `origin/<base_branch>`，origin 缺失则 fallback 到本地 `<base_branch>`（dogfood 场景常见 base_branch 未 push 到 remote；P0 spike 经验，见 PR #25）
 - task 完成后 worktree **保留**（C6 merge 后由 cleanup 阶段或人工删，C2 不删）
 
@@ -274,11 +284,11 @@ properties:
 | `SESSION_CRASHED` | Claude Code CLI 非 0 退出（含 OOM / SIGSEGV / API 429） | 记录 stderr tail，重试 |
 | `VERIFY_FAILED` | session 结束但 `verify_cmd` 非 0 | 透传 verify_report.json，重试（attempt 内重启 session 让 AI 自己 fix） |
 | `RETRY_EXHAUSTED` | `attempts > max_retries` 仍未 pass | 终态 failed，**worktree 保留**等人介入 |
-| `WORKTREE_CONFLICT` | `worktrees/<task_id>` 已存在且分支不是 `task/<task_id>` | 立即报错，不覆盖 |
+| `WORKTREE_CONFLICT` | `worktrees/<feature_id>/<task_id>` 已存在且分支不是 `task/<feature_id>/<task_id>` | 立即报错，不覆盖 |
 | `SPEC_NOT_FOUND` / `CONTEXT_SEEDS_MISSING` | 输入路径不存在 | 立即报错，不启动 session |
 | `HIGH_CRITICALITY_REJECT` | `criticality=high` | 立即报错，提示调用 C3 |
 | `INVALID_TASK_ID` | 不符合 `T-\d{3,}` | 立即报错 |
-| `WORKTREE_LOCKED` | `worktrees/<task_id>/.suiyin/lock` 存在且持有者 pid 存活 | 立即报错，不启动 session、不动 worktree（details 带 `holder_pid` + `lock_path`）|
+| `WORKTREE_LOCKED` | `worktrees/<feature_id>/<task_id>/.suiyin/lock` 存在且持有者 pid 存活 | 立即报错，不启动 session、不动 worktree（details 带 `holder_pid` + `lock_path`）|
 | `REVIEW_FEEDBACK_INVALID` | `review_feedback` 路径不存在 / JSON 解析失败 / `findings` 缺失或为空 | 立即报错，不启动 session |
 
 **重试策略**：
@@ -360,8 +370,8 @@ verify 没绿时不要 commit。你可以重复跑 verify_cmd 调试。
 - **AC-3**: 给定不存在的 `spec_ref`，返回 `SPEC_NOT_FOUND`，不启动 worktree
 - **AC-4**: AI session 跑超 `session_timeout_seconds`，返回 `TIMEOUT` 且进程被 `kill -9`
 - **AC-5**: verify_cmd 连续 `max_retries+1` 次非 0，返回 `RETRY_EXHAUSTED` 且 worktree 保留
-- **AC-6**: 同 `task_id` 复跑且 `worktrees/<task_id>/` 已存在异源分支，返回 `WORKTREE_CONFLICT`，不覆盖
-- **AC-7**: `worktree_path` 命名严格为 `worktrees/<task_id>`，跨 100 次调用 100% 满足
+- **AC-6**: 同 `task_id` 复跑且 `worktrees/<feature_id>/<task_id>/` 已存在异源分支，返回 `WORKTREE_CONFLICT`，不覆盖
+- **AC-7**: `worktree_path` 命名严格为 `worktrees/<feature_id>/<task_id>`，跨 100 次调用 100% 满足
 - **AC-8**: 成功时 PR / 分支描述含 `task_id` + `ac_list` + `attempts` 三个字段
 - **AC-9**: 每个 attempt 在 `.suiyin/sessions/attempt-{N}.log` 留下完整 stdout/stderr
 - **AC-10**: 给定 `review_feedback` 指向合法 C5 report（≥1 finding），渲染的 prompt 含「上次 Review 发现的问题」节及每条 finding 的 `location` + `suggested_fix`（severity 降序），且 output `review_feedback_applied=true`；未提供时该节不出现且 `review_feedback_applied=false`
@@ -463,7 +473,7 @@ suiyin-flow = "suiyin_flow.cli:main"
 | 进程树 kill | `psutil.Process(pid).children(recursive=True)` 拿子进程再批量 kill；**不要**用 `os.killpg`（POSIX only） | — |
 | subprocess 调用 | `shell=False` + `list[str]` args | `shell=True` ❌（Windows cmd 语义不同，引号转义陷阱） |
 | 子进程 Python I/O 编码 | spawn 子进程（claude session 等）时 env = **继承父环境** + 叠加 `PYTHONIOENCODING=utf-8` / `PYTHONUTF8=1`——父端 Popen 的 `encoding="utf-8"` 只管父侧管道编解码，不改变子进程自身的 locale 默认 | 只设父端 encoding ❌（Windows 非 UTF-8 locale 下子进程读含中文的 prompt 被 surrogateescape 静默损坏，直到重编码才炸 `UnicodeEncodeError`——issue #60 Windows CI 实证） |
-| worktree 命名 | 只用 ASCII (`task_id` pattern 已限制 `T-\d+`) | 非 ASCII 路径在 Windows NTFS / Git for Windows 下 quirks |
+| worktree 命名 | 只用 ASCII (`task_id`/`feature_id` pattern 均限 ASCII slug, v0.4.0 LOCAL_ID_PATTERN) | 非 ASCII 路径在 Windows NTFS / Git for Windows 下 quirks |
 | 换行 | 文件读写 binary 模式或 explicit `encoding='utf-8', newline=''` | text 模式默认 newline 转换在 Windows 上会改写 CRLF |
 | gh / git CLI | 用 `shutil.which('gh')` 探测，找不到降级 | hardcode `/usr/local/bin/gh` ❌ |
 
@@ -505,11 +515,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.3.2-draft
-**Last Updated**: 2026-07-09
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目；v0.3.2 子进程 UTF-8 I/O 强制（Windows CI 实证）
+**Version**: v0.4.0-draft
+**Last Updated**: 2026-08-12
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目；v0.3.2 子进程 UTF-8 I/O 强制（Windows CI 实证）；v0.4.0 canonical identity（gen4-plan P0-1）
 
 **Changelog**:
+- v0.4.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) §2.1 加 `feature_id`（可选，缺省从 base_branch 派生；约定 = spec-kit feature 目录名），canonical key = `feature_id + task_id`，单一权威实现 `suiyin_flow/identity.py`；(2) `task_id` pattern `^T-\d{3,}$` → LOCAL_ID_PATTERN（`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`）——002·T001 沙盒实验 `T-001B` 被 schema 拒收的案例转正，模板仍推荐 `T-NNN`；(3) **I1 修订**：worktree `worktrees/<feature_id>/<task_id>`、分支 `task/<feature_id>/<task_id>`——不同 feature 的同名 task 不再互撞；(4) batch manifest schema v0.2.0（顶层 `feature_id`；v0.1.0 兼容读 + 派生提示）；(5) precheck v2：`constitution_ref` 一并查 base 可见性 + tasks.yaml 自身与 base HEAD 一致性（C1 execution_plan 写回未 commit → fail-fast）+ base 不可解析从静默跳过改 stderr 警告。AC-7 更新 + tests/test_identity_p0_1.py（T-001B 回归靶 / 兼容读 / 漂移失败型）。
 - v0.3.2 (2026-07-09): **PATCH** — §7 跨平台表加「子进程 Python I/O 编码」行：spawn 子进程时 env 继承父环境并叠加 `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`。**issue #60 Windows CI 首跑实证**：父端 `Popen(encoding="utf-8")` 只管父侧管道，Windows 非 UTF-8 locale 的子进程读中文 prompt 会 surrogateescape 静默损坏、重编码时才炸（AC-10 retry 4 连崩现场）。C5 session / C1 semantic 同源同修（其 spec 跨平台节均为「继承 C2 §7 表」引用式，不另 bump）。§7 测试要求标注 Windows CI 已落地（3-OS matrix + `ci-ok` required check）。impl: PR #62
 - v0.3.1 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。**r4 真闭环发现 #1**：旧默认是 v4 自身的 constitution 路径，业务项目（v5）跑 C2 时校验「constitution_ref 在 base HEAD 可见」(v0.2.1) → `SPEC_NOT_FOUND` 阻断整个 phase run。v4 自身 dogfood 是特例（显式传 `docs/sdd/constitution.md`）；全部单元测试显式传 `constitution.md` → 零影响。cascade：C5 spec 同步（c5_reviewer 同源默认）+ `tasks-template.md` / `sy-tasks SKILL` schema 默认。
 - v0.3.0 (2026-06-10): **MINOR** — P1.3 R2 + C7 联动需求 2 双件落地。(1) **R2 retry-with-feedback**（C5 §7 Block Recovery R2 / Q5-5 的 C2 半边）：§2.1 加 `review_feedback`（C5 report 路径，文件系统校验语义），§4 加「上次 Review 发现的问题」渲染规则（severity 降序 + `feedback_disputes` 出口），§2.2 加 `review_feedback_applied` audit 字段，§2.3 加 `REVIEW_FEEDBACK_INVALID`；retry 编排留 caller（新 Q2-6 → Q7-2）。(2) **worktree 活跃 session 锁**（真闭环 dogfood 发现 #8 C2 半边）：§3.1 新 I8（`.suiyin/lock` pid 锁，同 C7 I9 pattern：O_EXCL 原子创建 + psutil 探活 + stale 接管），§2.3 加 `WORKTREE_LOCKED`。AC-10..AC-14。CLI 加 `--review-feedback`。

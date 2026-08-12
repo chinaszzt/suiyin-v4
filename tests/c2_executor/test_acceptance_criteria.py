@@ -72,8 +72,9 @@ def test_AC_1_success_with_valid_input(
     assert output.pr_url_or_branch is not None
     assert output.pr_url_or_branch.startswith(("task/", "http"))
     # Path.match 按 path segment 比较 (跨平台: Windows 上 worktree_path 是
-    # 反斜杠分隔, 字面 endswith("worktrees/T-001") 在 Windows 上恒 False).
-    assert Path(output.worktree_path).match("worktrees/T-001")
+    # 反斜杠分隔, 字面 endswith 恒 False). P0-1: 双段命名, feature 缺省从
+    # base_branch 派生 → worktrees/main/T-001
+    assert Path(output.worktree_path).match("worktrees/main/T-001")
 
 
 # =============================================================================
@@ -90,7 +91,7 @@ def test_AC_2_high_criticality_rejected(
         execute_task(task_input, claude_cmd=mock_claude_success)
     assert exc_info.value.error.code == "HIGH_CRITICALITY_REJECT"
     # worktree 不应被创建
-    wt = worktree_path_for(fixture_repo, "T-001")
+    wt = worktree_path_for(fixture_repo, "main", "T-001")
     assert not wt.exists()
 
 
@@ -105,7 +106,7 @@ def test_AC_3_spec_not_found(fixture_repo: Path) -> None:
     with pytest.raises(TaskExecutorError) as exc_info:
         validate_refs(task_input)
     assert exc_info.value.error.code == "SPEC_NOT_FOUND"
-    wt = worktree_path_for(fixture_repo, "T-001")
+    wt = worktree_path_for(fixture_repo, "main", "T-001")
     assert not wt.exists()
 
 
@@ -177,7 +178,7 @@ def test_AC_4_timeout_killed(
     # last_error 应该是 TIMEOUT
     assert exc_info.value.error.details.get("last_error") == "TIMEOUT"
     # log 文件应该存在 (落盘了)
-    wt = worktree_path_for(fixture_repo, "T-001")
+    wt = worktree_path_for(fixture_repo, "main", "T-001")
     assert (wt / ".suiyin" / "sessions" / "attempt-1.log").exists()
 
 
@@ -198,7 +199,7 @@ def test_AC_5_retry_exhausted_keeps_worktree(
     assert err.details.get("attempts") == 3  # max_retries+1
     assert err.details.get("last_error") == "VERIFY_FAILED"
     # worktree 保留 (spec §3.3 RETRY_EXHAUSTED: worktree 保留等人介入)
-    wt = worktree_path_for(fixture_repo, "T-001")
+    wt = worktree_path_for(fixture_repo, "main", "T-001")
     assert wt.exists()
 
 
@@ -210,7 +211,7 @@ def test_AC_5_retry_exhausted_keeps_worktree(
 def test_AC_6_worktree_conflict_blocks(fixture_repo: Path) -> None:
     """AC-6: 预先用 wrong branch 创建 worktree → execute_task raise WORKTREE_CONFLICT."""
     # 先用 'wrong-branch' 创建同名 worktree
-    wt_path = worktree_path_for(fixture_repo, "T-001")
+    wt_path = worktree_path_for(fixture_repo, "main", "T-001")
     subprocess.run(
         [
             "git",
@@ -236,7 +237,7 @@ def test_AC_6_worktree_conflict_blocks(fixture_repo: Path) -> None:
     err = exc_info.value.error
     assert err.code == "WORKTREE_CONFLICT"
     assert err.details.get("existing_branch") == "wrong-branch"
-    assert err.details.get("expected_branch") == "task/T-001"
+    assert err.details.get("expected_branch") == "task/main/T-001"
 
 
 # =============================================================================
@@ -245,15 +246,16 @@ def test_AC_6_worktree_conflict_blocks(fixture_repo: Path) -> None:
 
 
 def test_AC_7_worktree_path_naming(tmp_path: Path) -> None:
-    """AC-7 (I1 invariant): worktree_path_for 严格返回 <repo>/worktrees/<task_id>."""
-    for task_id in ("T-001", "T-042", "T-12345"):
-        wt = worktree_path_for(tmp_path, task_id)
+    """AC-7 (I1 invariant, v0.4.0): 严格 <repo>/worktrees/<feature_id>/<task_id>."""
+    for task_id in ("T-001", "T-042", "T-12345", "T-001B"):
+        wt = worktree_path_for(tmp_path, "001-demo", task_id)
         assert wt.name == task_id
-        assert wt.parent.name == "worktrees"
-        assert wt.parent.parent == tmp_path.resolve()
+        assert wt.parent.name == "001-demo"
+        assert wt.parent.parent.name == "worktrees"
+        assert wt.parent.parent.parent == tmp_path.resolve()
 
-    # branch 命名也对齐: task/<task_id>
-    assert worktree_branch_name("T-042") == "task/T-042"
+    # branch 命名也对齐: task/<feature_id>/<task_id>
+    assert worktree_branch_name("001-demo", "T-042") == "task/001-demo/T-042"
 
 
 # =============================================================================
@@ -289,7 +291,7 @@ def test_AC_8_pr_description_includes_required_fields(
     monkeypatch.setattr("suiyin_flow.c2_executor.cli.subprocess.run", fake_run)
 
     # 创建 worktree (因为 _open_pr_or_branch 用 wt_path 作 cwd)
-    wt_path = worktree_path_for(fixture_repo, "T-001")
+    wt_path = worktree_path_for(fixture_repo, "main", "T-001")
     subprocess.run(
         [
             "git",
@@ -344,7 +346,7 @@ def test_AC_9_session_logs_persisted(
     task_input = _make_input(fixture_repo)
     output = execute_task(task_input, claude_cmd=mock_claude_success)
 
-    wt = worktree_path_for(fixture_repo, "T-001")
+    wt = worktree_path_for(fixture_repo, "main", "T-001")
     log_path = wt / ".suiyin" / "sessions" / "attempt-1.log"
     assert log_path.exists()
     log_content = log_path.read_text(encoding="utf-8")

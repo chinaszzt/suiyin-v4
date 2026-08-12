@@ -510,7 +510,7 @@ def test_AC_B7_real_run_batch_two_tasks_success(
         assert r.output.pr_url_or_branch.startswith(("task/", "http"))
         # worktree 真创建 —— Path.match 按 path segment 比较 (跨平台: Windows
         # 上 worktree_path 是反斜杠分隔, 字面 endswith("worktrees/...") 恒 False)
-        assert Path(r.output.worktree_path).match(f"worktrees/{r.task_id}")
+        assert Path(r.output.worktree_path).match(f"worktrees/*/{r.task_id}")
 
 
 # =============================================================================
@@ -540,6 +540,7 @@ def test_AC_B8a_uncommitted_spec_ref_fails_fast(
                 task_id="T-001",
                 spec_ref="not-committed.md",  # repo 里不存在
                 plan_ref="plan.md",  # 已 commit
+                constitution_ref="constitution.md",  # 已 commit (precheck v2 也查它)
                 verify_cmd="true",
                 context_seeds=[],
                 ac_list=[],
@@ -577,6 +578,7 @@ def test_AC_B8b_committed_refs_pass_precheck(
                 task_id="T-001",
                 spec_ref="spec.md",
                 plan_ref="plan.md",
+                constitution_ref="constitution.md",  # precheck v2 也查它
                 verify_cmd="true",
                 context_seeds=[],
                 ac_list=[],

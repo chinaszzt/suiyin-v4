@@ -1,6 +1,6 @@
 # C7 Phase Coordinator — Component Spec
 
-> 按 `execution_plan` 逐 phase 调度 C2 Task Executor，phase 内 task 完成后把 `task/<id>` 分支**本地 ff-merge 回 base_branch（feature 分支）**，让下一 phase 的 worktree 从含前序产物的 base HEAD 分叉。关掉 P1.2.5 真闭环 dogfood 的头号能力错配：「`/sy-tasks` 拆得出依赖链，batch 跑不动依赖链」。
+> 按 `execution_plan` 逐 phase 调度 C2 Task Executor，phase 内 task 完成后把 `task/<feature_id>/<id>` 分支**本地 ff-merge 回 base_branch（feature 分支）**，让下一 phase 的 worktree 从含前序产物的 base HEAD 分叉。关掉 P1.2.5 真闭环 dogfood 的头号能力错配：「`/sy-tasks` 拆得出依赖链，batch 跑不动依赖链」。
 >
 > 路由核心是**确定性状态机**（纯 Python transition table，routing path 零 AI）——性质上跟 C6 的"纯 boolean 规则评估"同源，只是 C7 是 imperative 组件（要管进程、git、状态落盘）。
 
@@ -100,6 +100,7 @@ execution_plan:
 ```yaml
 type: object
 required: [schema_version, status, base_branch, phases, state_file_path]
+# v0.2.0 (P0-1): + feature_id (always；canonical key 上半)
 properties:
   schema_version:
     type: string
@@ -158,12 +159,12 @@ properties:
 
 #### Phase-state file schema（落盘产物，公开 artifact — resume 与 dogfood 都读它）
 
-路径（同 C5/C6 versioned + latest 落盘 pattern；`safe_base_branch` 转义规则复用 C6 §3.2，`/` `:` `?` → `-`）：
+路径（同 C5/C6 versioned + latest 落盘 pattern；`safe_feature_id` 转义规则复用 C6 §3.2，`/` `:` `?` → `-`）：
 
-- versioned：`<repo_root>/.suiyin/phase-state/<safe_base_branch>-<run_ts>.json`（run 内每次状态转移后**原子覆写**：temp + rename）
-- latest 镜像：`<repo_root>/.suiyin/phase-state/latest-<safe_base_branch>.json`
+- versioned：`<repo_root>/.suiyin/phase-state/<safe_feature_id>-<run_ts>.json`（run 内每次状态转移后**原子覆写**：temp + rename）
+- latest 镜像：`<repo_root>/.suiyin/phase-state/latest-<safe_feature_id>.json`
 
-> 锚点适配说明：todo.md P1.3 锚点写的是 `<safe_pr_ref>`。C7 v0.1.0 的调度单位是 feature batch（task→feature 层没有 PR，见 I6），故 key 取 `base_branch`——与锚点同义（都是"这次整合流的唯一标识"），措辞随架构落地修正。
+> 锚点适配说明：todo.md P1.3 锚点写的是 `<safe_pr_ref>`。C7 v0.1.0 的调度单位是 feature batch（task→feature 层没有 PR，见 I6），故 v0.1.x key 取 `base_branch`；**v0.2.0（P0-1）key 改取 `feature_id`**——canonical key 的落盘半边，分支改名不再丢 resume 入口。
 
 ```yaml
 type: object
@@ -173,6 +174,7 @@ properties:
   run_id: { type: string, description: '<run_ts> 派生，全 run 不变' }
   manifest_path: { type: string }
   manifest_sha256: { type: string, description: 'resume 时校验 manifest 没被改过；不符 → STATE_CORRUPTED' }
+  feature_id: { type: string, description: 'v0.2.0 (P0-1)；canonical key 上半，落盘键 = safe_ref(feature_id)；resume 一致性校验之一' }
   base_branch: { type: string }
   status: { enum: [in_progress, all_merged, stopped] }
   dry_run: { type: boolean }
@@ -214,7 +216,7 @@ properties:
       - MANIFEST_NOT_FOUND      # 透传 batch loader（tasks.yaml 不存在 / 不可读）
       - INVALID_MANIFEST        # 透传 batch loader（yaml/schema 校验失败；含 precheck_refs_on_base 失败）
       - INVALID_PLAN            # execution_plan 校验失败（§2.1 规则 1/2/3 任一）
-      - COORDINATOR_LOCKED      # 同 repo_root + base_branch 已有活跃 coordinator（I9，发现 #8）
+      - COORDINATOR_LOCKED      # 同 repo_root + feature_id 已有活跃 coordinator（I9，发现 #8；v0.2.0 键随 P0-1）
       - STATE_CORRUPTED         # resume 时 state file 解析失败 / manifest_sha256 不符 / state 与 git 事实矛盾（声称 merged 但 sha 非 base 祖先）
       - REPO_ROOT_NOT_FOUND     # --repo-root 不是目录
       - GIT_ERROR               # git binary / 仓库异常（区别于整合失败 — 那是 park，不是 Error）
@@ -245,12 +247,12 @@ properties:
   | `pending` / `skipped` | 照常调度 |
 - **I4（harness 边界）**：C7 调下游组件时，组件 Error / 非预期输出 → **确定性 park / stop + surface**，绝不把错误丢给 LLM session "想办法"。C7 自身 exit code：**0 = all_merged / 1 = stopped / 2 = Error**；caller（sy-* harness / dogfood orchestrator）对非 0 必须 stop + surface to human。此规则先于 C7 存在（P1.2 约定），本 spec 把它从约定升格为契约。
 - **I5（逐 phase merge）**：phase N+1 的任何 worktree 创建，必须发生在 phase N **全部** task ff-merge 进 base_branch 之后。依赖链的可见性只靠 base 前进传递（头号发现的 closure）。
-- **I6（task→feature 本地 merge 语义，关发现 #7）**：C7 整合 task 用**本地 ff-merge** `task/<id>` → base_branch；**不 push 任何分支、不开 task PR**。PR 只存在于 feature→main 层（C6 域）；base_branch 是否上 remote 是用户的事，C7 不越权。
+- **I6（task→feature 本地 merge 语义，关发现 #7）**：C7 整合 task 用**本地 ff-merge** `task/<feature_id>/<id>` → base_branch；**不 push 任何分支、不开 task PR**。PR 只存在于 feature→main 层（C6 域）；base_branch 是否上 remote 是用户的事，C7 不越权。
 - **I7（ff-only）**：base_branch 历史只接受 ff 前进。非 ff 时走 rebase-requeue 子流程（§3.3）；绝不产 merge commit、绝不 force、绝不 squash。
 - **I8（隔离不回滚，关 Q7）**：已 merge 进 base_branch 的 task **永不回滚**——它们是 verify 过的 ff 增量，回滚 = 改写 feature 历史（违 I7）+ 销毁已验证工作。卡住的 task **隔离**：park + worktree 完整保留现场。phase 内任一 task park → phase 标 parked，后续 phase 全 skipped（fail-stop 于 phase 边界——后续 phase 可能依赖被 park 的 task，半推进没有意义）。
-- **I9（单实例锁，关发现 #8 的 coordinator 半边）**：同一 `repo_root` + `base_branch` 同时至多一个 coordinator 实例。pid file lock `<repo_root>/.suiyin/locks/coordinator-<safe_base_branch>.lock`（`O_CREAT|O_EXCL` 原子创建，内容 = pid + run_id + start_ts）：锁存在且 pid 活 → `COORDINATOR_LOCKED` 拒跑，**绝不静默复用 worktree**；pid 死（stale）→ 确定性接管（覆写）。正常 / Error 退出都释放锁（finally 语义）。
+- **I9（单实例锁，关发现 #8 的 coordinator 半边）**：同一 `repo_root` + `feature_id` 同时至多一个 coordinator 实例（v0.2.0 起锁键随落盘键取 feature_id）。pid file lock `<repo_root>/.suiyin/locks/coordinator-<safe_feature_id>.lock`（`O_CREAT|O_EXCL` 原子创建，内容 = pid + run_id + start_ts）：锁存在且 pid 活 → `COORDINATOR_LOCKED` 拒跑，**绝不静默复用 worktree**；pid 死（stale）→ 确定性接管（覆写）。正常 / Error 退出都释放锁（finally 语义）。
 - **I10（rebase 后必重 verify）**：rebase 必然改变 task tree（commits 落到新 base 上，吸收了并行 task 的变更）→ merge 前必须在 task worktree 重跑该 task 的 `verify_cmd`，绿才 merge。比 C6 "rebase 干净则报告仍 valid" 更严——C6 场景是纯 base 推进，C7 场景是并行 task 合流，**语义冲突只有跑了才知道**。
-- **I11（worktree 生命周期归 C7）**：C7 调度下，merged task 的 worktree + 本地 `task/<id>` 分支由 C7 清理；parked task 双双保留。C2 standalone 直跑时沿用 C2 既有约定（保留，人清理）。
+- **I11（worktree 生命周期归 C7）**：C7 调度下，merged task 的 worktree + 本地 `task/<feature_id>/<id>` 分支由 C7 清理；parked task 双双保留。C2 standalone 直跑时沿用 C2 既有约定（保留，人清理）。
 
 ### 3.2 Side Effects
 
@@ -258,7 +260,7 @@ properties:
 - **base_branch ref 本地前进**（每 task merge 一次）：refs-direct ff（实现建议见 §7，学 C6 v0.1.3 零 checkout 教训）
 - task worktree 内执行 `git rebase <base_branch>`（requeue 路径）；conflict 时 `git rebase --abort` 还原现场再 park
 - task worktree 内重跑 `verify_cmd`（I10）—— **`shell=True` 跑命令字符串**（verify_cmd 是用户 / sy-tasks 定义的 shell 命令，常含 `&&` / `|`；必须 shell 跑才解释，否则 `shlex.split + shell=False` 把 `&&` 当字面参数 → 复合命令必失败，**r4 发现 #2 根因**）。失败时把 stdout+stderr 尾部存进 `reverify_output`（发现 #3）
-- merged task：`git worktree remove` + `git branch -d task/<id>`（I11）
+- merged task：`git worktree remove` + `git branch -d task/<feature_id>/<id>`（I11）
 - phase-state 落盘（versioned + latest，§2.2）
 - lock file 创建 / 释放（I9）
 - **不做**：push 任何分支 / 开任何 PR / 动 main / 调 C5、C6（v0.1.0，见 Q7-3）/ 修改 spec.md、plan.md、tasks.yaml
@@ -289,10 +291,10 @@ task 达到 `awaiting_merge` 后进入**串行**整合队列（完成序）：
 
 ```
 dequeue task
-  ├─ task/<id> HEAD 是 base HEAD 的 ff 可达后代？
+  ├─ task/<feature_id>/<id> HEAD 是 base HEAD 的 ff 可达后代？
   │    ├─ 是 → ff-merge（refs-direct）→ merged；清理 worktree + 分支（I11）
   │    └─ 否（base 被同 phase 先完成者推进）→ requeue:
-  │         rebase task/<id> onto base HEAD（worktree 内）
+  │         rebase task/<feature_id>/<id> onto base HEAD（worktree 内）
   │           ├─ conflict → abort rebase → park REBASE_CONFLICT
   │           └─ clean → 重跑 verify_cmd（I10）
   │                ├─ 非绿 → park REVERIFY_FAILED
@@ -321,7 +323,7 @@ phase barrier：本 phase 全部 task `merged` → phase `merged` → 进下一 
 - **AC-10 路由集中（I2）**：给 mock C2 output 注入 `next_action_owner: "human"` 等拓扑字段 → C7 决策与无该字段时逐项一致（忽略而非消费）；全 run 中 claude CLI 仅出现在 C2 dispatch 路径，C7 自身调用 0 次。
 - **AC-11 exit code + dry_run 边界（I4，§3.2）**：`all_merged`→0 / `stopped`→1 / Error→2；dry_run：不取锁、不建 worktree、base_branch ref 不动、latest 镜像不动，versioned state（`dry_run:true`）+ 完整 phase 计划照常产出，exit 0。
 - **AC-12 INVALID_PLAN（§2.1 校验）**：(a) execution_plan 漏列 task；(b) 同 phase 内出现 depends_on 边；(c) task 间 base_branch 不一致——三者各自 → Error `INVALID_PLAN`，零副作用。
-- **AC-13 生命周期（I11）**：merged task → worktree 已删 + `task/<id>` 分支已删；parked task → 双双保留。
+- **AC-13 生命周期（I11）**：merged task → worktree 已删 + `task/<feature_id>/<id>` 分支已删；parked task → 双双保留。
 - **AC-14 真并行全成功（Q7-1，max_parallel>1）**：phase 内 3 task `max_parallel=3` 并发 dispatch → 全 merged，整合串行保持 ff（零 merge commit），3 task commit 全在；只断言最终态（不依赖 dispatch 完成序）。
 - **AC-15 真并行 fail-stop（max_parallel>1）**：phase 内一 task fail → 同 phase 成功者仍 merge（隔离不回滚，I8），phase parked + 下 phase skip（fail-stop 在 phase 边界，并行语义下成立）。
 
@@ -405,11 +407,12 @@ git -C <repo_root> update-ref refs/heads/<base_branch> <task_head_sha> <expected
 
 ---
 
-**Version**: v0.1.2-draft
-**Last Updated**: 2026-06-12
-**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)；v0.1.1 reverify shell + 诊断（r4 #2/#3）；v0.1.2 真并行开闸（Q7-1）
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-08-12
+**Status**: draft — 待人审拍板（spec_pinning human gate）；落地 todo.md P1.3 四条 invariant 锚点（I1-I4），吸收真闭环 dogfood 发现 #头号（I5）/ #7（I6）/ #8（I9），关 Q7（I8）+ cascade 关 Q6-2 翻 (b)；v0.1.1 reverify shell + 诊断（r4 #2/#3）；v0.1.2 真并行开闸（Q7-1）；v0.2.0 canonical identity（gen4-plan P0-1）
 
 **Changelog**:
+- v0.2.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) phase-state 落盘键 `safe_ref(base_branch)` → `safe_ref(feature_id)`（分支改名不再丢 resume 入口；feature_id 由 manifest 显式给或 `resolve_feature_id` 派生）；(2) §2.2 CoordinatorState / PhaseRunOutput 加 `feature_id`，resume 加 feature_id 一致性校验（不符 → STATE_CORRUPTED）；(3) task 分支 `task/<id>` → `task/<feature_id>/<id>`、worktree `worktrees/<feature_id>/<id>`（C2 v0.4.0 I1 联动）；(4) precheck 升 v2（constitution_ref + tasks.yaml 与 base HEAD 一致性，透传 batch）。**Migration note**: 旧 `latest-<safe_base_branch>.json` 不再被识别——升级前先收尾 in-flight run（当前无，实际零影响）；旧 versioned state 保留为 audit。
 - v0.1.2 (2026-06-12): **MINOR** — Q7-1 真并行开闸。`max_parallel > 1` 时 phase 内 dispatch 并发（`ThreadPoolExecutor`，execute_task 在 worker 线程、state mutation 留主线程），**整合严格串行**（merge_queue 完成序 + ff/rebase-requeue 不变，I7/§3.3）。默认 1 保完全确定（determinism AC）；>1 dispatch 完成序非确定（"谁先 merge/rebase" 变，结局正确不变——I2 边界澄清为 routing path 非调度时序）。§2.1 max_parallel 描述更新 + §6 Q7-1 关闭 + AC-14/AC-15。前置满足：r4 真闭环实证 C1 生成对的并行分组。
 - v0.1.1 (2026-06-12): **PATCH** — reverify（I10 重跑 verify_cmd）修正：(1) 发现 #2 §3.2/§3.3 `shell=True` 跑 verify_cmd —— 旧版 `shlex.split + shell=False` 把含 `&&` 的复合命令的 `&&` 当字面参数 → 复合 verify_cmd（如 `npm install && npm run typecheck && npx vitest`）必失败 → REVERIFY_FAILED 误 park 健康代码（r4 真闭环实证；此前 r3 verify_cmd 是单命令故没踩，retry "过" 实为 task 已 rebase 到位 ff 跳过 reverify 的假象）。(2) 发现 #3 §2.2 TaskRecord 加 `reverify_output`，park REVERIFY_FAILED 时存命令 stdout+stderr 尾部供诊断（旧版只留 bool，排查靠人去 worktree 手动复现）。`run_verify` 返回 `(bool, output)`。impl + 防回归测试（复合 `&&` / `|` + 第二段 FAIL 断言）。
 - v0.1.0 (2026-06-10): 初稿。来源：2026-05-28 session 讨论沉淀（4 invariant 锚点）+ 2026-06-08~10 两轮真闭环 dogfood 实测（todo.md【真闭环 dogfood 实测发现】+【第二轮真闭环】）

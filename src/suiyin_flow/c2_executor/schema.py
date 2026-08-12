@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from suiyin_flow.identity import LOCAL_ID_PATTERN, derive_feature_id
 
 # 跟 docs/sdd/components/c2-task-executor.md 顶部 Version 同步
 # v0.1.2 (2026-05-24): session.py _maybe_parse_final_output 支持 Claude 真实 stream-json
@@ -27,7 +29,13 @@ from pydantic import BaseModel, Field
 #   .specify/memory/constitution.md (业务项目 spec-kit 标准位置). r4 真闭环发现 #1:
 #   旧默认是 v4 自身路径, 业务项目跑 C2 校验 base HEAD 可见性时 SPEC_NOT_FOUND 阻断
 #   (v4 自身 dogfood 显式传 docs/sdd/...; 全部测试显式传 → 零影响).
-SCHEMA_VERSION: str = "v0.3.1"
+# v0.4.0 (2026-08-12): MINOR — gen4-plan P0-1 canonical identity:
+#   1. TaskInput 加 feature_id (缺省从 base_branch 派生, 向后兼容)
+#   2. task_id pattern ^T-\d{3,}$ → LOCAL_ID_PATTERN (T-001B 合法; 002·T001
+#      沙盒实验 schema 拒收案例转正)
+#   3. worktree 命名 worktrees/<task_id> → worktrees/<feature_id>/<task_id>,
+#      分支 task/<task_id> → task/<feature_id>/<task_id> (I1 修订)
+SCHEMA_VERSION: str = "v0.4.0"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -40,8 +48,19 @@ class TaskInput(BaseModel):
     """C2 §2.1 Input Schema."""
 
     task_id: str = Field(
-        pattern=r"^T-\d{3,}$",
-        description="全 repo 唯一, 例 'T-042'",
+        pattern=LOCAL_ID_PATTERN,
+        description=(
+            "feature 内唯一 (local id), 例 'T-042' / 'T-001B'; "
+            "全局身份 = feature_id + task_id"
+        ),
+    )
+    feature_id: str = Field(
+        default="",
+        description=(
+            "canonical key 上半 (gen4-plan P0-1); 约定 = spec-kit feature 目录名。"
+            "缺省 ('') 时从 base_branch 派生 (identity.derive_feature_id), "
+            "向后兼容旧调用方"
+        ),
     )
     spec_ref: str = Field(description="spec.md 路径 (相对 repo_root)")
     plan_ref: str = Field(description="plan.md 路径")
@@ -92,6 +111,12 @@ class TaskInput(BaseModel):
             "编排 (Q2-6 → Q7-2), C2 单次调用无状态"
         ),
     )
+
+    @model_validator(mode="after")
+    def _fill_feature_id(self) -> TaskInput:
+        if not self.feature_id:
+            self.feature_id = derive_feature_id(None, self.base_branch)
+        return self
 
 
 # -------------------------------------------------------------------
