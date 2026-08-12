@@ -107,22 +107,36 @@ def _drop_throwaway(repo_root: Path, wt: Path) -> None:
 # -------------------------------------------------------------------
 
 
-def _apply_mutant(wt: Path, m: MutantSpec) -> str | None:
-    """在 throwaway 内做第 N 处字面替换. 返回 None=成功, str=失败原因."""
-    target = wt / m.target_file
+def _apply_edit(
+    wt: Path, target_file: str, match: str, replacement: str, occurrence: int
+) -> str | None:
+    """单点字面替换 (第 N 处). 返回 None=成功, str=失败原因."""
+    target = wt / target_file
     if not target.exists():
-        return f"target_file not found at ref: {m.target_file}"
+        return f"target_file not found at ref: {target_file}"
     text = target.read_text(encoding="utf-8")
     idx = -1
-    for _ in range(m.occurrence):
-        idx = text.find(m.match, idx + 1)
+    for _ in range(occurrence):
+        idx = text.find(match, idx + 1)
         if idx < 0:
             return (
-                f"match not found (occurrence {m.occurrence}): {m.match[:80]!r} "
+                f"match not found (occurrence {occurrence}): {match[:80]!r} "
                 "— catalog stale?"
             )
-    mutated = text[:idx] + m.replacement + text[idx + len(m.match):]
+    mutated = text[:idx] + replacement + text[idx + len(match):]
     target.write_text(mutated, encoding="utf-8")
+    return None
+
+
+def _apply_mutant(wt: Path, m: MutantSpec) -> str | None:
+    """主编辑点 + 全部 extra_edits (v0.1.1). 任一失配即失败 (fail-closed)."""
+    fail = _apply_edit(wt, m.target_file, m.match, m.replacement, m.occurrence)
+    if fail is not None:
+        return fail
+    for i, e in enumerate(m.extra_edits):
+        fail = _apply_edit(wt, e.target_file, e.match, e.replacement, e.occurrence)
+        if fail is not None:
+            return f"extra_edits[{i}]: {fail}"
     return None
 
 
@@ -165,6 +179,27 @@ def run_probe(
         )
     catalog = load_catalog(catalog_path)
     env = env_extra or {}
+
+    # v0.1.1 baseline 健全性: 未变异基线上每个杀手命令必须先绿 —— 否则
+    # 环境/测试本身是坏的, 所有 mutant 都会误报 killed → 假 pass (fail-closed)
+    unique_cmds = {m.test_cmd or catalog.default_test_cmd for m in catalog.mutants}
+    for cmd in sorted(unique_cmds):
+        wt = _make_throwaway(repo_root, ref)
+        try:
+            exit_code, tail = _run_test(wt, cmd, env)
+        finally:
+            _drop_throwaway(repo_root, wt)
+        if exit_code != 0:
+            return ProbeReport(
+                feature_id=catalog.feature_id,
+                ref=ref,
+                verdict="fail",
+                baseline_ok=False,
+                baseline_output_tail=f"baseline red for {cmd!r}: {tail[-1500:]}",
+                results=[],
+                survived_count=0,
+                killed_count=0,
+            )
 
     results: list[MutantResult] = []
     for m in catalog.mutants:

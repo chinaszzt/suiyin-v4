@@ -284,6 +284,73 @@ def test_AC_7_per_mutant_cmd_and_env(tmp_path: Path) -> None:
 
 
 # =============================================================================
+# AC-9 (v0.1.1): baseline 健全性 — 基线红 → fail 且不跑 mutant
+# =============================================================================
+
+
+def test_AC_9_red_baseline_fails_closed(tmp_path: Path) -> None:
+    """杀手测试在未变异基线上就红 (坏环境/坏测试) → 一切 killed 判定不可信 → fail."""
+    repo = _make_repo(tmp_path, hollow=False)
+    (repo / "test_app.py").write_text(
+        "raise SystemExit(1)  # 模拟环境坏 (如 lane mongo 连不上)\n", encoding="utf-8"
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "break baseline")
+    catalog = _write_catalog(tmp_path)
+    report = _probe(repo, catalog)
+    assert report.verdict == "fail"
+    assert report.baseline_ok is False
+    assert report.results == []  # mutant 一个都不跑 (省时 + 不产误导数据)
+
+
+# =============================================================================
+# AC-10 (v0.1.1): extra_edits 协同多点替换 (method_rename 类)
+# =============================================================================
+
+
+def test_AC_10_multi_edit_mutant(tmp_path: Path) -> None:
+    """接口+stub 同改 (保持可运行) — 实心测试杀掉, 附加点失配 → apply_failed."""
+    repo = _make_repo(tmp_path, hollow=False)
+    catalog = _write_catalog(
+        tmp_path,
+        mutants=[{
+            "mutant_id": "M-rename-both",
+            "mutant_class": "method_rename",
+            "target_file": "app.py",
+            "match": "def audit(user):",
+            "replacement": "def audit_renamed(user):",
+            "extra_edits": [{
+                "target_file": "app.py",
+                "match": 'TAG = "audit.v1"',
+                "replacement": 'TAG = "audit.v1"\n\naudit = None  # 旧名残根',
+            }],
+        }],
+    )
+    report = _probe(repo, catalog)
+    # 双点注入成功后 test_app import app; app.audit=None → 调用炸 → killed
+    assert report.results[0].outcome == "killed"
+
+    stale = _write_catalog(
+        tmp_path, name="stale-extra.yaml",
+        mutants=[{
+            "mutant_id": "M-extra-stale",
+            "mutant_class": "method_rename",
+            "target_file": "app.py",
+            "match": "def audit(user):",
+            "replacement": "def audit2(user):",
+            "extra_edits": [{
+                "target_file": "app.py",
+                "match": "NO_SUCH_ANCHOR",
+                "replacement": "x",
+            }],
+        }],
+    )
+    report2 = _probe(repo, stale)
+    assert report2.results[0].outcome == "apply_failed"
+    assert "extra_edits[0]" in report2.results[0].output_tail
+
+
+# =============================================================================
 # AC-8: CLI smoke (exit code 契约 + --env 解析)
 # =============================================================================
 
