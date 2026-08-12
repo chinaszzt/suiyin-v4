@@ -400,7 +400,12 @@ def _check_manifest_on_base(
             manifest_path=str(manifest_path),
             base_branch=base_branch,
         )
-    if base_bytes != manifest_path.read_bytes():
+    # 行尾归一化再比 (NC-5): Windows + core.autocrlf 下盘上 CRLF / blob LF,
+    # 字节直比会把干净 manifest 误判成漂移 (PR #64 Windows CI 实证)
+    def _norm(b: bytes) -> bytes:
+        return b.replace(b"\r\n", b"\n")
+
+    if _norm(base_bytes) != _norm(manifest_path.read_bytes()):
         raise BatchAdapterError(
             "INVALID_MANIFEST",
             f"tasks.yaml on disk differs from base_branch {base_branch!r} "
