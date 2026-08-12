@@ -272,6 +272,7 @@ properties:
 - 跑 `verify_cmd` 期间可能调用业务项目 toolchain（dart / pnpm / pytest / ...）
 - 写 `verify_report.json`（C4 输出，C2 透传路径，不解析内容）
 - 写 session log 到 `worktrees/<feature_id>/<task_id>/.suiyin/sessions/attempt-{N}.log`
+- 写 `<repo_root>/.suiyin/cost/log.jsonl` 成本台账（P0-6，只观测不路由）
 - 写/删 `worktrees/<feature_id>/<task_id>/.suiyin/lock` pid 锁（I8；run 起步创建，终态释放；`.suiyin/` gitignored 不入库）
 - 计算 `diff_stats` 时跑 `git diff --shortstat <base_ref>...HEAD`：**fallback 链** = 先试 `origin/<base_branch>`，origin 缺失则 fallback 到本地 `<base_branch>`（dogfood 场景常见 base_branch 未 push 到 remote；P0 spike 经验，见 PR #25）
 - task 完成后 worktree **保留**（C6 merge 后由 cleanup 阶段或人工删，C2 不删）
