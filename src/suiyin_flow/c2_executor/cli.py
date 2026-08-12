@@ -217,7 +217,17 @@ def _finalize_success(
     open_pr=False (C7 调度, C7 spec I6): 跳过 push + PR, 只留本地 task 分支.
     """
     diff_text = _git_full_diff(wt_path, task_input.base_branch)
-    diff_violations = check_diff(diff_text or "")
+    if diff_text is None:
+        # 安全闸 fail-closed: diff 取不到 (git 异常) 时不放行, 不猜内容
+        raise TaskExecutorError(
+            "SAFETY_BLOCKED",
+            "cannot compute git diff for safety gate; failing closed "
+            "(worktree retained)",
+            task_id=task_input.task_id,
+            retryable=False,
+            worktree_path=str(wt_path),
+        )
+    diff_violations = check_diff(diff_text)
     if diff_violations:
         raise TaskExecutorError(
             "SAFETY_BLOCKED",
