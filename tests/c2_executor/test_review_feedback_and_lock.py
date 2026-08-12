@@ -189,7 +189,7 @@ def test_AC_11_feedback_empty_findings(fixture_repo: Path, tmp_path: Path) -> No
 def test_AC_12_live_holder_pid_rejects_run(
     fixture_repo: Path, mock_claude_success: list[str]
 ) -> None:
-    wt_path = ensure_worktree(fixture_repo, "T-001", base_branch="main")
+    wt_path = ensure_worktree(fixture_repo, "main", "T-001", base_branch="main")
     # 真起一个存活子进程当锁持有者 (发现 #8 场景: 另一个 C2 run 在跑)
     holder = subprocess.Popen(
         [sys.executable, "-c", "import time; time.sleep(60)"],
@@ -225,7 +225,7 @@ def test_AC_12_live_holder_pid_rejects_run(
 def test_AC_13_stale_lock_taken_over(
     fixture_repo: Path, mock_claude_success: list[str]
 ) -> None:
-    wt_path = ensure_worktree(fixture_repo, "T-001", base_branch="main")
+    wt_path = ensure_worktree(fixture_repo, "main", "T-001", base_branch="main")
     # 拿一个真实已死的 pid: 起个立即退出的子进程, wait 完后 pid 必死
     dead = subprocess.Popen([sys.executable, "-c", "pass"], shell=False)
     dead.wait(timeout=10)
@@ -242,7 +242,7 @@ def test_AC_13_stale_lock_taken_over(
 
 
 def test_AC_13_corrupt_lock_treated_as_stale(fixture_repo: Path) -> None:
-    wt_path = ensure_worktree(fixture_repo, "T-001", base_branch="main")
+    wt_path = ensure_worktree(fixture_repo, "main", "T-001", base_branch="main")
     lock = lock_path_for(wt_path)
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text("garbage not json", encoding="utf-8")
@@ -274,6 +274,6 @@ def test_AC_14_lock_released_after_retry_exhausted(
         execute_task(task_input, claude_cmd=mock_claude_verify_fail)
 
     assert exc_info.value.error.code == "RETRY_EXHAUSTED"
-    wt_path = fixture_repo / "worktrees" / "T-001"
+    wt_path = fixture_repo / "worktrees" / "main" / "T-001"
     assert wt_path.exists()  # worktree 保留 (AC-5 语义)
     assert not lock_path_for(wt_path).exists()  # 锁释放

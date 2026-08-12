@@ -293,3 +293,35 @@ def test_AC_10_report_schema_stable_across_100_builds() -> None:
 
 # Touch unused imports to silence ruff F401 (test fixture deps)
 _ = (datetime, UTC, Arbitration)
+
+
+# =============================================================================
+# AC-9 (P0-1): review 落盘按 canonical key 定位
+# =============================================================================
+
+
+def test_AC_9_review_dir_keyed_by_identity(
+    fixture_pr_repo: Path, mock_claude_review_approve: list[str]
+) -> None:
+    """P0-1: reviews/<review_key>/<uuid>/latest.json — 不再是裸 uuid 目录."""
+    review_input = _make_input(fixture_pr_repo).model_copy(
+        update={"feature_id": "001-demo"}
+    )
+    _, report_path = execute_review(
+        review_input, claude_cmd=mock_claude_review_approve
+    )
+    # <repo>/.suiyin/reviews/001-demo-T-100/<uuid>/latest.json
+    assert report_path.name == "latest.json"
+    key_dir = report_path.parent.parent
+    assert key_dir.name == "001-demo-T-100"
+    assert key_dir.parent.name == "reviews"
+
+
+def test_AC_9b_review_dir_key_falls_back_to_task_id(
+    fixture_pr_repo: Path, mock_claude_review_approve: list[str]
+) -> None:
+    """feature_id 缺省 → 键退化为 task_id (兼容旧调用方)."""
+    _, report_path = execute_review(
+        _make_input(fixture_pr_repo), claude_cmd=mock_claude_review_approve
+    )
+    assert report_path.parent.parent.name == "T-100"

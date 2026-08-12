@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field
 from suiyin_flow.c2_executor.schema import TaskError, TaskOutput
 
 # 跟 docs/sdd/components/c7-phase-coordinator.md 顶部 Version 同步
-C7_SCHEMA_VERSION: str = "v0.1.0"
+# v0.2.0 (2026-08-12): MINOR — P0-1 canonical identity: state 加 feature_id,
+#   落盘键 safe_ref(base_branch) → safe_ref(feature_id) (分支改名不丢 resume);
+#   旧 latest-<safe_base_branch>.json 不再被识别 (升级前先收尾 in-flight run)
+C7_SCHEMA_VERSION: str = "v0.2.0"
 
 # -------------------------------------------------------------------
 # 状态枚举 (state file 用全集; Output 终态只出现 terminal 子集)
@@ -96,6 +99,10 @@ class CoordinatorState(BaseModel):
     manifest_sha256: str = Field(
         description="resume 时校验 manifest 未被改; 不符 → STATE_CORRUPTED"
     )
+    feature_id: str = Field(
+        default="",
+        description="canonical key 上半 (P0-1); 落盘键 = safe_ref(feature_id)",
+    )
     base_branch: str
     status: RunStatus = "in_progress"
     dry_run: bool = False
@@ -113,6 +120,7 @@ class PhaseRunOutput(BaseModel):
 
     schema_version: str = C7_SCHEMA_VERSION
     status: Literal["all_merged", "stopped", "dry_run"]
+    feature_id: str = ""
     base_branch: str
     phases: list[PhaseRecord]
     stopped_at_phase: int | None = None

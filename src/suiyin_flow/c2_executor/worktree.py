@@ -1,6 +1,8 @@
 """C2 worktree management — git worktree add/remove wrappers + I8 pid 锁.
 
-I1 invariant: worktree 命名严格 `worktrees/<task_id>`.
+I1 invariant (v0.4.0 修订): worktree 命名严格 `worktrees/<feature_id>/<task_id>`,
+分支 `task/<feature_id>/<task_id>` — canonical key 双段 (gen4-plan P0-1),
+不同 feature 的同名 task 不再互撞.
 I2 invariant: AI session 在 worktree 内启动, 严禁在主仓库工作树跑.
 I8 invariant (v0.3.0): 同一 worktree 同时至多一个活跃 C2 run —
 `.suiyin/lock` pid 文件, 同 C7 coordinator 锁 pattern (lock.py):
@@ -20,16 +22,17 @@ from pathlib import Path
 import psutil
 
 from suiyin_flow.c2_executor.schema import TaskExecutorError
+from suiyin_flow.identity import task_branch
 
 
-def worktree_path_for(repo_root: Path, task_id: str) -> Path:
-    """返回 task 对应的 worktree 绝对路径 (I1 invariant)."""
-    return (repo_root / "worktrees" / task_id).resolve()
+def worktree_path_for(repo_root: Path, feature_id: str, task_id: str) -> Path:
+    """返回 task 对应的 worktree 绝对路径 (I1 invariant, canonical key 双段)."""
+    return (repo_root / "worktrees" / feature_id / task_id).resolve()
 
 
-def worktree_branch_name(task_id: str) -> str:
-    """对应分支名: task/<task_id>."""
-    return f"task/{task_id}"
+def worktree_branch_name(feature_id: str, task_id: str) -> str:
+    """对应分支名: task/<feature_id>/<task_id> (identity.task_branch)."""
+    return task_branch(feature_id, task_id)
 
 
 def _get_worktree_branch(wt_path: Path) -> str | None:
@@ -50,17 +53,18 @@ def _get_worktree_branch(wt_path: Path) -> str | None:
 
 def ensure_worktree(
     repo_root: Path,
+    feature_id: str,
     task_id: str,
     base_branch: str = "main",
 ) -> Path:
     """创建或复用 task 对应的 worktree (I1).
 
-    - 不存在 → 从 base_branch 起新 worktree + 新分支 `task/<task_id>`
+    - 不存在 → 从 base_branch 起新 worktree + 新分支 `task/<feature_id>/<task_id>`
     - 已存在 + 分支匹配 → 复用 (返回路径)
     - 已存在 + 分支不匹配 → raise WORKTREE_CONFLICT (不覆盖)
     """
-    wt_path = worktree_path_for(repo_root, task_id)
-    expected_branch = worktree_branch_name(task_id)
+    wt_path = worktree_path_for(repo_root, feature_id, task_id)
+    expected_branch = worktree_branch_name(feature_id, task_id)
 
     if wt_path.exists():
         actual = _get_worktree_branch(wt_path)
@@ -171,12 +175,14 @@ def release_worktree_lock(worktree_path: Path) -> None:
         pass
 
 
-def remove_worktree(repo_root: Path, task_id: str, *, force: bool = False) -> None:
+def remove_worktree(
+    repo_root: Path, feature_id: str, task_id: str, *, force: bool = False
+) -> None:
     """删除 worktree (P0 不自动删, 给 cleanup 阶段或人工调用).
 
-    幂等: 不存在则 noop.
+    幂等: 不存在则 noop. 删后 best-effort 清空 worktrees/<feature_id>/ 空目录.
     """
-    wt_path = worktree_path_for(repo_root, task_id)
+    wt_path = worktree_path_for(repo_root, feature_id, task_id)
     if not wt_path.exists():
         return
     args = ["git", "-C", str(repo_root), "worktree", "remove"]
@@ -191,3 +197,7 @@ def remove_worktree(repo_root: Path, task_id: str, *, force: bool = False) -> No
         encoding="utf-8",
         shell=False,
     )
+    try:
+        wt_path.parent.rmdir()  # 空 feature 目录顺手清; 非空自然失败
+    except OSError:
+        pass

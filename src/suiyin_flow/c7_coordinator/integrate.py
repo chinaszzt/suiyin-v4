@@ -16,6 +16,7 @@ from pathlib import Path
 
 from suiyin_flow.c2_executor.worktree import remove_worktree
 from suiyin_flow.c7_coordinator.schema import CoordinatorAbort
+from suiyin_flow.identity import task_branch
 
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -105,14 +106,14 @@ def run_verify(worktree: Path, verify_cmd: str) -> tuple[bool, str]:
     return result.returncode == 0, tail
 
 
-def cleanup_merged(repo: Path, task_id: str) -> None:
-    """merged task 清理 (I11): worktree 删 + 本地 task/<id> 分支删.
+def cleanup_merged(repo: Path, feature_id: str, task_id: str) -> None:
+    """merged task 清理 (I11): worktree 删 + 本地 task/<feature>/<id> 分支删.
 
     best-effort — 清理失败不影响 merge 已成立的事实, 不抛.
     force=True: worktree 内 node_modules 等未跟踪产物属预期.
     """
     try:
-        remove_worktree(repo, task_id, force=True)
+        remove_worktree(repo, feature_id, task_id, force=True)
     except (subprocess.CalledProcessError, OSError):
         pass
-    _git(repo, "branch", "-D", f"task/{task_id}")
+    _git(repo, "branch", "-D", task_branch(feature_id, task_id))

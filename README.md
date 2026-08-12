@@ -34,13 +34,15 @@ lefthook install
 #    pyyaml 等依赖随 pyproject 一起装上（缺 pyyaml = 装的是 P1.2.5 之前的旧环境，重装即可）
 cd /path/to/suiyin-v4 && .venv/bin/pip install -e .
 
-# 2) 代理网络注意：C2 用 subprocess 起 claude session，shell alias 不生效。
-#    如果你平时靠 `alias claude='https_proxy=... claude'` 上网，跑 batch 前先 export：
-export https_proxy=http://127.0.0.1:<port> http_proxy=http://127.0.0.1:<port>
+# 2) 网络注意：C2 用 subprocess 起 claude session，shell alias 不生效
+#    （alias 内嵌的 proxy 对子进程同样无效）。系统代理（如 Surge/Clash 设为
+#    系统级）会通过环境变量自动继承，无需手动 export；跑前建议探活一次 API：
+#    curl -sS --max-time 5 https://api.anthropic.com >/dev/null && echo ok
 suiyin-flow task batch --tasks-yaml specs/<feature>/tasks.yaml --repo-root .
 
-# 3) /sy-specify / /sy-plan / /sy-tasks 的产物必须已 commit 到 base_branch ——
-#    task worktree 从 base HEAD 分叉，看不到未提交文件（batch 会 fail-fast 提示）
+# 3) /sy-specify / /sy-plan / /sy-tasks 的产物（含 tasks.yaml 自身与
+#    constitution）必须已 commit 到 base_branch —— task worktree 从 base HEAD
+#    分叉，看不到未提交文件（batch/phase 会 fail-fast 提示，P0-1 precheck v2）
 ```
 
 ## 项目结构

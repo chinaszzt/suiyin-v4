@@ -206,7 +206,7 @@ def test_AC_5_rebase_conflict_parks_and_restores(
     t2 = _task(out, "T-002")
     assert t2.state == "parked" and t2.park_reason == "REBASE_CONFLICT"
     # worktree 还原到 rebase 前 (无 conflict marker), 保留现场
-    wt = fixture_repo / "worktrees" / "T-002"
+    wt = fixture_repo / "worktrees" / "c7-test" / "T-002"
     assert wt.exists()
     assert (wt / "conflict.txt").read_text(encoding="utf-8") == "from T-002\n"
     assert git(wt, "status", "--porcelain") == ""
@@ -243,7 +243,7 @@ def test_AC_6_reverify_failed_parks(
 
 
 def _write_lock(repo: Path, pid: int) -> Path:
-    lock = repo / ".suiyin" / "locks" / "coordinator-main.lock"
+    lock = repo / ".suiyin" / "locks" / "coordinator-c7-test.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     lock.write_text(
         json.dumps({"pid": pid, "run_id": "prior", "start_ts": "t"}),
@@ -312,7 +312,7 @@ def test_AC_8_crash_resume_skips_merged(
     mp = _two_phase_manifest(fixture_repo)
     _stopped_run(fixture_repo, mp, monkeypatch)
 
-    latest = fixture_repo / ".suiyin" / "phase-state" / "latest-main.json"
+    latest = fixture_repo / ".suiyin" / "phase-state" / "latest-c7-test.json"
     state = json.loads(latest.read_text(encoding="utf-8"))
     t2 = state["phases"][1]["tasks"][0]
     assert t2["task_id"] == "T-002"
@@ -360,7 +360,7 @@ def test_AC_8c_retry_parked_reintegrates_without_redispatch(
     assert _task(out, "T-002").park_reason == "REBASE_CONFLICT"
 
     # 人工解 conflict: worktree 内 rebase + 取双方合并版 + continue
-    wt = fixture_repo / "worktrees" / "T-002"
+    wt = fixture_repo / "worktrees" / "c7-test" / "T-002"
     import subprocess
 
     subprocess.run(
@@ -524,10 +524,10 @@ def test_AC_11c_dry_run_boundaries(
     assert not (fixture_repo / "worktrees").exists()
     assert not (fixture_repo / ".suiyin" / "locks").exists()
     state_dir = fixture_repo / ".suiyin" / "phase-state"
-    versioned = [p for p in state_dir.iterdir() if p.name.startswith("main-")]
+    versioned = [p for p in state_dir.iterdir() if p.name.startswith("c7-test-")]
     assert len(versioned) == 1
     assert json.loads(versioned[0].read_text(encoding="utf-8"))["dry_run"] is True
-    assert not (state_dir / "latest-main.json").exists()
+    assert not (state_dir / "latest-c7-test.json").exists()
 
 
 # -------------------------------------------------------------------
@@ -579,13 +579,15 @@ def test_AC_13_lifecycle_cleanup(
     mp = _two_phase_manifest(fixture_repo)
     _stopped_run(fixture_repo, mp, monkeypatch)
 
-    # merged → worktree 删 + 分支删
-    assert not (fixture_repo / "worktrees" / "T-001").exists()
-    branches = git(fixture_repo, "branch", "--list", "task/T-001")
+    # merged → worktree 删 + 分支删 (P0-1: canonical 双段命名 <feature>/<task>)
+    assert not (fixture_repo / "worktrees" / "c7-test" / "T-001").exists()
+    branches = git(fixture_repo, "branch", "--list", "task/c7-test/T-001")
     assert branches == ""
     # parked → 双双保留
-    assert (fixture_repo / "worktrees" / "T-002").exists()
-    assert "task/T-002" in git(fixture_repo, "branch", "--list", "task/T-002")
+    assert (fixture_repo / "worktrees" / "c7-test" / "T-002").exists()
+    assert "task/c7-test/T-002" in git(
+        fixture_repo, "branch", "--list", "task/c7-test/T-002"
+    )
 
 
 # -------------------------------------------------------------------

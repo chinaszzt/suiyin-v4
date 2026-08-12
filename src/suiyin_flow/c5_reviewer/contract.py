@@ -10,9 +10,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from suiyin_flow.identity import LOCAL_ID_PATTERN
+
 # 跟 docs/sdd/components/c5-ai-reviewer.md 顶部 Version 同步.
 # v0.1.1 (2026-05-24): verdict 二元化 + 按 category 决定 + Block Recovery.
-CONTRACT_VERSION: str = "v0.1.1"
+# v0.2.0 (2026-08-12): MINOR — P0-1 canonical identity:
+#   task_id pattern 放宽 (LOCAL_ID_PATTERN, T-001B 合法) + 输入加 feature_id
+#   (可选) + 落盘 reviews/<uuid> → reviews/<review_key>/<uuid> (可按身份键定位)
+CONTRACT_VERSION: str = "v0.2.0"
 
 # -------------------------------------------------------------------
 # Enums
@@ -64,10 +69,19 @@ class ReviewInput(BaseModel):
         ),
     )
     task_id: str = Field(
-        pattern=r"^T-\d{3,}$",
+        pattern=LOCAL_ID_PATTERN,
         description=(
             "v0.1.1 required: 所有 PR 必须来自 task (含 hotfix / Initiative). "
-            "C5 不审'非 task PR' (应先把任务 task 化)."
+            "C5 不审'非 task PR' (应先把任务 task 化). "
+            "v0.2.0: local id (feature 内唯一), 全局身份 = feature_id + task_id"
+        ),
+    )
+    feature_id: str | None = Field(
+        default=None,
+        pattern=LOCAL_ID_PATTERN,
+        description=(
+            "canonical key 上半 (P0-1, 可选); 提供时 review 落盘键 = "
+            "<safe_feature>-<task_id>, 缺省退化 task_id"
         ),
     )
     criticality: Criticality = Field(
@@ -132,7 +146,7 @@ class ReviewReport(BaseModel):
     session_id: str = Field(description="always; 本次 review session UUID")
     task_id: str | None = Field(
         default=None,
-        pattern=r"^T-\d{3,}$",
+        pattern=LOCAL_ID_PATTERN,
         description="conditional (when input.task_id 非空, v0.1.1 实际 always)",
     )
     pr_ref: str = Field(description="always; 回传 input.pr_ref")

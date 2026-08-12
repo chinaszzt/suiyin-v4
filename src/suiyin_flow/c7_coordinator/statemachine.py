@@ -18,6 +18,7 @@ from suiyin_flow.c2_executor.batch import (
     BatchManifest,
     BatchTaskEntry,
     precheck_refs_on_base,
+    resolve_feature_id,
 )
 from suiyin_flow.c2_executor.cli import execute_task
 from suiyin_flow.c2_executor.schema import TaskExecutorError, TaskOutput
@@ -39,6 +40,7 @@ from suiyin_flow.c7_coordinator.state import (
     make_run_id,
     safe_ref,
 )
+from suiyin_flow.identity import task_branch
 
 
 @dataclass
@@ -81,7 +83,8 @@ def run_coordinator(cfg: CoordinatorConfig) -> PhaseRunOutput:
             **e.error.details,
         ) from e
 
-    safe_key = safe_ref(base_branch)
+    feature_id = resolve_feature_id(manifest)
+    safe_key = safe_ref(feature_id)  # P0-1: 落盘键 = feature_id (原 base_branch)
     run_id = make_run_id()
     store = StateStore(repo_root, safe_key, run_id)
 
@@ -89,6 +92,7 @@ def run_coordinator(cfg: CoordinatorConfig) -> PhaseRunOutput:
         run_id=run_id,
         manifest_path=str(cfg.tasks_yaml.resolve()),
         manifest_sha256=manifest_sha256(cfg.tasks_yaml),
+        feature_id=feature_id,
         base_branch=base_branch,
         phases=phases,
     )
@@ -104,9 +108,10 @@ def run_coordinator(cfg: CoordinatorConfig) -> PhaseRunOutput:
         store.write(state)
         return _build_output(state, store)
 
-    # 真跑前 fail-fast: spec_ref/plan_ref 必须在 base HEAD 可见 (复用 batch precheck)
+    # 真跑前 fail-fast: spec/plan/constitution + manifest 必须在 base HEAD 可见
+    # (复用 batch precheck; P0-1 v2 含 manifest 与 base 一致性)
     try:
-        precheck_refs_on_base(manifest, str(repo_root))
+        precheck_refs_on_base(manifest, str(repo_root), cfg.tasks_yaml)
     except BatchAdapterError as e:
         raise CoordinatorAbort(e.error.code, e.error.message, **e.error.details) from e
 
@@ -153,6 +158,12 @@ def _maybe_resume(
             "STATE_CORRUPTED",
             f"latest phase-state targets base_branch {prev.base_branch!r}, "
             f"manifest says {fresh.base_branch!r}",
+        )
+    if prev.feature_id and prev.feature_id != fresh.feature_id:
+        raise CoordinatorAbort(
+            "STATE_CORRUPTED",
+            f"latest phase-state targets feature_id {prev.feature_id!r}, "
+            f"manifest resolves to {fresh.feature_id!r}",
         )
 
     base_sha = g.rev_parse(repo_root, prev.base_branch)
@@ -233,7 +244,10 @@ def _run_phases(
                 continue
             try:
                 wt = ensure_worktree(
-                    repo_root, t.task_id, entries[t.task_id].base_branch
+                    repo_root,
+                    state.feature_id,
+                    t.task_id,
+                    entries[t.task_id].base_branch,
                 )
                 t.worktree_path = str(wt)
             except TaskExecutorError as e:
@@ -316,7 +330,10 @@ def _execute_phase_parallel(
 
     if pending:
         with ThreadPoolExecutor(max_workers=cfg.max_parallel) as ex:
-            fut_to_task = {ex.submit(_run_c2, cfg, entries[t.task_id]): t for t in pending}
+            fut_to_task = {
+                ex.submit(_run_c2, cfg, entries[t.task_id], state.feature_id): t
+                for t in pending
+            }
             for fut in as_completed(fut_to_task):
                 t = fut_to_task[fut]
                 try:
@@ -333,14 +350,18 @@ def _execute_phase_parallel(
             _integrate(cfg, repo_root, ph, mt, entries[mt.task_id], state, store)
 
 
-def _run_c2(cfg: CoordinatorConfig, entry: BatchTaskEntry) -> TaskOutput:
+def _run_c2(
+    cfg: CoordinatorConfig, entry: BatchTaskEntry, feature_id: str
+) -> TaskOutput:
     """纯 C2 调用 (无 C7 state 副作用 → 可在 worker 线程并发跑, Q7-1).
 
     I6: C7 调度下 task→feature 是本地 merge 语义 — 不 push / 不开 task PR.
     worktree 已由 phase 预 fork 建好, execute_task 内 ensure_worktree 复用。
     Raises TaskExecutorError (caller 主线程接住转 park).
     """
-    task_input = entry.to_task_input(repo_root=str(cfg.repo_root.resolve()))
+    task_input = entry.to_task_input(
+        repo_root=str(cfg.repo_root.resolve()), feature_id=feature_id
+    )
     task_input = task_input.model_copy(update={"open_pr": False})
     return execute_task(task_input, claude_cmd=cfg.claude_cmd)
 
@@ -389,7 +410,7 @@ def _dispatch(
     store.write(state)
     _log(f"[phase {ph.phase}] {t.task_id}: dispatch C2")
     try:
-        out = _run_c2(cfg, entry)
+        out = _run_c2(cfg, entry, state.feature_id)
     except TaskExecutorError as e:
         _apply_dispatch_result(ph, t, None, e, state, store)
         return
@@ -408,18 +429,18 @@ def _integrate(
     """awaiting_merge → 整合子流程 (spec §3.3) → merged | parked."""
     t.state = "integrating"
     store.write(state)
-    task_branch = f"task/{t.task_id}"
+    branch = task_branch(state.feature_id, t.task_id)  # P0-1 canonical branch
     base_branch = state.base_branch
     wt = Path(t.worktree_path) if t.worktree_path else None
 
     attempts = t.requeue_count
     while True:
-        task_sha = g.rev_parse(repo_root, task_branch)
+        task_sha = g.rev_parse(repo_root, branch)
         base_sha = g.rev_parse(repo_root, base_branch)
         if task_sha is None or base_sha is None:
             raise CoordinatorAbort(
                 "GIT_ERROR",
-                f"cannot resolve {task_branch!r} or {base_branch!r} in {repo_root}",
+                f"cannot resolve {branch!r} or {base_branch!r} in {repo_root}",
                 retryable=True,
                 task_id=t.task_id,
             )
@@ -478,7 +499,7 @@ def _mark_merged(
     if t.task_id in state.merge_queue:
         state.merge_queue.remove(t.task_id)
     store.write(state)  # 先落盘 merge 事实, 再 best-effort 清理 (I3)
-    g.cleanup_merged(repo_root, t.task_id)  # I11
+    g.cleanup_merged(repo_root, state.feature_id, t.task_id)  # I11
     t.worktree_path = None
     store.write(state)
     _log(f"[phase {ph.phase}] {t.task_id}: merged @ {merged_sha[:10]}")
@@ -503,6 +524,7 @@ def _build_output(state: CoordinatorState, store: StateStore) -> PhaseRunOutput:
     assert state.status in ("all_merged", "stopped", "dry_run")
     return PhaseRunOutput(
         status=state.status,
+        feature_id=state.feature_id,
         base_branch=state.base_branch,
         phases=state.phases,
         stopped_at_phase=state.stopped_at_phase,

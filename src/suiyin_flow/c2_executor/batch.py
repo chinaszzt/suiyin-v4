@@ -9,12 +9,17 @@ P1.2.5: 把 C2 从「人手敲单 task CLI」升级成「读 tasks.yaml 顺序�
   真正的依赖图调度 / 并行 phase 划分留给 P1.3 C1 Planning Engine.
 - **dry-run**: 解析 + 列 task, 不真起 session.
 
-Schema 版本 v0.1.0 (随 batch 模块 introduce). 跟 C2 SCHEMA_VERSION 解耦.
+Schema 版本 v0.2.0 (P0-1 canonical identity):
+- 顶层加 feature_id (身份键上半; v0.1.0 manifest 兼容读, 从 feature_name /
+  base_branch 派生 + stderr 提示)
+- task_id pattern 放宽为 LOCAL_ID_PATTERN (T-001B 合法)
+跟 C2 SCHEMA_VERSION 解耦.
 """
 
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Literal
 
@@ -29,8 +34,11 @@ from suiyin_flow.c2_executor.schema import (
     TaskInput,
     TaskOutput,
 )
+from suiyin_flow.identity import LOCAL_ID_PATTERN, derive_feature_id, is_valid_local_id
 
-BATCH_SCHEMA_VERSION: str = "v0.1.0"
+BATCH_SCHEMA_VERSION: str = "v0.2.0"
+# 兼容读集合: v0.1.0 manifest (r3/r4 工件) 仍可加载, feature_id 走派生
+_ACCEPTED_SCHEMA_VERSIONS = frozenset({"v0.1.0", BATCH_SCHEMA_VERSION})
 
 
 # -------------------------------------------------------------------
@@ -44,7 +52,7 @@ class BatchTaskEntry(BaseModel):
     映射到 C2 TaskInput 的字段; `repo_root` 不在 yaml 里 (CLI --repo-root 注入).
     """
 
-    task_id: str = Field(pattern=r"^T-\d{3,}$")
+    task_id: str = Field(pattern=LOCAL_ID_PATTERN)
     spec_ref: str
     plan_ref: str
     constitution_ref: str = ".specify/memory/constitution.md"
@@ -70,10 +78,11 @@ class BatchTaskEntry(BaseModel):
     session_timeout_seconds: int = Field(default=7200, gt=0)
     base_branch: str = "main"
 
-    def to_task_input(self, *, repo_root: str) -> TaskInput:
-        """转 C2 TaskInput; repo_root 由 batch caller 注入 (CLI 顶层参数)."""
+    def to_task_input(self, *, repo_root: str, feature_id: str = "") -> TaskInput:
+        """转 C2 TaskInput; repo_root/feature_id 由 batch caller 注入."""
         return TaskInput(
             task_id=self.task_id,
+            feature_id=feature_id,
             spec_ref=self.spec_ref,
             plan_ref=self.plan_ref,
             constitution_ref=self.constitution_ref,
@@ -91,7 +100,18 @@ class BatchTaskEntry(BaseModel):
 class BatchManifest(BaseModel):
     """tasks.yaml 顶层 schema."""
 
-    schema_version: str = Field(description="tasks.yaml schema 版本; 当前 'v0.1.0'")
+    schema_version: str = Field(
+        description="tasks.yaml schema 版本; 当前 'v0.2.0' (v0.1.0 兼容读)"
+    )
+    feature_id: str | None = Field(
+        default=None,
+        pattern=LOCAL_ID_PATTERN,
+        description=(
+            "canonical key 上半 (P0-1); 约定 = spec-kit feature 目录名 "
+            "(例 '001-login-core')。v0.2.0 起应显式给; 缺省走 "
+            "resolve_feature_id 派生 (feature_name → base_branch)"
+        ),
+    )
     feature_name: str | None = Field(
         default=None,
         description="spec-kit feature 名 (例 '001-c4-no-color'); optional metadata",
@@ -101,10 +121,10 @@ class BatchManifest(BaseModel):
     @field_validator("schema_version")
     @classmethod
     def _check_schema_version(cls, v: str) -> str:
-        if v != BATCH_SCHEMA_VERSION:
+        if v not in _ACCEPTED_SCHEMA_VERSIONS:
             raise ValueError(
                 f"unsupported schema_version: {v!r}; "
-                f"this build only understands {BATCH_SCHEMA_VERSION!r}"
+                f"this build understands {sorted(_ACCEPTED_SCHEMA_VERSIONS)}"
             )
         return v
 
@@ -254,6 +274,32 @@ def load_tasks_yaml(path: Path) -> BatchManifest:
 
 
 # -------------------------------------------------------------------
+# Feature identity resolution (P0-1)
+# -------------------------------------------------------------------
+
+
+def resolve_feature_id(manifest: BatchManifest) -> str:
+    """manifest → canonical feature_id.
+
+    优先级: 显式 feature_id (v0.2.0) > feature_name 派生 > base_branch 派生。
+    派生路径 stderr 提示实际取值 (身份键进 worktree/branch/state/review 落盘,
+    用户该知道它是什么)。
+    """
+    if manifest.feature_id:
+        return manifest.feature_id
+    base_branch = manifest.tasks[0].base_branch
+    derived = derive_feature_id(manifest.feature_name, base_branch)
+    from_name = manifest.feature_name and is_valid_local_id(derived)
+    print(
+        f"batch: note: manifest has no feature_id; derived {derived!r} "
+        f"(from {'feature_name' if from_name else 'base_branch'}). "
+        "Set feature_id explicitly in tasks.yaml (schema v0.2.0) to pin identity.",
+        file=sys.stderr,
+    )
+    return derived
+
+
+# -------------------------------------------------------------------
 # Base-branch ref visibility precheck
 # -------------------------------------------------------------------
 
@@ -282,23 +328,100 @@ def _refs_missing_on_base(repo_root: str, entry: BatchTaskEntry) -> list[str]:
     拿不到输入, 整段 ~2h 的真跑直接废掉。这里把这种情况 fail-fast 成清晰错误。
 
     base_branch 本身解析不了时 (repo_root 非 git repo / 分支不存在 —— 例如
-    单测 monkeypatch 场景) **跳过检查返回 []**, 留给 execute_task 自己报错;
-    本检查只在 "base 可解析但 ref 缺失" 这个明确坏状态下出手。
+    单测 monkeypatch 场景) **跳过检查返回 [] + stderr 警告** (P0-1: 旧版静默
+    跳过, 用户不知道预检没生效), 留给 execute_task 自己报错; 本检查只在
+    "base 可解析但 ref 缺失" 这个明确坏状态下出手。
+
+    P0-1 扩展: constitution_ref 一并检查 (r4 发现 #1 同类盲区 — session 从
+    base fork 的 worktree 读它, 不在 base HEAD 就是坏输入)。
     """
     if not _git_ok(repo_root, "rev-parse", "--verify", "--quiet", entry.base_branch):
+        print(
+            f"batch: warning: base_branch {entry.base_branch!r} not resolvable "
+            f"in {repo_root}; skipping base-visibility precheck for "
+            f"{entry.task_id} (execute_task will surface real errors)",
+            file=sys.stderr,
+        )
         return []
     missing: list[str] = []
-    for ref in (entry.spec_ref, entry.plan_ref):
+    for ref in (entry.spec_ref, entry.plan_ref, entry.constitution_ref):
         if not _git_ok(repo_root, "cat-file", "-e", f"{entry.base_branch}:{ref}"):
             missing.append(ref)
     return missing
 
 
-def precheck_refs_on_base(manifest: BatchManifest, repo_root: str) -> None:
-    """对 manifest 所有 task 跑 base-branch ref 可见性检查; 有缺失即抛.
+def _git_capture(repo_root: str, *args: str) -> bytes | None:
+    """跑 git 命令, 成功返回 stdout bytes; 失败返回 None."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", repo_root, *args],
+            capture_output=True,
+            shell=False,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
 
-    Raises BatchAdapterError(INVALID_MANIFEST): 任一 task 的 spec_ref/plan_ref
-    在其 base_branch HEAD 上不可见 (即引用了未提交的文件)。
+
+def _check_manifest_on_base(
+    repo_root: str, manifest_path: Path, base_branch: str
+) -> None:
+    """tasks.yaml 自身必须与 base HEAD 版本一致 (P0-1 身份基线).
+
+    C7 state 记 manifest_sha256; C1 写回 execution_plan 后若忘 commit,
+    盘上内容与 base HEAD 漂移 → run 的身份审计断裂 (state 里的 sha 对应
+    一个 base 上不存在的 manifest)。这里 fail-fast 成清晰错误。
+
+    宽松边界 (均 stderr 警告 + 放行, 不误伤):
+    - manifest 在 repo_root 之外 (手写实验工件): 无 base 版本可比
+    - base_branch 不可解析: 同 _refs_missing_on_base 跳过语义
+    """
+    try:
+        rel = manifest_path.resolve().relative_to(Path(repo_root).resolve())
+    except ValueError:
+        print(
+            f"batch: warning: tasks.yaml {manifest_path} is outside repo_root; "
+            "skipping manifest-on-base consistency check (identity audit weakened)",
+            file=sys.stderr,
+        )
+        return
+    if not _git_ok(repo_root, "rev-parse", "--verify", "--quiet", base_branch):
+        return  # _refs_missing_on_base 已对同一情形警告过
+    base_bytes = _git_capture(repo_root, "show", f"{base_branch}:{rel.as_posix()}")
+    if base_bytes is None:
+        raise BatchAdapterError(
+            "INVALID_MANIFEST",
+            f"tasks.yaml not committed on base_branch {base_branch!r}: "
+            f"{rel.as_posix()}. Commit the /sy-tasks artifact (and any "
+            "C1 execution_plan write-back) before running.",
+            manifest_path=str(manifest_path),
+            base_branch=base_branch,
+        )
+    if base_bytes != manifest_path.read_bytes():
+        raise BatchAdapterError(
+            "INVALID_MANIFEST",
+            f"tasks.yaml on disk differs from base_branch {base_branch!r} "
+            f"version: {rel.as_posix()}. Commit the drifted manifest "
+            "(e.g. C1 execution_plan write-back) so run identity is auditable.",
+            manifest_path=str(manifest_path),
+            base_branch=base_branch,
+        )
+
+
+def precheck_refs_on_base(
+    manifest: BatchManifest,
+    repo_root: str,
+    manifest_path: Path | None = None,
+) -> None:
+    """对 manifest 所有 task 跑 base-branch 基线检查; 有缺失即抛.
+
+    Raises BatchAdapterError(INVALID_MANIFEST):
+    - 任一 task 的 spec_ref/plan_ref/constitution_ref 在其 base_branch HEAD
+      上不可见 (即引用了未提交的文件)
+    - manifest_path 提供时: tasks.yaml 自身未提交 / 与 base HEAD 漂移
     """
     for entry in manifest.tasks:
         missing = _refs_missing_on_base(repo_root, entry)
@@ -314,6 +437,10 @@ def precheck_refs_on_base(manifest: BatchManifest, repo_root: str) -> None:
                 base_branch=entry.base_branch,
                 missing_refs=missing,
             )
+    if manifest_path is not None:
+        _check_manifest_on_base(
+            repo_root, manifest_path, manifest.tasks[0].base_branch
+        )
 
 
 # -------------------------------------------------------------------
@@ -327,6 +454,7 @@ def run_batch(
     repo_root: str,
     dry_run: bool = False,
     claude_cmd: list[str] | None = None,
+    manifest_path: Path | None = None,
 ) -> BatchOutput:
     """顺序跑 manifest.tasks; 中间 fail 立即停, 后续 skipped.
 
@@ -335,6 +463,7 @@ def run_batch(
         repo_root: 业务项目根 (绝对路径); 给每个 task 注入.
         dry_run: True 时只列 task, 不调 execute_task.
         claude_cmd: 测试时 inject mock claude script; None = 走默认 claude CLI.
+        manifest_path: tasks.yaml 路径; 提供时 precheck 校验其与 base HEAD 一致.
 
     Returns:
         BatchOutput: 含 per-task 结果 + 整体 status.
@@ -350,8 +479,10 @@ def run_batch(
             tasks=results,
         )
 
-    # 真跑前 fail-fast: spec_ref/plan_ref 必须在各自 base_branch HEAD 可见
-    precheck_refs_on_base(manifest, repo_root)
+    feature_id = resolve_feature_id(manifest)
+
+    # 真跑前 fail-fast: spec/plan/constitution + manifest 必须在 base HEAD 可见
+    precheck_refs_on_base(manifest, repo_root, manifest_path)
 
     stopped_at: str | None = None
     overall_success = True
@@ -361,7 +492,7 @@ def run_batch(
             results.append(BatchTaskResult(task_id=entry.task_id, status="skipped"))
             continue
 
-        task_input = entry.to_task_input(repo_root=repo_root)
+        task_input = entry.to_task_input(repo_root=repo_root, feature_id=feature_id)
         try:
             output = execute_task(task_input, claude_cmd=claude_cmd)
         except TaskExecutorError as e:
