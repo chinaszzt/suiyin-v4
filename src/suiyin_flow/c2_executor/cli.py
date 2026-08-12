@@ -133,6 +133,8 @@ def _run_attempts(
             attempt=attempt,
             timeout_seconds=float(task_input.session_timeout_seconds),
             claude_cmd=claude_cmd,
+            feature_id=task_input.feature_id,
+            cost_repo_root=Path(task_input.repo_root),
         )
 
         # 解析 verify_pass: 看 session final_output_json 里 verify_cmd_exit_code

@@ -196,6 +196,7 @@ properties:
 - 调用 `gh pr diff <pr_ref>` 或 `git diff <base_branch>...<pr_ref>` 拉 PR diff
 - `complexity` 类 finding 触发时调用 **C11 query 接口**（Fork L: embedding 语义查重 + jscpd 语法兜底），P1.2 阶段 C11 未落地时降级为只跑 jscpd
 - 写 `review_report.json` 到 `<repo_root>/.suiyin/reviews/<review_key>/<session_id>/`（versioned + latest.json）
+- 写 `<repo_root>/.suiyin/cost/log.jsonl` 成本台账（P0-6，只观测不路由）
 - **不**修改源码、**不** commit、**不** push（C5 是只读审查）
 
 ### 3.3 Failure Modes

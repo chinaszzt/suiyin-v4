@@ -82,6 +82,8 @@ def execute_review(
         session_id=session_id,
         timeout_seconds=float(review_input.session_timeout_seconds),
         claude_cmd=claude_cmd,
+        feature_id=review_input.feature_id or "",
+        cost_repo_root=repo_root,
     )
 
     if session_result.timed_out:

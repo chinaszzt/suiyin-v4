@@ -23,6 +23,7 @@ from typing import Any
 import psutil
 
 from suiyin_flow.c5_reviewer.contract import ReviewerError
+from suiyin_flow.costlog import CostRecord, TerminalStatus, close_invocation, open_invocation
 
 # Default 30 min (跟 spec §2.1 session_timeout_seconds default 一致)
 DEFAULT_TIMEOUT_SECONDS = 1800.0
@@ -187,6 +188,17 @@ def _maybe_parse_final_output(line: str) -> dict[str, Any] | None:
     return None
 
 
+def _maybe_parse_usage(line: str) -> Any | None:
+    """从 result event 取 usage；结构校验留给 costlog 显式记录错误."""
+    try:
+        event: Any = json.loads(line)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if isinstance(event, dict) and event.get("type") == "result":
+        return event.get("usage")
+    return None
+
+
 def run_session(
     *,
     task_id: str,
@@ -195,6 +207,8 @@ def run_session(
     session_id: str,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     claude_cmd: list[str] | None = None,
+    feature_id: str = "",
+    cost_repo_root: Path | None = None,
 ) -> SessionResult:
     """跑一次 C5 review session.
 
@@ -205,6 +219,8 @@ def run_session(
         session_id: UUID for this session
         timeout_seconds: 超时上限 (默认 1800s = 30 min)
         claude_cmd: injectable mock for tests
+        feature_id: canonical identity 的 feature 部分
+        cost_repo_root: 成本台账所属 repo；None 时不记账
 
     Returns:
         SessionResult — exit_code / duration / log_path / final_review_json / timed_out
@@ -220,63 +236,108 @@ def run_session(
 
     start = time.monotonic()
     final_review: dict[str, Any] | None = None
+    usage: Any | None = None
     timed_out_flag = threading.Event()
-
-    with open(log_path, "w", encoding="utf-8") as log_file:
-        proc = subprocess.Popen(
-            cmd,
-            cwd=review_dir,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
-            shell=False,
-            bufsize=1,
-            # 跟 C2 session.py 同一个坑: encoding="utf-8" 只管父进程这端的
-            # 管道编解码, 子进程自己的 sys.stdin 默认走 locale 编码 ——
-            # Windows 非 UTF-8 locale 下读入含中文的 prompt 会用
-            # surrogateescape 静默吞掉解不出的字节, 直到子进程后面把它重新
-            # 编码 (如落盘) 才炸 UnicodeEncodeError。强制子进程 UTF-8 I/O
-            # 从根上避免编解码不对齐; 对真 claude CLI 是无害 no-op。
-            env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+    cost_record: CostRecord | None = None
+    if cost_repo_root is not None:
+        cost_record = open_invocation(
+            cost_repo_root,
+            feature_id=feature_id,
+            task_id=task_id,
+            role="reviewer",
+            attempt=1,
         )
 
-        if proc.stdin is not None:
-            proc.stdin.write(prompt)
-            proc.stdin.close()
+    try:
+        with open(log_path, "w", encoding="utf-8") as log_file:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=review_dir,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                shell=False,
+                bufsize=1,
+                # 跟 C2 session.py 同一个坑: encoding="utf-8" 只管父进程这端的
+                # 管道编解码, 子进程自己的 sys.stdin 默认走 locale 编码 ——
+                # Windows 非 UTF-8 locale 下读入含中文的 prompt 会用
+                # surrogateescape 静默吞掉解不出的字节, 直到子进程后面把它重新
+                # 编码 (如落盘) 才炸 UnicodeEncodeError。强制子进程 UTF-8 I/O
+                # 从根上避免编解码不对齐; 对真 claude CLI 是无害 no-op。
+                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+            )
 
-        def _watchdog() -> None:
-            if proc.poll() is None:
-                timed_out_flag.set()
-                _kill_tree(proc.pid)
+            if proc.stdin is not None:
+                proc.stdin.write(prompt)
+                proc.stdin.close()
 
-        watchdog = threading.Timer(timeout_seconds, _watchdog)
-        watchdog.daemon = True
-        watchdog.start()
+            def _watchdog() -> None:
+                if proc.poll() is None:
+                    timed_out_flag.set()
+                    _kill_tree(proc.pid)
 
-        try:
-            if proc.stdout is not None:
-                for line in proc.stdout:
-                    log_file.write(line)
-                    log_file.flush()
-                    parsed = _maybe_parse_final_output(line)
-                    if parsed is not None:
-                        final_review = parsed
-        finally:
-            watchdog.cancel()
+            watchdog = threading.Timer(timeout_seconds, _watchdog)
+            watchdog.daemon = True
+            watchdog.start()
+
             try:
-                exit_code = proc.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                _kill_tree(proc.pid)
-                exit_code = -9
+                if proc.stdout is not None:
+                    for line in proc.stdout:
+                        log_file.write(line)
+                        log_file.flush()
+                        parsed = _maybe_parse_final_output(line)
+                        if parsed is not None:
+                            final_review = parsed
+                        parsed_usage = _maybe_parse_usage(line)
+                        if parsed_usage is not None:
+                            usage = parsed_usage
+            finally:
+                watchdog.cancel()
+                try:
+                    exit_code = proc.wait(timeout=5.0)
+                except subprocess.TimeoutExpired:
+                    _kill_tree(proc.pid)
+                    exit_code = -9
+    except BaseException as exc:
+        if cost_record is not None:
+            assert cost_repo_root is not None
+            close_invocation(
+                cost_repo_root,
+                cost_record,
+                status="crashed",
+                usage=usage,
+                error=str(exc),
+            )
+        raise
 
     duration = time.monotonic() - start
+    timed_out = timed_out_flag.is_set()
+    if cost_record is not None:
+        assert cost_repo_root is not None
+        status: TerminalStatus
+        if timed_out:
+            status = "timeout"
+            error = f"claude session timed out after {timeout_seconds}s"
+        elif exit_code != 0:
+            status = "crashed"
+            error = f"claude session exit_code={exit_code}"
+        else:
+            status = "success"
+            error = None
+        close_invocation(
+            cost_repo_root,
+            cost_record,
+            status=status,
+            usage=usage,
+            error=error,
+        )
 
     return SessionResult(
         exit_code=exit_code,
         duration_seconds=duration,
         log_path=log_path,
         final_review_json=final_review,
-        timed_out=timed_out_flag.is_set(),
+        timed_out=timed_out,
     )
