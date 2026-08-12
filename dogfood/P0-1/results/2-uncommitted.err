@@ -1,0 +1,10 @@
+batch: 1 tasks from /Users/zhangtuo/suiyin-desk-v4lab/p01-tasks.yaml
+batch: note: manifest has no feature_id; derived '002-t001-replay' (from feature_name). Set feature_id explicitly in tasks.yaml (schema v0.2.0) to pin identity.
+{
+  "code": "INVALID_MANIFEST",
+  "message": "tasks.yaml not committed on base_branch 'v4lab/002-t001-replay-b': p01-tasks.yaml. Commit the /sy-tasks artifact (and any C1 execution_plan write-back) before running.",
+  "details": {
+    "manifest_path": "/Users/zhangtuo/suiyin-desk-v4lab/p01-tasks.yaml",
+    "base_branch": "v4lab/002-t001-replay-b"
+  }
+}

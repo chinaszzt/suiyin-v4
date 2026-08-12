@@ -1,0 +1,29 @@
+{
+  "schema_version": "v0.2.0",
+  "status": "dry_run",
+  "feature_id": "p0-1-dogfood",
+  "base_branch": "v4lab/002-t001-replay-b",
+  "phases": [
+    {
+      "phase": 1,
+      "status": "dry_run",
+      "tasks": [
+        {
+          "task_id": "T-001B",
+          "state": "dry_run",
+          "park_reason": null,
+          "merged_sha": null,
+          "requeue_count": 0,
+          "rebased": false,
+          "reverify_pass": null,
+          "reverify_output": null,
+          "worktree_path": null,
+          "c2_output": null,
+          "c2_error": null
+        }
+      ]
+    }
+  ],
+  "stopped_at_phase": null,
+  "state_file_path": "/Users/zhangtuo/suiyin-desk-v4lab/.suiyin/phase-state/p0-1-dogfood-20260812T123623Z-37702.json"
+}

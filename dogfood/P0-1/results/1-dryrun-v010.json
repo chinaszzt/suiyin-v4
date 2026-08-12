@@ -1,0 +1,14 @@
+{
+  "schema_version": "v0.2.0",
+  "feature_name": "002-t001-replay",
+  "status": "dry_run",
+  "tasks": [
+    {
+      "task_id": "T-001B",
+      "status": "dry_run",
+      "output": null,
+      "error": null
+    }
+  ],
+  "stopped_at_task_id": null
+}

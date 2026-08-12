@@ -382,7 +382,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - **precheck v2**（r4 #4 auto-commit 缺口收口）：+`constitution_ref` base 可见性 + tasks.yaml 盘上内容 == base HEAD（C1 写回忘 commit → fail-fast）+ base 不可解析从静默跳过改 stderr 警告
   - cascade：C2 spec v0.4.0 / C7 spec v0.2.0（migration note：旧 latest-* 不再识别）/ C5 spec v0.2.0；README proxy 指引清理（系统代理自动继承，不再教 export）
   - tests：192 passed（+17 新 AC，含失败型：非法 id / 未知 schema 版本 / manifest 未提交 / 漂移）+ ruff + mypy 全绿。kill-9/resume：机制不变仅键变，不适用新 AC
-- [ ] **P0-2 AC 迁移与冻结闸**（AC manifest + diff 拦截；下一件）
+- [x] **P0-2 AC 冻结闸** ✅ (2026-08-12, 本 PR)
+  - 新组件 `src/suiyin_flow/acgate/`（spec: [ac-freeze-gate.md](components/ac-freeze-gate.md) v0.1.0）：`suiyin-flow acgate {run,freeze}`
+  - 机械闭集：删文件/改名(含 git R)/删 def/skip → 明确类；其余含删除行 → **UNKNOWN 同样不放行**（fail-closed）；纯新增放行
+  - 三通道机械识别：spec_changed（Type B/C）/ projection_fix（oracle 证据文件）/ 通道放行留 audit finding
+  - AC manifest（ac_id/kind/spec_hash/test_hash/baseline_ref，CRLF 归一化 hash）+ MANIFEST_STALE 恒 block
+  - 13 AC tests（真 git fixture）；desk FR/GWT → AC-N 批量映射留 M2；task 级挂点留 QA-1（P0-4 harness 时定）
+  - 附带：P0-1 dogfood 工件落库 `dogfood/P0-1/`（DoD 收口）
 - [ ] **P0-3 最小隔离 + mutation 探针**（throwaway worktree + lane mongo；验收 = v4lab B 产物五处空心全杀）
 - [ ] **P0-4 feature 收口 harness**（C4 全量 → C5 subject=feature → C6；human:block 本地状态化）
 - [ ] **P0-5 安全闸三条**（27017 / bzds 写 / 凭证入 git，模型调用前机械阻断）
