@@ -1,0 +1,52 @@
+{
+  "schema_version": "v0.1.0",
+  "feature_id": "002-t001-replay",
+  "ref": "v4lab/e4-cross",
+  "verdict": "fail",
+  "baseline_ok": true,
+  "baseline_output_tail": "",
+  "results": [
+    {
+      "mutant_id": "M-bson-tag-rename",
+      "mutant_class": "tag_rename",
+      "target_file": "internal/store/schema.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t2.615s\n"
+    },
+    {
+      "mutant_id": "M-iface-method-rename",
+      "mutant_class": "method_rename",
+      "target_file": "internal/topic/deps.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t3.053s\n"
+    },
+    {
+      "mutant_id": "M-audit-field-drop",
+      "mutant_class": "assert_field_drop",
+      "target_file": "internal/topic/registry.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t2.707s\n"
+    },
+    {
+      "mutant_id": "M-taint-escape",
+      "mutant_class": "taint_escape",
+      "target_file": "internal/topic/registry.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t4.632s\n"
+    },
+    {
+      "mutant_id": "M-scratch-shallow-copy",
+      "mutant_class": "shallow_copy",
+      "target_file": "internal/topic/deps.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t2.709s\n"
+    }
+  ],
+  "survived_count": 5,
+  "killed_count": 0
+}
