@@ -389,10 +389,16 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - AC manifest（ac_id/kind/spec_hash/test_hash/baseline_ref，CRLF 归一化 hash）+ MANIFEST_STALE 恒 block
   - 13 AC tests（真 git fixture）；desk FR/GWT → AC-N 批量映射留 M2；task 级挂点留 QA-1（P0-4 harness 时定）
   - 附带：P0-1 dogfood 工件落库 `dogfood/P0-1/`（DoD 收口）
-- [ ] **P0-3 最小隔离 + mutation 探针**（throwaway worktree + lane mongo；验收 = v4lab B 产物五处空心全杀）
-- [ ] **P0-4 feature 收口 harness**（C4 全量 → C5 subject=feature → C6；human:block 本地状态化）
-- [ ] **P0-5 安全闸三条**（27017 / bzds 写 / 凭证入 git，模型调用前机械阻断）
-- [ ] **P0-6 成本记账最小版**（6 字段/调用，用 P0-1 canonical key）
+- [x] **P0-3 mutation 探针** ✅ (2026-08-12, 本 PR)
+  - 新组件 `src/suiyin_flow/mutation/`（spec: [mutation-probe.md](components/mutation-probe.md) v0.1.0）：`suiyin-flow mutation run`
+  - catalog 驱动确定性文本变异（语言无关）；每 mutant 独立 throwaway worktree（原树 byte-identical，AC-3）；lane 隔离靠 `--env` 注入
+  - fail-closed：零适用 / catalog stale (apply_failed) / error 一律 fail；pass = ≥1 且全 killed
+  - 10 AC（实心/空心对照 fixture：空心测试放跑 mutant → fail 逐个点名）
+  - **拍板验收（B 产物五处空心）= merge 后 v4lab dogfood**，desk 五类 mutant catalog 现场写
+- [x] **P0-5 安全闸三条** ✅ (2026-08-12, PR #66, **codex 外包实现** + Claude review 收紧 diff-unavailable fail-closed)
+  - `c2_executor/safety.py` 三规则（27017 数字边界 / bzds 写共现 / 凭证 pattern+占位符白名单）；挂 execute_task（session 前）+ _finalize_success（commit 采纳前）；C2 v0.5.0 `SAFETY_BLOCKED`
+- [x] **P0-6 成本记账最小版** ✅ (2026-08-12, PR #67, **codex 外包实现**)
+  - `costlog.py` 双行 JSONL（running + 终态，kill -9 留痕）；canonical key 身份；usage 缺失≠错误 / 结构异常 → cost_log_error 显式；写盘失败不抛；挂 C2/C5 run_session
 
 ### P1.4 P3 — 强化关键路径
 
