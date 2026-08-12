@@ -13,7 +13,7 @@ import yaml
 
 from suiyin_flow.acgate.cli import main as acgate_main
 from suiyin_flow.acgate.gate import content_hash, freeze_manifest, run_gate
-from suiyin_flow.acgate.schema import AcGateError
+from suiyin_flow.acgate.schema import AcGateError, GateReport
 
 TEST_FILE = "tests/test_ac.py"
 GUARD_FILE = "tests/test_guard.py"
@@ -123,7 +123,7 @@ def _commit_all(repo: Path, msg: str) -> None:
     _git(repo, "commit", "-m", msg)
 
 
-def _run(repo: Path, manifest: Path):
+def _run(repo: Path, manifest: Path) -> GateReport:
     return run_gate(
         repo_root=repo, manifest_path=manifest, base_ref="main", head_ref="task1"
     )
