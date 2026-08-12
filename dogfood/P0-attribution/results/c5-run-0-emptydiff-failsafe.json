@@ -1,0 +1,29 @@
+{
+  "verdict": "block",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "ac_uncovered",
+      "location": "internal/ (repo-wide — no topic/triage/llm/clockx/replay packages exist at HEAD 6753721)",
+      "suggested_fix": "The supplied pr_diff.patch is empty (0 bytes), and the reconstructed git diff (228fb1e..6753721) contains zero Go code. None of spec.md's 41 FRs or 5 user stories (US1-US5) have any implementation or test — the T001 contract's own §五 machine-checkable acceptance list (TestTopicEnsureIndexes, TestTopicSchemas, TestTransition, TestRegistry, TestContractShapes, TestAppendOnlyCollections, TestCount, TestCardMessagesUniqueIndex) references packages (internal/topic, internal/llm, internal/clockx) that don't exist in this repo. Either (a) implement T001's data model/state machine/our_members per plan.md §三, or (b) if this task's real scope is only 'prepare condition-B replay seed' rather than feature delivery, correct the review dispatch so it isn't gated against 002-topic-triage's functional spec/plan and AC-coverage rule."
+    },
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "specs/002-topic-triage/contracts/T002-T008-*.md, specs/002-topic-triage/reviews/*.md (52 files removed from working tree)",
+      "suggested_fix": "plan.md §三 scopes T001 to 'schema/索引/枚举、状态机合法迁移校验、our_members 增删、配置读取' only. This diff instead deletes the contracts for T002-T008 and the entire historical spec-review/contracts-review/contracts-adjudication/gate1-view/T001-auth audit trail (~40 files), none of which falls inside T001's declared boundary, with no plan revision authorizing it. tasks-v4lab-b.yaml's own comments indicate this is deliberate replay-experiment seeding ('condition B ... other contracts and historical reviews are stripped'), and main branch history is presumably unaffected — but if this branch is meant to be evaluated as a T001 deliverable under 002-topic-triage's spec/plan, the deletion is out of scope and should be split into a separately-declared experiment-harness change, not bundled with (or reviewed under) the feature task."
+    },
+    {
+      "severity": "low",
+      "category": "reusable_knowledge_not_captured",
+      "location": "specs/002-topic-triage/contracts/T001-topic-model.md (v6 header) vs docs/constitution.md §二 E6",
+      "suggested_fix": "v6's core fix — 'acceptance criteria over an object/scenario set must enumerate a closed set, otherwise review can always cite one more uncovered case, which is a structural deadlock for the implementer' — is diagnosed in the contract's own text as having recurred across 3 rounds of v5 review on this single contract, and is structurally identical to the two anti-patterns E6 already promoted to constitution level in v1.3 (same-source oracle; new tests must enter the machine command list) — whose stated rationale for being enshrined was exactly 'avoid the same argument repeating per-feature.' Consider a constitution amendment adding 'acceptance-criteria object sets must be explicitly closed, not left open' as an E6 4th standard, so 003/004 and later features don't hit the same loop before some future contract independently rediscovers it."
+    }
+  ],
+  "reviewed_at": "2026-08-12T16:07:15.516719Z",
+  "session_id": "50e0539c-7e12-4fa8-830c-97756d29d8e5",
+  "task_id": "T-001B",
+  "pr_ref": "v4lab/002-t001-replay-b",
+  "contract_version": "v0.3.0",
+  "arbitration": null
+}

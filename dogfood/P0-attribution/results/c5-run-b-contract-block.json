@@ -1,0 +1,17 @@
+{
+  "verdict": "block",
+  "findings": [
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "cmd/server/main.go (missing call) / cmd/server/assemble.go",
+      "suggested_fix": "在 cmd/server/main.go 的 `st.EnsureIndexes(startCtx)` 之后追加 `topic.EnsureIndexes(startCtx, st)` 调用（镜像 001 已有模式：'连库→建索引→组装 App'）。当前 `topic.EnsureIndexes` 只在测试代码（testutil_test.go 的 testStore、schema_test.go）里被调用，生产二进制从未执行它——这意味着 002 全部 11 个集合的索引（含 FR-012 依赖的 `card_messages.message_nmid` 唯一索引、`our_members.wxid` 唯一索引、`topic_metrics.{name,bucket}` 唯一索引——`Count()` 的 upsert 原子性正依赖它防止并发重复写）在真实部署中永远不会被创建，只是恰好还没有真实调用方触发写入所以暂未暴露。需同时确认 main.go 现有 10s `startupBudget` 能否容纳两次 EnsureIndexes 调用（001 的 + 002 自身 5s 预算）。"
+    }
+  ],
+  "reviewed_at": "2026-08-12T16:30:00.545667Z",
+  "session_id": "0beaa6cb-38d3-40ed-9d22-a8fa2a3d8377",
+  "task_id": "T-001B",
+  "pr_ref": "v4lab/b-product",
+  "contract_version": "v0.3.0",
+  "arbitration": null
+}
