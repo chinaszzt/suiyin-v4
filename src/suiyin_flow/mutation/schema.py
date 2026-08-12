@@ -19,8 +19,21 @@ from suiyin_flow.identity import LOCAL_ID_PATTERN
 MUTATION_SCHEMA_VERSION: str = "v0.1.0"
 
 
+class MutantEdit(BaseModel):
+    """附加编辑点 (v0.1.1): 同一 mutant 的协同多点替换.
+
+    典型场景 = method_rename 类: 接口声明与 stub 必须同改才保持编译通过,
+    才能暴露"测试不冻结方法集"(E4 实测手法; 单点改名只会编译红, 信号错误)。
+    """
+
+    target_file: str
+    match: str = Field(min_length=1)
+    replacement: str
+    occurrence: int = Field(default=1, ge=1)
+
+
 class MutantSpec(BaseModel):
-    """catalog 单条: 对目标文件做一次确定性文本替换."""
+    """catalog 单条: 对目标文件做一次确定性文本替换 (+ 可选协同编辑点)."""
 
     mutant_id: str = Field(pattern=r"^M-[A-Za-z0-9._-]+$")
     mutant_class: str = Field(
@@ -39,6 +52,10 @@ class MutantSpec(BaseModel):
         default=1,
         ge=1,
         description="替换第 N 处出现 (确定性; 默认第 1 处)",
+    )
+    extra_edits: list[MutantEdit] = Field(
+        default_factory=list,
+        description="v0.1.1; 协同编辑点 (全部成功才算注入成功, 任一失配 → apply_failed)",
     )
     test_cmd: str | None = Field(
         default=None,
@@ -103,10 +120,18 @@ class ProbeReport(BaseModel):
     ref: str = Field(description="被测 ref (探针在 throwaway worktree 内跑此基准)")
     verdict: ProbeVerdict = Field(
         description=(
-            "pass = ≥1 个 mutant 且全部 killed; "
-            "其余一律 fail (survived / apply_failed / error / 零适用, fail-closed)"
+            "pass = baseline 绿 + ≥1 个 mutant 且全部 killed; "
+            "其余一律 fail (survived / apply_failed / error / 零适用 / baseline 红, fail-closed)"
         )
     )
+    baseline_ok: bool = Field(
+        default=True,
+        description=(
+            "v0.1.1; 未变异基线上杀手测试必须先绿 — 否则环境/测试本身是坏的, "
+            "所有 mutant 都会误报 killed → 假 pass。基线红 → verdict=fail, 不跑 mutant"
+        ),
+    )
+    baseline_output_tail: str = Field(default="", description="baseline 失败时的输出尾部")
     results: list[MutantResult]
     survived_count: int
     killed_count: int

@@ -70,7 +70,8 @@ AC-1 实心测试全杀 → pass / AC-2 空心测试放跑 → fail + 逐个点�
 
 ---
 
-**Version**: v0.1.0-draft
+**Version**: v0.1.1-draft
 **Last Updated**: 2026-08-12
 **Changelog**:
+- v0.1.1 (2026-08-12): **MINOR — B 产物验收 dogfood 前逼出的两升级**。(1) `extra_edits` 协同多点替换：method_rename 类需接口声明+stub 同改保持编译通过，才能暴露"测试不冻结方法集"（E4 实测手法；单点改名只会编译红，信号错误）；任一点失配 → apply_failed。(2) **baseline 健全性跑（I2 补强）**：每个杀手命令先在未变异基线 throwaway 跑一次，红 → `baseline_ok=false` + verdict=fail + 不跑 mutant——否则坏环境（如 lane mongo 连不上）会把所有 mutant 误报 killed → 假 pass（E4 报告里 Mongo 拒连导致大量"无法判定"正是此病）。AC-9/AC-10。
 - v0.1.0 (2026-08-12): 初稿 + impl + 10 AC。来源 gen4-plan §二拍板 1 + §三 P0-3；五类 mutant class 来源 8-08 E4 交叉审查。
