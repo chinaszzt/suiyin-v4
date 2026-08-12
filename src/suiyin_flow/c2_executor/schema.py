@@ -35,7 +35,9 @@ from suiyin_flow.identity import LOCAL_ID_PATTERN, derive_feature_id
 #      沙盒实验 schema 拒收案例转正)
 #   3. worktree 命名 worktrees/<task_id> → worktrees/<feature_id>/<task_id>,
 #      分支 task/<task_id> → task/<feature_id>/<task_id> (I1 修订)
-SCHEMA_VERSION: str = "v0.4.0"
+# v0.5.0 (2026-08-12): MINOR — gen4-plan P0-5 安全闸，机械阻断生产
+# MongoDB 端口、bzds 写操作与凭证进入 git diff。
+SCHEMA_VERSION: str = "v0.5.0"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -218,6 +220,7 @@ TaskErrorCode = Literal[
     "CONTEXT_SEEDS_MISSING",
     "WORKTREE_LOCKED",
     "REVIEW_FEEDBACK_INVALID",
+    "SAFETY_BLOCKED",
 ]
 
 

@@ -20,6 +20,7 @@ from suiyin_flow.c2_executor.prompt import (
     validate_refs,
 )
 from suiyin_flow.c2_executor.retry import should_retry
+from suiyin_flow.c2_executor.safety import check_command, check_diff
 from suiyin_flow.c2_executor.schema import (
     DiffStats,
     SessionLog,
@@ -72,6 +73,17 @@ def execute_task(
     validate_refs(task_input)
     validate_context_seeds(task_input)
     review_findings = load_review_findings(task_input)
+
+    # I9: 模型调用前机械阻断危险验证命令，不创建 worktree / 不启动 session。
+    command_violations = check_command(task_input.verify_cmd)
+    if command_violations:
+        raise TaskExecutorError(
+            "SAFETY_BLOCKED",
+            "verify_cmd failed the pre-session safety gate",
+            task_id=task_input.task_id,
+            retryable=False,
+            violations=[violation.model_dump() for violation in command_violations],
+        )
 
     repo_root = Path(task_input.repo_root).resolve()
 
@@ -204,6 +216,18 @@ def _finalize_success(
 
     open_pr=False (C7 调度, C7 spec I6): 跳过 push + PR, 只留本地 task 分支.
     """
+    diff_text = _git_full_diff(wt_path, task_input.base_branch)
+    diff_violations = check_diff(diff_text or "")
+    if diff_violations:
+        raise TaskExecutorError(
+            "SAFETY_BLOCKED",
+            "git diff failed the pre-adoption safety gate; worktree retained",
+            task_id=task_input.task_id,
+            retryable=False,
+            worktree_path=str(wt_path),
+            violations=[violation.model_dump() for violation in diff_violations],
+        )
+
     branch = worktree_branch_name(task_input.feature_id, task_input.task_id)
     diff_stats = _compute_diff_stats(wt_path, task_input.base_branch)
     pr_url_or_branch: str | None = None
@@ -256,6 +280,32 @@ def _git_shortstat(wt_path: Path, base_ref: str) -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout
+
+
+def _git_diff(wt_path: Path, base_ref: str) -> str | None:
+    """跑 `git diff <base_ref>...HEAD`，返回完整 diff 或 None（失败）。"""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(wt_path), "diff", f"{base_ref}...HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            shell=False,
+            check=False,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def _git_full_diff(wt_path: Path, base_branch: str) -> str | None:
+    """取 base 到 HEAD 的完整 diff；origin 不可用时退回本地 base。"""
+    diff_text = _git_diff(wt_path, f"origin/{base_branch}")
+    if diff_text is None:
+        diff_text = _git_diff(wt_path, base_branch)
+    return diff_text
 
 
 def _compute_diff_stats(wt_path: Path, base_branch: str) -> DiffStats | None:

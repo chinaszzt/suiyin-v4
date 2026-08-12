@@ -239,6 +239,7 @@ properties:
       - CONTEXT_SEEDS_MISSING  # 任一 context_seeds 文件不存在
       - WORKTREE_LOCKED        # worktree 有活跃 C2 run（.suiyin/lock pid 存活，I8）
       - REVIEW_FEEDBACK_INVALID  # review_feedback 不存在 / JSON 非法 / findings 缺失或为空
+      - SAFETY_BLOCKED         # 安全闸命中；不起 session 或不采纳 commit，等待人工处置
   message: { type: string }
   task_id: { type: string }
   details:
@@ -262,6 +263,7 @@ properties:
 - **I6**: PR 描述里必须包含 `spec_ref` + `ac_list` + `attempts`，便于 C5 Reviewer 关联回 spec。
 - **I7**: 单 session 超 `session_timeout_seconds` 强制 `kill -9`，**不允许优雅退出超时**（避免假活）。
 - **I8**: 同一 worktree 同时至多一个活跃 C2 run。run 起步（worktree 创建/复用后、session 启动前）在 `worktrees/<feature_id>/<task_id>/.suiyin/lock` 写 pid 锁（`O_CREAT|O_EXCL` 原子创建），终态（success / RETRY_EXHAUSTED 等一切退出路径）释放；已存在且持有者 pid 存活（`psutil.pid_exists`）→ `WORKTREE_LOCKED` 拒跑，不动 worktree 内容；pid 已死或锁内容损坏 = stale → 确定性接管。**真闭环 dogfood 发现 #8 的 C2 半边** —— C7 的 I9 coordinator 锁挡「同 manifest 双 coordinator」，本锁挡「coordinator 在跑 + 人又直跑单 task」的交叉竞态（C7 spec §7 联动需求 2）。锁文件与 C7 coordinator 锁同 pattern（pid + task_id + start_ts JSON）。
+- **I9（安全闸）**: 以下三条规则任一命中即 `SAFETY_BLOCKED`：(1) 测试/验证命令或新增 diff 行出现生产 MongoDB 端口 `27017`；(2) 同一行内生产库账号 `bzds` 与写操作词共现（只读放行）；(3) 新增 diff 行含 private key、AWS/OpenAI 风格密钥或非占位符明文凭证。输入闸在 worktree/session 之前阻断，diff 闸在 commit 采纳、push/开 PR 前阻断并保留 worktree；全程零模型参与，仅用确定性正则扫描。
 
 ### 3.2 Side Effects
 
@@ -290,6 +292,7 @@ properties:
 | `INVALID_TASK_ID` | 不符合 `T-\d{3,}` | 立即报错 |
 | `WORKTREE_LOCKED` | `worktrees/<feature_id>/<task_id>/.suiyin/lock` 存在且持有者 pid 存活 | 立即报错，不启动 session、不动 worktree（details 带 `holder_pid` + `lock_path`）|
 | `REVIEW_FEEDBACK_INVALID` | `review_feedback` 路径不存在 / JSON 解析失败 / `findings` 缺失或为空 | 立即报错，不启动 session |
+| `SAFETY_BLOCKED` | `verify_cmd` 或新增 git diff 行命中 I9 任一安全规则 | 输入阶段不起 session、不创建 worktree；采纳阶段不 push/不开 PR并保留 worktree，交由人工处置 |
 
 **重试策略**：
 - VERIFY_FAILED / SESSION_CRASHED → 重试（max_retries 默认 3）
@@ -515,11 +518,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.4.0-draft
+**Version**: v0.5.0-draft
 **Last Updated**: 2026-08-12
-**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目；v0.3.2 子进程 UTF-8 I/O 强制（Windows CI 实证）；v0.4.0 canonical identity（gen4-plan P0-1）
+**Status**: draft — P0 spike 跑通 (PR #21+25 impl, PR #24 dogfood)；Q2-2/Q2-3 已 spike 验证；v0.2.x 接入 C7 调度（open_pr + base-branch 视角输入校验）；v0.3.0 R2 retry-with-feedback + worktree 活跃锁；v0.3.1 constitution_ref 默认值面向业务项目；v0.3.2 子进程 UTF-8 I/O 强制（Windows CI 实证）；v0.4.0 canonical identity（gen4-plan P0-1）；v0.5.0 安全闸（gen4-plan P0-5）
 
 **Changelog**:
+- v0.5.0 (2026-08-12): **MINOR — gen4-plan P0-5 安全闸三条**。用零模型、纯正则机械阻断：(1) 生产 MongoDB 端口 `27017`；(2) 生产库账号 `bzds` 与写操作同一行共现（只读放行）；(3) private key、AWS/OpenAI 风格密钥或非占位符明文凭证进入新增 git diff。两挂点分别位于 `validate_refs` 后、`ensure_worktree` 前，以及 `_finalize_success()` commit 采纳/push/开 PR 前；命中统一返回 `SAFETY_BLOCKED`，后者保留 worktree 供人工处置。
 - v0.4.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) §2.1 加 `feature_id`（可选，缺省从 base_branch 派生；约定 = spec-kit feature 目录名），canonical key = `feature_id + task_id`，单一权威实现 `suiyin_flow/identity.py`；(2) `task_id` pattern `^T-\d{3,}$` → LOCAL_ID_PATTERN（`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`）——002·T001 沙盒实验 `T-001B` 被 schema 拒收的案例转正，模板仍推荐 `T-NNN`；(3) **I1 修订**：worktree `worktrees/<feature_id>/<task_id>`、分支 `task/<feature_id>/<task_id>`——不同 feature 的同名 task 不再互撞；(4) batch manifest schema v0.2.0（顶层 `feature_id`；v0.1.0 兼容读 + 派生提示）；(5) precheck v2：`constitution_ref` 一并查 base 可见性 + tasks.yaml 自身与 base HEAD 一致性（C1 execution_plan 写回未 commit → fail-fast）+ base 不可解析从静默跳过改 stderr 警告。AC-7 更新 + tests/test_identity_p0_1.py（T-001B 回归靶 / 兼容读 / 漂移失败型）。
 - v0.3.2 (2026-07-09): **PATCH** — §7 跨平台表加「子进程 Python I/O 编码」行：spawn 子进程时 env 继承父环境并叠加 `PYTHONIOENCODING=utf-8` + `PYTHONUTF8=1`。**issue #60 Windows CI 首跑实证**：父端 `Popen(encoding="utf-8")` 只管父侧管道，Windows 非 UTF-8 locale 的子进程读中文 prompt 会 surrogateescape 静默损坏、重编码时才炸（AC-10 retry 4 连崩现场）。C5 session / C1 semantic 同源同修（其 spec 跨平台节均为「继承 C2 §7 表」引用式，不另 bump）。§7 测试要求标注 Windows CI 已落地（3-OS matrix + `ci-ok` required check）。impl: PR #62
 - v0.3.1 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。**r4 真闭环发现 #1**：旧默认是 v4 自身的 constitution 路径，业务项目（v5）跑 C2 时校验「constitution_ref 在 base HEAD 可见」(v0.2.1) → `SPEC_NOT_FOUND` 阻断整个 phase run。v4 自身 dogfood 是特例（显式传 `docs/sdd/constitution.md`）；全部单元测试显式传 `constitution.md` → 零影响。cascade：C5 spec 同步（c5_reviewer 同源默认）+ `tasks-template.md` / `sy-tasks SKILL` schema 默认。
