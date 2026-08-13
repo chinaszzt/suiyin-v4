@@ -24,6 +24,7 @@ from suiyin_flow.c5_reviewer import cli as c5_cli
 from suiyin_flow.c6_gate import cli as c6_cli
 from suiyin_flow.c7_coordinator import cli as c7_cli
 from suiyin_flow.close_harness import cli as close_cli
+from suiyin_flow.lane import cli as lane_cli
 from suiyin_flow.mutation import cli as mutation_cli
 from suiyin_flow.seamlint import cli as seamlint_cli
 
@@ -78,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
         return seamlint_cli.main(args)
     if cmd == "close":
         return close_cli.main(args)
+    if cmd == "lane":
+        return lane_cli.main(args)
 
     print(f"suiyin-flow: error: unknown subcommand: {cmd}", file=sys.stderr)
     print(_USAGE, file=sys.stderr)
