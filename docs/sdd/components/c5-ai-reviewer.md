@@ -173,6 +173,11 @@ properties:
       v0.4.0；本次 review 实际输入面（resolved）：每条 = kind / 绝对 path /
       authority / status (loaded|skipped_missing) / 实测 content_sha256。
       审计"这个 verdict 是用什么尺子量出来的"；为报告新鲜度绑定（M3 件 4）铺路。
+  target_tree_sha:
+    type: string
+    description: |
+      optional (v0.5.0, M3 件 4)；被审 ref 的 git tree sha（pr_ref 本地分支形态时盖章；
+      URL/PR 号形态或解析失败 → 缺省 + stderr 警告）。C6 门侧对缺失 fail-closed。
 ```
 
 ### 2.3 Error Schema
@@ -467,11 +472,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.4.0-draft
+**Version**: v0.5.0-draft
 **Last Updated**: 2026-08-13
 **Status**: draft — v0.4.0 typed inputs（gen4-plan 拍板 7 / M3 件 1）；Q5 / Q5-5 spike 待续
 
 **Changelog**:
+- v0.5.0 (2026-08-13): **MINOR — M3 件 4 报告新鲜度绑定**：review_report 加 optional `target_tree_sha`（pr_ref 本地分支形态盖章；URL/PR 号形态缺省）。CONTRACT_VERSION → v0.5.0。
 - v0.4.1 (2026-08-13): **PATCH — M3 件 3 cascade**：InputKind 加 `authorization`（authority=design；写权声明进输入面，db/network 越界审查有尺子——机械精判随件 8 校准，分期见 authorization-manifest.md §3.2）；close harness 自动收 `authorization.yaml`。report schema 未变。
 - v0.4.0 (2026-08-13): **MINOR — M3 件 1 typed inputs（gen4-plan 拍板 7）**。(1) §2.1 加 `review_inputs[]`（kind 闭集 / authority 由 KIND_AUTHORITY 固定表派生 / required / content_sha256 CRLF 归一化校验）；核心三件自动合成 entries；(2) fail-closed：REVIEW_INPUT_MISSING / REVIEW_INPUT_HASH_DRIFT / REVIEW_INPUT_MANIFEST_INVALID（session 不启动）；(3) §2.2 report 加 resolved `review_inputs`（实测 hash，verdict 可审计到尺子，为报告新鲜度绑定 M3 件 4 铺路）；(4) I9/I10 + AC-11..16；(5) prompt 权威序 `nc > acceptance > design > failure_modes > advisory` + 归类钉死（nc 命中一律 nc_violation；契约违反 → spec_drift 不降级）；(6) CLI `--inputs-manifest`；close harness 自动收 feature 目录契约资产（ac-map / seam-manifest / failure-modes / contracts/*.md）。**动机 = 尺子对照实验**（dogfood/P0-attribution/）：同 C5 同 diff，spec 输入 approve/0 → 契约输入 block/1 真 finding。
 - v0.3.0 (2026-08-12): **MINOR — P0-4 补记**（spec changelog 漏记，代码已发布）：§2.1 加可选 `task_ids[]`（subject=feature 收口 review：task_id 槽位放 feature_id，review 覆盖整个 feature diff）。CONTRACT_VERSION → v0.3.0。

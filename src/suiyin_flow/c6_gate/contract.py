@@ -21,7 +21,8 @@ from pydantic import BaseModel, Field
 # 收敛, invariant 仍 ff-only main history).
 # v0.1.2 (2026-05-25, PR #34 cascade): §3.2 dry_run 落盘边界 clarify.
 # v0.1.1 (2026-05-25): round-3 max-effort review — omit-when-absent / I8 / I9 / etc.
-CONTRACT_VERSION: str = "v0.1.3"
+# v0.2.0 (2026-08-13): MINOR — C4/C5 两票 tree SHA 新鲜度校验.
+CONTRACT_VERSION: str = "v0.2.0"
 
 # -------------------------------------------------------------------
 # Enums (§2.2 / §2.3)
@@ -54,6 +55,7 @@ Code = Literal[
     "GIT_ERROR",
     "GH_ERROR",
     "PERMISSION_DENIED",
+    "STALE_REPORT",
 ]
 
 

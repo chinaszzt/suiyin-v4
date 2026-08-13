@@ -76,11 +76,13 @@ def build_report(
     task_id: str | None,
     levels: LevelsReport,
     requested_acs: list[str],
+    target_tree_sha: str | None = None,
 ) -> VerifyReport:
     """组装完整 VerifyReport."""
     test_results = levels.L2.test_results if levels.L2 else []
     return VerifyReport(
         target=target,
+        target_tree_sha=target_tree_sha,
         task_id=task_id,
         overall_verdict=compute_overall_verdict(levels),
         generated_at=datetime.now(UTC),

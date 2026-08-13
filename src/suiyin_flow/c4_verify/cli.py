@@ -24,6 +24,7 @@ from suiyin_flow.c4_verify.contract import (
 from suiyin_flow.c4_verify.report import build_report, write_report
 from suiyin_flow.c4_verify.runners import flutter as flutter_runner
 from suiyin_flow.c4_verify.runners import pytest as pytest_runner
+from suiyin_flow.treesha import resolve_tree_sha
 
 # spec.md §5 标题匹配，宽松匹配 (允许有无空格 / 不同前缀)
 _AC_SECTION_PATTERN = re.compile(r"^##\s+5\.\s+Acceptance Criteria", re.MULTILINE)
@@ -128,12 +129,18 @@ def run_verify(verify_input: VerifyInput) -> int:
         if level_name not in verify_input.levels:
             setattr(levels_report, level_name, LevelReportSkipped())
 
-    # 组装 + 落盘
+    # 组装 + 落盘。盖章失败不影响 C4 独立运行；C6 会对缺票 fail-closed。
+    try:
+        target_tree_sha = resolve_tree_sha(target_root)
+    except ValueError as exc:
+        target_tree_sha = None
+        print(f"[c4] warning: target tree SHA unavailable: {exc}", file=sys.stderr)
     report = build_report(
         target=verify_input.target,
         task_id=verify_input.task_id,
         levels=levels_report,
         requested_acs=verify_input.ac_list,
+        target_tree_sha=target_tree_sha,
     )
 
     output_dir = target_root / ".suiyin" / "verify"

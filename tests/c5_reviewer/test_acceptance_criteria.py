@@ -32,6 +32,7 @@ from suiyin_flow.c5_reviewer.inputs import (
 )
 from suiyin_flow.c5_reviewer.prompt import render_prompt, validate_refs
 from suiyin_flow.c5_reviewer.report import build_report
+from suiyin_flow.treesha import resolve_tree_sha
 
 
 def _make_input(
@@ -78,6 +79,7 @@ def test_AC_1_valid_input_returns_verdict_and_findings_schema(
     assert report.verdict == verdict
     assert report.task_id == "T-100"
     assert report.contract_version == CONTRACT_VERSION
+    assert report.target_tree_sha == resolve_tree_sha(fixture_pr_repo, "pr-test")
     # findings 每条 4 字段齐
     for f in report.findings:
         assert f.severity and f.category and f.location and f.suggested_fix
@@ -476,3 +478,32 @@ def test_AC_16_report_records_resolved_inputs(
     for i in inputs:
         if i["status"] == "loaded":
             assert len(i["content_sha256"]) == 64
+
+
+def test_AC_freshness_url_pr_ref_leaves_tree_sha_none(
+    fixture_pr_repo: Path,
+    mock_claude_review_approve: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Remote PR identifiers cannot be stamped as an unverified local ref."""
+    import json
+
+    def fake_fetch_pr_diff(*, output_path: Path, **_kwargs: object) -> Path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("diff --git a/x b/x\n", encoding="utf-8")
+        return output_path
+
+    monkeypatch.setattr(
+        "suiyin_flow.c5_reviewer.cli.fetch_pr_diff", fake_fetch_pr_diff
+    )
+    review_input = _make_input(
+        fixture_pr_repo,
+        pr_ref="https://github.com/example/project/pull/42",
+    )
+    _, report_path = execute_review(
+        review_input, claude_cmd=mock_claude_review_approve
+    )
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["target_tree_sha"] is None
+    assert "warning: target tree SHA unavailable" in capsys.readouterr().err

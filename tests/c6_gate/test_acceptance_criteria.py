@@ -509,6 +509,20 @@ def test_AC_11_worktree_ff_merge_no_checkout_main(
 
     parent, child = fixture_repo_worktree
 
+    # 该 fixture 的 README 内容与通用 report fixture 不同，按实际 feature tree 盖票。
+    target_tree_sha = subprocess.run(
+        ["git", "-C", str(child), "rev-parse", "feature^{tree}"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        shell=False,
+    ).stdout.strip()
+    for report_path in (verify_report_pass, review_report_approve):
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+        payload["target_tree_sha"] = target_tree_sha
+        report_path.write_text(json.dumps(payload), encoding="utf-8")
+
     gi = GateInput(
         pr_ref="feature",  # local branch — gh path 跳过, 走 git rev-parse
         verify_report_path=str(verify_report_pass),

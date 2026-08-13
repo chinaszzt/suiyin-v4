@@ -7,7 +7,8 @@ rules → I8 reason precedence → (merged: ff merge to main) / (held + R1: labe
 **Exit codes** (§7 落地形态):
   0 = merged
   1 = held
-  2 = Error (MISSING_INPUT / INVALID_REPORT / GIT_ERROR / GH_ERROR / PERMISSION_DENIED)
+  2 = Error (MISSING_INPUT / INVALID_REPORT / STALE_REPORT / GIT_ERROR / GH_ERROR /
+      PERMISSION_DENIED)
 """
 
 from __future__ import annotations
@@ -46,6 +47,44 @@ from suiyin_flow.c6_gate.rules import (
     evaluate_rules,
     select_reason,
 )
+from suiyin_flow.treesha import resolve_tree_sha
+
+
+def _display_tree_sha(value: object) -> str:
+    return value if isinstance(value, str) and value else "missing"
+
+
+def _validate_report_freshness(
+    *,
+    verify_report: dict[str, object],
+    review_report: dict[str, object],
+    current_tree_sha: str | None,
+) -> None:
+    """Require both report tickets to match the tree currently being gated."""
+    verify_tree_sha = verify_report.get("target_tree_sha")
+    review_tree_sha = review_report.get("target_tree_sha")
+    if not (
+        isinstance(verify_tree_sha, str)
+        and verify_tree_sha
+        and isinstance(review_tree_sha, str)
+        and review_tree_sha
+        and current_tree_sha
+        and verify_tree_sha == current_tree_sha
+        and review_tree_sha == current_tree_sha
+    ):
+        displayed = {
+            "verify_tree_sha": _display_tree_sha(verify_tree_sha),
+            "review_tree_sha": _display_tree_sha(review_tree_sha),
+            "current_tree_sha": _display_tree_sha(current_tree_sha),
+        }
+        raise GateContractError(
+            "STALE_REPORT",
+            "report tree SHA mismatch: "
+            f"verify={displayed['verify_tree_sha']}, "
+            f"review={displayed['review_tree_sha']}, "
+            f"current={displayed['current_tree_sha']}",
+            details=displayed,
+        )
 
 
 def execute_gate(gate_input: GateInput) -> GateOutput:
@@ -68,13 +107,28 @@ def execute_gate(gate_input: GateInput) -> GateOutput:
     verify_report = load_report(gate_input.verify_report_path, kind="verify")
     review_report = load_report(gate_input.review_report_path, kind="review")
 
-    # 2. Probe git/gh state
+    # 2. Mechanically validate both report tickets before evaluating any rules.
+    pr_sha = resolve_pr_sha(pr_ref=gate_input.pr_ref, repo_root=repo_root)
+    current_tree_sha: str | None = None
+    if pr_sha is not None:
+        try:
+            current_tree_sha = resolve_tree_sha(repo_root, pr_sha)
+        except ValueError:
+            current_tree_sha = None
+    _validate_report_freshness(
+        verify_report=verify_report,
+        review_report=review_report,
+        current_tree_sha=current_tree_sha,
+    )
+    assert pr_sha is not None  # freshness validation rejects an unresolved current ref
+
+    # 3. Probe remaining git/gh state
     ff_mergeable = is_ff_mergeable(pr_ref=gate_input.pr_ref, repo_root=repo_root)
     has_human_block = has_human_block_label(
         pr_ref=gate_input.pr_ref, repo_root=repo_root
     )
 
-    # 3. Evaluate rules + select reason (I8 precedence)
+    # 4. Evaluate rules + select reason (I8 precedence)
     rules = evaluate_rules(
         verify_report=verify_report,
         review_report=review_report,
@@ -85,7 +139,7 @@ def execute_gate(gate_input: GateInput) -> GateOutput:
 
     ts = now_iso8601_utc()
 
-    # 4a. Merged path
+    # 5a. Merged path
     if all_rules_pass(rules):
         if gate_input.dry_run:
             # AC-1b: dry_run 时不真 merge，merged_sha absent
@@ -95,13 +149,6 @@ def execute_gate(gate_input: GateInput) -> GateOutput:
                 timestamp=ts,
             )
         # 真 merge — 解 sha + ff merge + push (I5)
-        pr_sha = resolve_pr_sha(pr_ref=gate_input.pr_ref, repo_root=repo_root)
-        if pr_sha is None:
-            raise GateContractError(
-                "MISSING_INPUT",
-                f"could not resolve pr_ref to SHA for merge: {gate_input.pr_ref}",
-                details={"pr_ref": gate_input.pr_ref},
-            )
         merged_sha = ff_merge_to_main(pr_sha=pr_sha, repo_root=repo_root)
         return GateOutput(
             gate_result="merged",
@@ -110,7 +157,7 @@ def execute_gate(gate_input: GateInput) -> GateOutput:
             timestamp=ts,
         )
 
-    # 4b. Held path — reason 已由 I8 选定
+    # 5b. Held path — reason 已由 I8 选定
     assert reason is not None, "rules not all pass but no reason selected"
 
     if gate_input.dry_run:

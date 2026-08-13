@@ -35,6 +35,7 @@ def build_report(
     session_id: str,
     arbitration: Arbitration | None = None,
     review_inputs: list[ResolvedReviewInput] | None = None,
+    target_tree_sha: str | None = None,
 ) -> ReviewReport:
     """组装 ReviewReport (跟 spec §2.2 字段对齐)."""
     return ReviewReport(
@@ -44,6 +45,7 @@ def build_report(
         session_id=session_id,
         task_id=review_input.task_id,
         pr_ref=review_input.pr_ref,
+        target_tree_sha=target_tree_sha,
         contract_version=CONTRACT_VERSION,
         arbitration=arbitration,
         review_inputs=review_inputs,

@@ -6,6 +6,7 @@ C6 在 fixture repo 上真 ff-merge。
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -158,6 +159,12 @@ def test_AC_1_happy_path_merges(feature_repo: Path, tmp_path: Path) -> None:
     assert by_name["verify"].status == "passed"
     assert by_name["review"].status == "passed"
     assert by_name["gate"].status == "passed"
+    verify_path = by_name["verify"].report_path
+    assert verify_path is not None
+    verify_report = json.loads(Path(verify_path).read_text(encoding="utf-8"))
+    assert verify_report["target_tree_sha"] == _git(
+        feature_repo, "rev-parse", f"{FEATURE}^{{tree}}"
+    )
     # 落盘: versioned + latest
     d = feature_repo / ".suiyin" / "close"
     assert (d / "latest-002-demo.json").exists()

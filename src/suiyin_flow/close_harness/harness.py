@@ -59,6 +59,7 @@ from suiyin_flow.close_harness.schema import (
 from suiyin_flow.identity import safe_ref
 from suiyin_flow.mutation.runner import run_probe
 from suiyin_flow.mutation.schema import MutationError
+from suiyin_flow.treesha import resolve_tree_sha
 
 
 @dataclass
@@ -320,6 +321,12 @@ def _step_verify(
             "GIT_ERROR", f"verify worktree add failed: {r.stderr.strip()[-300:]}"
         )
     try:
+        # Stamp the detached snapshot that verify_cmd actually runs against.
+        target_tree_sha = resolve_tree_sha(wt)
+    except ValueError as exc:
+        target_tree_sha = None
+        _log(f"close: warning: target tree SHA unavailable: {exc}")
+    try:
         try:
             proc = subprocess.run(
                 cfg.verify_cmd,
@@ -339,6 +346,7 @@ def _step_verify(
     verdict = "pass" if exit_code == 0 else "fail"
     report = VerifyReport(
         target=TargetWorktree(worktree_path=str(wt)),
+        target_tree_sha=target_tree_sha,
         task_id=None,
         overall_verdict=verdict,  # type: ignore[arg-type]
         generated_at=datetime.now(UTC),

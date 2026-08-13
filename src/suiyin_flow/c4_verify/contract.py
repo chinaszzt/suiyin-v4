@@ -15,8 +15,8 @@ from pydantic import BaseModel, Field
 
 # 跟 docs/sdd/components/c4-verify-contract.md 顶部 Version 同步.
 # Breaking change → MAJOR bump (I4 invariant).
-# v0.1.2 (2026-05-24): require_tool 加 venv fallback (P0 spike 修, 非 schema 变更, PATCH bump).
-CONTRACT_VERSION: str = "v0.1.2"
+# v0.2.0 (2026-08-13): MINOR — report 加可选 target_tree_sha 新鲜度锚.
+CONTRACT_VERSION: str = "v0.2.0"
 
 # -------------------------------------------------------------------
 # §2.1 Input Schema
@@ -161,6 +161,7 @@ class VerifyReport(BaseModel):
     """C4 §2.2 Output Schema — verify_report.json."""
 
     target: Target
+    target_tree_sha: str | None = None
     task_id: str | None = None
     overall_verdict: OverallVerdict
     generated_at: datetime

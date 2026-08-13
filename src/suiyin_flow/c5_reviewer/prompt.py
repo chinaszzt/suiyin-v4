@@ -80,7 +80,7 @@ failure_modes (已知坑) > advisory (辅助)**。判据冲突时以高档为准
   "session_id": "...",
   "task_id": "{task_id}",
   "pr_ref": "{pr_ref}",
-  "contract_version": "v0.4.0"
+  "contract_version": "v0.5.0"
 }}
 ```
 

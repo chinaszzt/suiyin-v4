@@ -363,11 +363,13 @@ R2（C2 retry-with-feedback）和 R3（Codex 仲裁）在 P1.3 / P3+ 阶段才�
 
 ---
 
-**Version**: v0.1.4-draft
-**Last Updated**: 2026-06-10
-**Status**: draft（v0.1.4 = C7 spec cascade 关 Q6-2，见下方 Changelog；v0.1.3 = PR #35 dogfood 暴露 worktree+NC-4 不兼容后收敛单一 merge 路径）
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-08-13
+**Status**: draft（v0.2.0 = M3 件 4 先验票再评门；v0.1.4 = C7 spec cascade 关 Q6-2；v0.1.3 = PR #35 dogfood 暴露 worktree+NC-4 不兼容后收敛单一 merge 路径）
 
 ### Changelog
+
+- **v0.2.0** (2026-08-13, M3 件 4 报告新鲜度绑定): **MINOR — 先验票再评门**。rules 评估**之前**新增机械验票步：取被合 ref 当前 tree sha（`treesha.resolve_tree_sha`），verify_report / review_report 的 `target_tree_sha` 任一缺失、或与当前 tree sha 不一致、或被合 ref 本身解析不了 → 新 error code `STALE_REPORT`（exit 2，报错含 verify/review/current 三个 sha，缺失显示 "missing"），**不进入 rules 评估**——「旧 tree 的票给新 tree 过门」这条路焊死。CONTRACT_VERSION → v0.2.0。
 
 - **v0.1.4** (2026-06-10, C7 spec v0.1.0 cascade): §6 Q6-2 翻牌 (b) "C7 重排队列" 为 default（todo.md P1.3 锚点既定动作）——队列语义由 C7 spec §3.3 整合子流程确定性定义；标注架构落点（C7 v0.1.0 队列在 task→feature 层，feature→main 层 C7 接管收口前维持 (c) 人工兜底）。**PATCH bump** per ADR-0001 SemVer（仅 Open Question 决议，C6 自身 invariant / schema / AC 零变化——held+no_op 输出不变，requeue 是 caller 行为）。
 - **v0.1.3** (2026-05-27, P1.2.5 PR #35 dogfood Bug 1 fix): §3.2 Merge to main 收敛为**单一路径** `git push <sha>:main + git update-ref refs/heads/main` — 删 "或等价" 的 `git checkout main && git merge --ff-only` 选项。原因：NC-4 worktree 模式下子 worktree 不能 checkout 父 worktree 占着的 main，自动 merge 整条路径 fail（v4 自身所有 PR 都受阻）。I5 invariant 同步措辞。impl actions.py ff_merge_to_main 跟随重写为 refs-direct（zero checkout）。**PATCH bump** per ADR-0001 SemVer（措辞 + 路径收敛，invariant 含义不变 — 仍是 ff-only main history）。Bug 2 (gh 抖动重试) 是 impl-side 工程化加固，无 spec 表达需求，不入 changelog。
