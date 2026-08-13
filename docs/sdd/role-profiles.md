@@ -53,6 +53,50 @@
 
 **C → D 飞跃**：AI 可在 **constitution 允许范围内**自治微调（complexity 阈值、retry 策略、phase 分组、task 顺序）。超出范围 → 仍然触发 spec_drift_arbitration。
 
+---
+
+## Plan Gate 分档（gen4-plan 拍板 3，2026-08-13）
+
+> 拍板 3 原文：「plan 人审退役有前置链。前置齐之前旧 plan gate 有效……"取消人审"的准确表述：
+> 前置满足后 **D 档可自动 pin 纯技术 plan**。」上表 plan_pinning 行的「✅ 人 pin」在 D 档
+> 按本节条件放行，其余三档不变。
+
+### 四档 plan/review/merge/park 行为矩阵
+
+| 节点 | A (assistant) | B (junior) | C (collaborator) | D (autonomous) |
+|---|---|---|---|---|
+| **plan 机检**（seamlint + authz schema + tasks.yaml 强校验） | 建议跑 | 必跑；红 → 返工再送人审 | 必跑；红 → block | 必跑；红 → block（自动 pin 的硬前置） |
+| **plan_pinning** | 人 pin | 人 pin | 人 pin | 机检链全绿 + 纯技术 plan → **自动 pin**；否则人 pin |
+| **review (C5)** | 人审为主，C5 辅助 | C5 跑 + 人复核 verdict | C5 全权；block → R1 human:block | C5 全权；feature 级 block → feature-repair task/worktree（拍板 4，不复用已删 worktree） |
+| **merge (C6)** | 人 merge | 人 merge | C6 自动 ff（先验票，STALE_REPORT fail-closed） | 同 C |
+| **park** | 人处理 | 人处理 | park → 人 | park → 后果化拍板题工件 → 用户答案作 typed event 回灌 C7（拍板 4：分类器不路由，C7 是唯一路由权威） |
+
+### D 档自动 pin 的前置链（全部 ✅ 才开闸；缺一仍走人 pin）
+
+1. **seam manifest 正式 schema + lint 就位** — ✅ 2026-08-13（`suiyin-flow seamlint`，PR #75）
+2. **authorization manifest + 机械闸就位** — ✅ 2026-08-13（`suiyin-flow authz`，PR #76）
+3. **plan 机检在该 feature 上实际全绿** — 逐 feature 判定，不是一次性开关：
+   seamlint pass（依赖闭合零 finding）+ authorization.yaml 存在且 schema 合法 +
+   tasks.yaml 过 batch 强校验
+4. **该 plan 是纯技术 plan**（机械定义见下）
+
+前置 1/2 是工具存在性（M3 已齐）；3/4 逐 plan 判。**机检工具齐 ≠ 全面取消人审**——
+非纯技术 plan、机检红的 plan、A/B/C 档一律仍走人 pin。
+
+### 纯技术 plan 的机械定义（不满足任一 → 不算，走人 pin）
+
+- authorization manifest 中该 feature 所有 grants 的 `db_writes` 与 `network` **全空**
+  （无数据面 / 出口面写权需求——有写权诉求的 plan 天然涉业务判断）
+- plan 不伴随 spec / constitution 变更（AC 冻结闸三通道均未触发 spec_changed）
+- denies 无变更（禁区调整永远是人的决定）
+
+### 判定落点
+
+- 判定逻辑由 `/sy-plan` 收尾步 + C7 dispatch 前置检查执行（读本节 + `plan_gate` 配置块）；
+  机检命令即 seamlint / authz / batch 三件，无新组件
+- 自动 pin 的 plan 必须在 plan.md 头部留痕：`<!-- auto-pinned: <date> preconditions=1,2,3,4 -->`
+  （审计可回查；人 pin 的不留此标记）
+
 ### Git Automation 矩阵
 
 | | A | B | C | D |
@@ -159,6 +203,10 @@ Constitution **引用** role-profile（"v5 当前用 D 档，详见 `.specify/ro
 
 ---
 
-**Version**: v0.1.0
-**Last Updated**: 2026-05-19
-**Status**: 初版，待 P0 spike 后视情况升 v1.0
+**Version**: v0.2.0
+**Last Updated**: 2026-08-13
+**Status**: v0.2.0 = gen4-plan 拍板 3 plan gate 分档（M3 件 6）；初版待 P0 spike 后视情况升 v1.0
+
+**Changelog**:
+- v0.2.0 (2026-08-13): 新增「Plan Gate 分档」节——四档 plan/review/merge/park 行为矩阵；D 档自动 pin 前置链（工具存在性 2 项已齐 + 逐 plan 机检全绿 + 纯技术 plan 机械定义：db_writes/network 全空 + 无 spec/宪法变更 + denies 无变更）；auto-pinned 留痕。C5 block 侧同步拍板 4（feature-repair / park→typed event 回灌 C7）
+- v0.1.0 (2026-05-19): 初版
