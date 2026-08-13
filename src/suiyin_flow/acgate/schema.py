@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from suiyin_flow.identity import LOCAL_ID_PATTERN
 
 ACGATE_SCHEMA_VERSION: str = "v0.1.0"
+AC_ID_PATTERN: str = r"^(AC|GUARD)-[A-Za-z0-9._-]+$"
 
 
 # -------------------------------------------------------------------
@@ -29,7 +30,7 @@ class AcEntry(BaseModel):
     """manifest 单条: 一个 AC (或 guard 规则) ↔ 它的可执行投影 (测试)."""
 
     ac_id: str = Field(
-        pattern=r"^(AC|GUARD)-[A-Za-z0-9._-]+$",
+        pattern=AC_ID_PATTERN,
         description="AC-N (行为) 或 GUARD-N (seam/守卫); spec/plan 里的编号",
     )
     kind: Literal["behavior", "guard"] = Field(

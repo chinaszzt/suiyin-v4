@@ -368,16 +368,19 @@ def _freeze(
     task: BatchTaskEntry,
     targets_by_id: dict[str, TestTarget],
     results: list[TargetResult],
-) -> FrozenInfo | None:
+) -> tuple[FrozenInfo | None, str | None]:
     manifest_path = _manifest_path(task, repo_root, worktree)
     if manifest_path is None:
-        return None
+        return None, f"cannot derive manifest path from spec_ref {task.spec_ref!r}"
     try:
         manifest: AcManifest | None
         if manifest_path.is_file():
             manifest = load_manifest(manifest_path)
             if manifest.feature_id != feature_id:
-                return None
+                return None, (
+                    "existing manifest feature_id mismatch: "
+                    f"expected {feature_id!r}, got {manifest.feature_id!r}"
+                )
             entries = list(manifest.entries)
         else:
             entries = []
@@ -388,11 +391,14 @@ def _freeze(
             if result.status != "authored":
                 continue
             if result.target_id in existing_ids:
-                return None
+                return None, f"duplicate ac_id in manifest: {result.target_id!r}"
             target = targets_by_id[result.target_id]
             first = _split_test_ref(result.test_refs[0], worktree)
             if first is None:
-                return None
+                return None, (
+                    "authored test_ref does not resolve to a test file: "
+                    f"{result.test_refs[0]!r}"
+                )
             test_file, first_name = first
             names: list[str] = []
             for test_ref in result.test_refs:
@@ -415,7 +421,7 @@ def _freeze(
             )
             existing_ids.add(result.target_id)
         if not new_entries:
-            return None
+            return None, "no authored targets were eligible for freezing"
         if manifest is None:
             manifest = AcManifest(feature_id=feature_id, entries=new_entries)
         else:
@@ -438,10 +444,10 @@ def _freeze(
         ValueError,
         IndexError,
         TestAuthorError,
-    ):
-        return None
+    ) as exc:
+        return None, f"{type(exc).__name__}: {exc}"
     relative_manifest = manifest_path.relative_to(worktree).as_posix()
-    return FrozenInfo(manifest_path=relative_manifest, entries=len(frozen.entries))
+    return FrozenInfo(manifest_path=relative_manifest, entries=len(frozen.entries)), None
 
 
 def _write_report(report: TestAuthorReport, artifact_dir: Path) -> None:
@@ -627,8 +633,9 @@ def run_author(
 
     authored = [result for result in results if result.status == "authored"]
     frozen: FrozenInfo | None = None
+    freeze_error: str | None = None
     if not violations and red_check.red and authored:
-        frozen = _freeze(
+        frozen, freeze_error = _freeze(
             repo_root=repo_root,
             worktree=worktree,
             feature_id=feature_id,
@@ -649,6 +656,7 @@ def run_author(
         path_check=path_check,
         red_check=red_check,
         frozen=frozen,
+        freeze_error=freeze_error,
         verdict=verdict,
         author_branch=branch,
         author_worktree=str(worktree),

@@ -361,3 +361,78 @@ def test_AC_12_renamed_file_blocks(frozen_repo: Path, tmp_path: Path) -> None:
     assert any(
         f.kind == "TEST_FILE_DELETED" and f.file == TEST_FILE for f in report.findings
     )
+
+
+# =============================================================================
+# AC-13/14: path#anchor refs 保留文档语义，文件级 freeze/gate 正常工作
+# =============================================================================
+
+
+def test_AC_13_anchored_refs_freeze_and_gate_at_file_granularity(
+    frozen_repo: Path, tmp_path: Path
+) -> None:
+    manifest_path = _write_manifest(frozen_repo, tmp_path)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    entry = data["entries"][0]
+    entry["spec_ref"] = "spec.md#AC-1"
+    entry["spec_hash"] = "0" * 64
+    entry["test_ref"] = f"{TEST_FILE}#test_AC_1_login_ok"
+    entry["test_hash"] = "0" * 64
+    data["entries"] = [entry]
+    manifest_path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+
+    freeze_manifest(repo_root=frozen_repo, manifest_path=manifest_path, ref="main")
+
+    refreshed = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    frozen_entry = refreshed["entries"][0]
+    assert frozen_entry["spec_ref"] == "spec.md#AC-1"
+    assert frozen_entry["test_ref"] == f"{TEST_FILE}#test_AC_1_login_ok"
+    assert frozen_entry["spec_hash"] == content_hash(
+        (frozen_repo / "spec.md").read_bytes()
+    )
+    assert frozen_entry["test_hash"] == content_hash(
+        (frozen_repo / TEST_FILE).read_bytes()
+    )
+    assert _run(frozen_repo, manifest_path).verdict == "pass"
+
+    body = (frozen_repo / TEST_FILE).read_text(encoding="utf-8")
+    (frozen_repo / TEST_FILE).write_text(
+        body.replace('    assert "token" in {"token": "x"}\n', ""),
+        encoding="utf-8",
+    )
+    _commit_all(frozen_repo, "weaken anchored frozen test")
+    report = _run(frozen_repo, manifest_path)
+    assert report.verdict == "block"
+    assert any(f.kind == "TEST_WEAKENED_UNKNOWN" for f in report.findings)
+
+
+def test_AC_14_anchored_spec_ref_opens_spec_changed_channel(
+    frozen_repo: Path, tmp_path: Path
+) -> None:
+    manifest_path = _write_manifest(frozen_repo, tmp_path)
+    data = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    entry = data["entries"][0]
+    entry["spec_ref"] = "spec.md#AC-1"
+    entry["test_ref"] = f"{TEST_FILE}#test_AC_1_login_ok"
+    data["entries"] = [entry]
+    manifest_path.write_text(
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    freeze_manifest(repo_root=frozen_repo, manifest_path=manifest_path, ref="main")
+
+    (frozen_repo / "spec.md").write_text("# Revised spec\n", encoding="utf-8")
+    body = (frozen_repo / TEST_FILE).read_text(encoding="utf-8")
+    (frozen_repo / TEST_FILE).write_text(
+        body.replace('    assert "token" in {"token": "x"}\n', ""),
+        encoding="utf-8",
+    )
+    _commit_all(frozen_repo, "revise anchored spec and test")
+
+    report = _run(frozen_repo, manifest_path)
+    assert report.verdict == "pass"
+    assert any(
+        finding.channel == "spec_changed" and not finding.blocking
+        for finding in report.findings
+    )

@@ -178,6 +178,7 @@ def test_AC_1_valid_author_output_passes(author_repo: Path, tmp_path: Path) -> N
     assert report.path_check.violations == []
     assert report.red_check.red is True
     assert report.frozen is not None
+    assert report.freeze_error is None
     assert report.targets[0].status == "authored"
 
 
@@ -273,6 +274,21 @@ def test_AC_6_empty_or_malformed_targets_fail_before_session(
     assert not marker.exists()
 
 
+def test_AC_6b_invalid_target_id_fails_before_session_with_prefix_hint(
+    author_repo: Path, tmp_path: Path
+) -> None:
+    marker = tmp_path / "session-started-invalid-id"
+    mock = _mock_session(tmp_path, writes={}, mapping={}, marker=marker)
+    targets = _write_targets(author_repo, ("SEAM-INGEST-OPTS-FACE",))
+
+    with pytest.raises(TestAuthorError) as caught:
+        _run(author_repo, targets, mock)
+
+    assert caught.value.error.code == "TESTAUTHOR_TARGETS_INVALID"
+    assert "AC- or GUARD-" in caught.value.error.message
+    assert not marker.exists()
+
+
 def test_AC_7_partial_output_reports_skipped_but_can_pass(
     author_repo: Path, tmp_path: Path
 ) -> None:
@@ -351,6 +367,27 @@ def test_AC_10_typed_inputs_fail_closed_before_session(
     expected = "REVIEW_INPUT_MISSING" if mode == "missing" else "REVIEW_INPUT_HASH_DRIFT"
     assert caught.value.error.code == expected
     assert not marker.exists()
+
+
+def test_AC_11_freeze_failure_reports_diagnostic(
+    author_repo: Path, tmp_path: Path
+) -> None:
+    (author_repo / "ac-manifest.yaml").write_text("entries: [\n", encoding="utf-8")
+    _git(author_repo, "add", "ac-manifest.yaml")
+    _git(author_repo, "commit", "-m", "add malformed manifest")
+    targets = _write_targets(author_repo)
+    mock = _mock_session(
+        tmp_path,
+        writes={"tests_dir/test_new.py": _red_test()},
+        mapping={"AC-NEW": ["tests_dir/test_new.py::test_new_behavior"]},
+    )
+
+    report = _run(author_repo, targets, mock)
+
+    assert report.verdict == "fail"
+    assert report.frozen is None
+    assert report.freeze_error is not None
+    assert "INVALID_MANIFEST" in report.freeze_error
 
 
 def test_AC_1_report_json_round_trips(author_repo: Path, tmp_path: Path) -> None:

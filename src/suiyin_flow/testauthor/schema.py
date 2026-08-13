@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from suiyin_flow.acgate.schema import AC_ID_PATTERN
 from suiyin_flow.identity import LOCAL_ID_PATTERN
 
 SCHEMA_VERSION: Literal["v0.1.0"] = "v0.1.0"
@@ -16,13 +18,25 @@ class TestTarget(BaseModel):
 
     __test__ = False
 
-    target_id: str
+    target_id: str = Field(pattern=AC_ID_PATTERN)
     kind: Literal["ac", "guard", "seam"]
     source: str
     directive: str
     suggested_test_ref: str | None = None
 
-    @field_validator("target_id", "source", "directive")
+    @field_validator("target_id", mode="before")
+    @classmethod
+    def _valid_target_id(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            value = value.strip()
+            if re.fullmatch(AC_ID_PATTERN, value) is None:
+                raise ValueError(
+                    "must start with AC- or GUARD- and contain only letters, "
+                    "digits, dots, underscores, or hyphens"
+                )
+        return value
+
+    @field_validator("source", "directive")
     @classmethod
     def _non_empty(cls, value: str) -> str:
         value = value.strip()
@@ -82,6 +96,7 @@ class TestAuthorReport(BaseModel):
     path_check: PathCheck
     red_check: RedCheck
     frozen: FrozenInfo | None = None
+    freeze_error: str | None = None
     verdict: Literal["pass", "fail"]
     author_branch: str
     author_worktree: str
