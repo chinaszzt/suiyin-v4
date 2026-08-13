@@ -1,7 +1,12 @@
 # Close Harness — Component Spec
 
 > Feature 收口 harness（gen4-plan P0-4）。**确定性脚本**串 feature HEAD 的
-> `human_block → acgate → mutation(触发键) → verify(C4 全量) → review(C5 subject=feature) → gate(C6 ff-merge)`。
+> `human_block → acgate → authz → seamlint → mutation(触发键) → verify(C4 全量) → review(C5 subject=feature) → gate(C6 ff-merge)`。
+> （v0.2.0 M4 前置：authz/seamlint 零模型纯静态，插在贵步骤前 fail-fast——QS-2 拍板。
+> authz：`authorization.yaml` 缺失即 fail（feature 收口必须有写权声明，拍板 9）；feature 模式 =
+> 全 task modifies∪write_paths 并集，denies 绝对优先。seamlint：多 task feature 缺
+> `seam-manifest.yaml` 即 fail，单 task 缺失 skipped_warning（单 task 无跨 task 接缝，
+> schema entries≥1 无法表达空集）；draft 不算。）
 > Q7-3（feature→main 收口编排）完整实现前的过渡形态——**不宣称端到端全自动**：任一步失败即停 + surface to human。
 
 ## 0. Type
@@ -43,12 +48,14 @@ AC-1 happy 全链 → C6 真 ff-merge / AC-2 本地 block → blocked 零步骤 
 ## 6. Open Questions
 
 - **QH-1**：C4 结构化 Go runner 落地后 verify 步切回 C4 API（保留 verify_cmd 作通用兜底）
-- **QH-2**：M3 门内 skipped_warning → 强制 fail 的切换开关形态（配置 vs 硬编码按里程碑）
-- **QH-3**：C4/C5 报告新鲜度绑定（target_tree_sha）接入后，harness 在 gate 前先验票（M3 门内条目）
+- **QH-2**：M3 门内 skipped_warning → 强制 fail 的切换开关形态（配置 vs 硬编码按里程碑）——
+  v0.2.0 部分收口：authz 缺失已硬 fail；seamlint 缺失仅单 task 情形保留 skipped_warning（结构性合理，非过渡）
+- **QH-3**：~~C4/C5 报告新鲜度绑定接入~~ ✅ M3 件 4 已收：C6 v0.2.0 gate 内先验票（STALE_REPORT），harness 无需另验
 
 ---
 
-**Version**: v0.1.0-draft
-**Last Updated**: 2026-08-12
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-08-13
 **Changelog**:
+- v0.2.0 (2026-08-13): **MINOR — M4 前置（QS-2 拍板落地）**：步序插 authz→seamlint（acgate 后 mutation 前，零模型 fail-fast）；authz feature 模式（`run_feature_check`：全 task 写权并集 + denies 绝对优先）+ authorization.yaml 缺失硬 fail；seamlint 多 task 缺失 fail / 单 task skipped_warning / draft 拒收；feature diff 落盘复用 + 两步报告入 `.suiyin` 工件目录。QH-3 关（C6 v0.2.0 已验票）。
 - v0.1.0 (2026-08-12): 初稿 + impl + 9 AC。来源 gen4-plan §三 P0-4。联动：C5 v0.3.0（task_ids[]，关 ADR-0005 记的"C5 审 feature/meta 级 subject 输入形态" open gap 的 feature 半边）；C4 task_id pattern 补 P0-1 cascade 漏网；safety v0.5.1（规则 4：`.suiyin/` 运行时工件入 diff → 拦，8 条 E4 blocker 中 hygiene 类的机械承接）。

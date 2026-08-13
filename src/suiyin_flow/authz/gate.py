@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +121,89 @@ def _matches_any(path: str, patterns: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in normalized_patterns)
 
 
+def _ordered_unique(groups: Iterable[Iterable[str]]) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for value in group:
+            if value not in seen:
+                seen.add(value)
+                values.append(value)
+    return values
+
+
+def _resolve_matching_feature_id(
+    manifest: AuthzManifest,
+    tasks_manifest: BatchManifest,
+) -> str:
+    tasks_feature_id = resolve_feature_id(tasks_manifest)
+    if manifest.feature_id != tasks_feature_id:
+        raise AuthzError(
+            "AUTHZ_FEATURE_MISMATCH",
+            (
+                f"authorization feature_id {manifest.feature_id!r} does not match "
+                f"tasks.yaml feature_id {tasks_feature_id!r}"
+            ),
+            manifest_feature_id=manifest.feature_id,
+            tasks_feature_id=tasks_feature_id,
+        )
+    return tasks_feature_id
+
+
+def _path_findings(
+    *,
+    touched_paths: list[str],
+    denied_paths: list[str],
+    effective_paths: list[str],
+    subject_id: str,
+    authority_scope: str,
+) -> list[AuthzFinding]:
+    findings: list[AuthzFinding] = []
+    for touched_path in touched_paths:
+        if _matches_any(touched_path, denied_paths):
+            findings.append(
+                AuthzFinding(
+                    code="AUTHZ_PATH_DENIED",
+                    dimension="path",
+                    detail=f"path {touched_path!r} matches a feature-level deny",
+                    task_id=subject_id,
+                )
+            )
+        elif not _matches_any(touched_path, effective_paths):
+            findings.append(
+                AuthzFinding(
+                    code="AUTHZ_PATH_UNGRANTED",
+                    dimension="path",
+                    detail=f"path {touched_path!r} is outside {authority_scope}",
+                    task_id=subject_id,
+                )
+            )
+    return findings
+
+
+def _report(
+    *,
+    manifest_file: Path,
+    subject_id: str,
+    findings: list[AuthzFinding],
+    declared_db_writes: list[str],
+    declared_network: list[str],
+) -> AuthzReport:
+    counts = {
+        "path": sum(finding.dimension == "path" for finding in findings),
+        "command": sum(finding.dimension == "command" for finding in findings),
+    }
+    return AuthzReport(
+        manifest_path=str(manifest_file),
+        task_id=subject_id,
+        counts=counts,
+        findings=findings,
+        passed=not findings,
+        declared_db_writes=declared_db_writes,
+        declared_network=declared_network,
+    )
+
+
 def run_check(
     manifest_path: str | Path,
     tasks_yaml_path: str | Path,
@@ -135,17 +219,7 @@ def run_check(
     manifest = _load_manifest(manifest_file)
     tasks_manifest = _load_tasks(tasks_file)
     touched_paths = _read_diff(diff_file)
-    tasks_feature_id = resolve_feature_id(tasks_manifest)
-    if manifest.feature_id != tasks_feature_id:
-        raise AuthzError(
-            "AUTHZ_FEATURE_MISMATCH",
-            (
-                f"authorization feature_id {manifest.feature_id!r} does not match "
-                f"tasks.yaml feature_id {tasks_feature_id!r}"
-            ),
-            manifest_feature_id=manifest.feature_id,
-            tasks_feature_id=tasks_feature_id,
-        )
+    _resolve_matching_feature_id(manifest, tasks_manifest)
 
     task = next((entry for entry in tasks_manifest.tasks if entry.task_id == task_id), None)
     if task is None:
@@ -160,27 +234,13 @@ def run_check(
         AuthzGrant(task_id=task_id),
     )
     effective_paths = [*task.modifies, *grant.write_paths]
-    findings: list[AuthzFinding] = []
-
-    for touched_path in touched_paths:
-        if _matches_any(touched_path, manifest.denies.paths):
-            findings.append(
-                AuthzFinding(
-                    code="AUTHZ_PATH_DENIED",
-                    dimension="path",
-                    detail=f"path {touched_path!r} matches a feature-level deny",
-                    task_id=task_id,
-                )
-            )
-        elif not _matches_any(touched_path, effective_paths):
-            findings.append(
-                AuthzFinding(
-                    code="AUTHZ_PATH_UNGRANTED",
-                    dimension="path",
-                    detail=f"path {touched_path!r} is outside the task's write grants",
-                    task_id=task_id,
-                )
-            )
+    findings = _path_findings(
+        touched_paths=touched_paths,
+        denied_paths=manifest.denies.paths,
+        effective_paths=effective_paths,
+        subject_id=task_id,
+        authority_scope="the task's write grants",
+    )
 
     if command is not None:
         requested_command = command.strip()
@@ -197,16 +257,51 @@ def run_check(
                 )
             )
 
-    counts = {
-        "path": sum(finding.dimension == "path" for finding in findings),
-        "command": sum(finding.dimension == "command" for finding in findings),
-    }
-    return AuthzReport(
-        manifest_path=str(manifest_file),
-        task_id=task_id,
-        counts=counts,
+    return _report(
+        manifest_file=manifest_file,
+        subject_id=task_id,
         findings=findings,
-        passed=not findings,
         declared_db_writes=list(grant.db_writes),
         declared_network=list(grant.network),
+    )
+
+
+def run_feature_check(
+    manifest_path: str | Path,
+    tasks_yaml_path: str | Path,
+    diff_path: str | Path,
+) -> AuthzReport:
+    """Check a whole feature diff against the union of all task authorities."""
+    manifest_file = Path(manifest_path)
+    tasks_file = Path(tasks_yaml_path)
+    diff_file = Path(diff_path)
+
+    manifest = _load_manifest(manifest_file)
+    tasks_manifest = _load_tasks(tasks_file)
+    touched_paths = _read_diff(diff_file)
+    feature_id = _resolve_matching_feature_id(manifest, tasks_manifest)
+
+    effective_paths = _ordered_unique(
+        [
+            *(task.modifies for task in tasks_manifest.tasks),
+            *(grant.write_paths for grant in manifest.grants),
+        ]
+    )
+    findings = _path_findings(
+        touched_paths=touched_paths,
+        denied_paths=manifest.denies.paths,
+        effective_paths=effective_paths,
+        subject_id=feature_id,
+        authority_scope="the feature's combined write grants",
+    )
+    return _report(
+        manifest_file=manifest_file,
+        subject_id=feature_id,
+        findings=findings,
+        declared_db_writes=_ordered_unique(
+            grant.db_writes for grant in manifest.grants
+        ),
+        declared_network=_ordered_unique(
+            grant.network for grant in manifest.grants
+        ),
     )

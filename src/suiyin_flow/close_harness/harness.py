@@ -1,7 +1,8 @@
 """Feature 收口 harness — 确定性步进 (gen4-plan P0-4).
 
 步序 (固定, fail-closed, 每步后落盘):
-  human_block → acgate → mutation(触发键) → verify(C4 全量) → review(C5) → gate(C6)
+  human_block → acgate → authz → seamlint → mutation(触发键) → verify(C4 全量)
+  → review(C5) → gate(C6)
 
 - acgate / mutation 的工件 (ac-manifest.yaml / mutants.yaml) 约定与 tasks.yaml
   同目录; 缺失 → skipped_warning 放行 (迁移期语义, M3 门内转强制 — acgate QA-1)
@@ -25,6 +26,8 @@ from pathlib import Path
 
 from suiyin_flow.acgate.gate import run_gate
 from suiyin_flow.acgate.schema import AcGateError
+from suiyin_flow.authz.gate import run_feature_check
+from suiyin_flow.authz.schema import AuthzError
 from suiyin_flow.c2_executor.batch import (
     BatchAdapterError,
     BatchManifest,
@@ -59,6 +62,8 @@ from suiyin_flow.close_harness.schema import (
 from suiyin_flow.identity import safe_ref
 from suiyin_flow.mutation.runner import run_probe
 from suiyin_flow.mutation.schema import MutationError
+from suiyin_flow.seamlint.lint import run_lint
+from suiyin_flow.seamlint.schema import SeamLintError
 from suiyin_flow.treesha import resolve_tree_sha
 
 
@@ -93,6 +98,40 @@ def _changed_files(repo: Path, target: str, feature: str) -> set[str]:
             f"diff {target}...{feature} failed: {r.stderr.strip()[-300:]}",
         )
     return {line.strip() for line in r.stdout.splitlines() if line.strip()}
+
+
+def _feature_dir(repo_root: Path, spec_ref: str) -> Path:
+    spec_path = Path(spec_ref)
+    if not spec_path.is_absolute():
+        spec_path = repo_root / spec_path
+    return spec_path.parent
+
+
+def _feature_artifact_dir(repo_root: Path, feature_id: str) -> Path:
+    path = repo_root / ".suiyin" / "close" / safe_ref(feature_id)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _write_feature_diff(
+    repo_root: Path,
+    target_branch: str,
+    feature_branch: str,
+    feature_id: str,
+) -> Path:
+    """Persist the same merge-base three-dot diff used by close trigger checks."""
+    result = _git(repo_root, "diff", f"{target_branch}...{feature_branch}")
+    if result.returncode != 0:
+        raise CloseError(
+            "GIT_ERROR",
+            (
+                f"diff {target_branch}...{feature_branch} failed: "
+                f"{result.stderr.strip()[-300:]}"
+            ),
+        )
+    path = _feature_artifact_dir(repo_root, feature_id) / "feature_diff.patch"
+    path.write_text(result.stdout, encoding="utf-8")
+    return path
 
 
 # -------------------------------------------------------------------
@@ -158,36 +197,49 @@ def run_close(cfg: CloseConfig) -> CloseReport:
     steps.append(CloseStep(name="human_block", status="passed", detail="no local block"))
 
     manifest_dir = cfg.tasks_yaml.resolve().parent
-    changed = _changed_files(repo_root, cfg.target_branch, base_branch)
 
     # ---- step 2: acgate ----
     if not _step_acgate(cfg, repo_root, manifest_dir, base_branch, art_dir, steps):
         return finalize("held", "acgate")
 
-    # ---- step 3: mutation (触发键) ----
+    # ---- step 3: authz (feature 写权静态闸) ----
+    if not _step_authz(
+        cfg, repo_root, manifest, feature_id, base_branch, steps
+    ):
+        return finalize("held", "authz")
+
+    # ---- step 4: seamlint (跨 task 接缝静态闸) ----
+    if not _step_seamlint(cfg, repo_root, manifest, feature_id, steps):
+        return finalize("held", "seamlint")
+
+    # ---- step 5: mutation (触发键) ----
+    changed = _changed_files(repo_root, cfg.target_branch, base_branch)
     if not _step_mutation(cfg, repo_root, manifest_dir, base_branch, changed, art_dir, steps):
         return finalize("held", "mutation")
 
-    # ---- step 4: verify (C4 全量, verify_cmd 兜底) ----
+    # ---- step 6: verify (C4 全量, verify_cmd 兜底) ----
     verify_path = _step_verify(cfg, repo_root, base_branch, art_dir, steps)
     if verify_path is None:
         return finalize("held", "verify")
 
-    # ---- step 5: review (C5 subject=feature) ----
+    # ---- step 7: review (C5 subject=feature) ----
     review_path = _step_review(
         cfg, repo_root, manifest, feature_id, base_branch, verify_path, steps
     )
     if review_path is None:
         return finalize("held", "review")
 
-    # ---- step 6: gate (C6) ----
+    # ---- step 8: gate (C6) ----
     ok = _step_gate(cfg, repo_root, base_branch, verify_path, review_path, steps)
     return finalize("merged" if ok else "held", None if ok else "gate")
 
 
 def _fill_not_reached(steps: list[CloseStep]) -> None:
     done = {s.name for s in steps}
-    order: list[StepName] = ["human_block", "acgate", "mutation", "verify", "review", "gate"]
+    order: list[StepName] = [
+        "human_block", "acgate", "authz", "seamlint",
+        "mutation", "verify", "review", "gate",
+    ]
     for name in order:
         if name not in done:
             steps.append(CloseStep(name=name, status="not_reached"))
@@ -235,6 +287,122 @@ def _step_acgate(
         report_path=str(out),
     ))
     return ok
+
+
+def _step_authz(
+    cfg: CloseConfig,
+    repo_root: Path,
+    manifest: BatchManifest,
+    feature_id: str,
+    base_branch: str,
+    steps: list[CloseStep],
+) -> bool:
+    feature_dir = _feature_dir(repo_root, manifest.tasks[0].spec_ref)
+    authz_path = feature_dir / "authorization.yaml"
+    if not authz_path.is_file():
+        steps.append(CloseStep(
+            name="authz",
+            status="failed",
+            detail=(
+                "feature 收口必须有写权声明 (authorization.yaml), M3 拍板 9; "
+                f"missing: {authz_path}"
+            ),
+        ))
+        return False
+
+    diff_path = _write_feature_diff(
+        repo_root, cfg.target_branch, base_branch, feature_id
+    )
+    try:
+        authz_report = run_feature_check(authz_path, cfg.tasks_yaml, diff_path)
+    except AuthzError as exc:
+        raise CloseError(
+            "STEP_ERROR",
+            f"authz error: {exc.code}: {exc.message}",
+            step="authz",
+        ) from exc
+
+    out = _feature_artifact_dir(repo_root, feature_id) / "authz_report.json"
+    out.write_text(authz_report.model_dump_json(indent=2), encoding="utf-8")
+    ok = not authz_report.findings
+    finding_preview = "; ".join(
+        f"{finding.code}: {finding.detail}"
+        for finding in authz_report.findings[:3]
+    )
+    detail = f"findings={len(authz_report.findings)}"
+    if finding_preview:
+        detail += f"; {finding_preview}"
+    steps.append(CloseStep(
+        name="authz",
+        status="passed" if ok else "failed",
+        detail=detail,
+        report_path=str(out),
+    ))
+    return ok
+
+
+def _step_seamlint(
+    cfg: CloseConfig,
+    repo_root: Path,
+    manifest: BatchManifest,
+    feature_id: str,
+    steps: list[CloseStep],
+) -> bool:
+    feature_dir = _feature_dir(repo_root, manifest.tasks[0].spec_ref)
+    seam_path = feature_dir / "seam-manifest.yaml"
+    if not seam_path.is_file():
+        if len(manifest.tasks) == 1:
+            steps.append(CloseStep(
+                name="seamlint",
+                status="skipped_warning",
+                detail=(
+                    "seam-manifest.yaml missing — single-task feature has no "
+                    "cross-task seam to declare"
+                ),
+            ))
+            return True
+        steps.append(CloseStep(
+            name="seamlint",
+            status="failed",
+            detail=(
+                "multi-task feature requires formal seam-manifest.yaml; "
+                f"missing: {seam_path}"
+            ),
+        ))
+        return False
+
+    try:
+        lint_report = run_lint(seam_path, cfg.tasks_yaml)
+    except SeamLintError as exc:
+        raise CloseError(
+            "STEP_ERROR",
+            f"seamlint error: {exc.code}: {exc.message}",
+            step="seamlint",
+        ) from exc
+
+    out = _feature_artifact_dir(repo_root, feature_id) / "seamlint_report.json"
+    out.write_text(lint_report.model_dump_json(indent=2), encoding="utf-8")
+    pending = lint_report.counts.get("SEAM_TEST_PENDING", 0)
+    blocking = [
+        finding
+        for finding in lint_report.findings
+        if finding.code != "SEAM_TEST_PENDING"
+    ]
+    detail = f"pending_tests={pending}"
+    if blocking:
+        detail += "; " + "; ".join(
+            f"{finding.code}"
+            + (f"[{finding.seam_id}]" if finding.seam_id else "")
+            + f": {finding.message}"
+            for finding in blocking[:3]
+        )
+    steps.append(CloseStep(
+        name="seamlint",
+        status="passed" if lint_report.passed else "failed",
+        detail=detail,
+        report_path=str(out),
+    ))
+    return lint_report.passed
 
 
 def _step_mutation(
