@@ -1,0 +1,1 @@
+"""Authorization manifest gate tests."""

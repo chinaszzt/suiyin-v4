@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 
 from suiyin_flow.acgate import cli as acgate_cli
+from suiyin_flow.authz import cli as authz_cli
 from suiyin_flow.c1_planning import cli as c1_cli
 from suiyin_flow.c2_executor import cli as c2_cli
 from suiyin_flow.c4_verify import cli as c4_cli
@@ -26,7 +27,7 @@ from suiyin_flow.close_harness import cli as close_cli
 from suiyin_flow.mutation import cli as mutation_cli
 
 _USAGE = """\
-usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate,mutation,close} ...
+usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate,authz,mutation,close} ...
 
 Subcommands:
   plan     C1 Planning Engine (tasks.yaml → execution_plan 依赖分层 + 并行组, P1.3)
@@ -36,6 +37,7 @@ Subcommands:
   gate     C6 Gate Contract (自动 merge gate, P1.2 阶段 3.2)
   phase    C7 Phase Coordinator (逐 phase 调度 + ff-merge 回 feature, P1.3)
   acgate   AC 冻结闸 (行为/守卫测试 diff 拦截, gen4-plan P0-2)
+  authz    Authorization manifest 静态写权闸 (gen4-plan M3 件 3)
   mutation Mutation 探针 (冻结测试证伪力验证, gen4-plan P0-3)
   close    Feature 收口 harness (C4→C5→C6 确定性串接, gen4-plan P0-4)
 
@@ -67,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
         return c7_cli.main(args)
     if cmd == "acgate":
         return acgate_cli.main(args)
+    if cmd == "authz":
+        return authz_cli.main(args)
     if cmd == "mutation":
         return mutation_cli.main(args)
     if cmd == "close":
