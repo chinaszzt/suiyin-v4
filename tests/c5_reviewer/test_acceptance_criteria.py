@@ -25,6 +25,11 @@ from suiyin_flow.c5_reviewer.findings import (
     audit_findings,
     derive_verdict,
 )
+from suiyin_flow.c5_reviewer.inputs import (
+    load_inputs_manifest,
+    resolve_inputs,
+    synthesize_core_inputs,
+)
 from suiyin_flow.c5_reviewer.prompt import render_prompt, validate_refs
 from suiyin_flow.c5_reviewer.report import build_report
 
@@ -177,7 +182,10 @@ def test_AC_6_prompt_excludes_implementer_session_log(fixture_pr_repo: Path) -> 
     """AC-6 (I1): render_prompt 输出**不含** .suiyin/sessions/ 路径
     (避免 AI 误以为可以读 implementer log)."""
     review_input = _make_input(fixture_pr_repo)
-    prompt = render_prompt(review_input, str(fixture_pr_repo / "pr_diff.patch"))
+    resolved = resolve_inputs(synthesize_core_inputs(review_input), fixture_pr_repo)
+    prompt = render_prompt(
+        review_input, str(fixture_pr_repo / "pr_diff.patch"), resolved
+    )
     # 隔离 invariant: prompt 中可以提到 'sessions' (在 Constraints 节里告诫 AI 不读),
     # 但不应该 inject 任何 .suiyin/sessions/<某文件> 作为 context_seed
     # 简单 audit: 不含 attempt-N.log 路径
@@ -325,3 +333,146 @@ def test_AC_9b_review_dir_key_falls_back_to_task_id(
         _make_input(fixture_pr_repo), claude_cmd=mock_claude_review_approve
     )
     assert report_path.parent.parent.name == "T-100"
+
+
+# =============================================================================
+# v0.4.0 typed inputs (M3 件 1, 拍板 7): AC-11..AC-16
+# =============================================================================
+
+
+def test_AC_11_required_input_missing_fail_closed(fixture_pr_repo: Path) -> None:
+    """AC-11: required entry 文件缺失 → REVIEW_INPUT_MISSING, session 不启动."""
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    entries = [ReviewInputEntry(kind="contract", path="contracts/nope.md")]
+    with pytest.raises(ReviewerError) as ei:
+        resolve_inputs(entries, fixture_pr_repo)
+    assert ei.value.error.code == "REVIEW_INPUT_MISSING"
+
+
+def test_AC_11b_optional_input_missing_skipped(fixture_pr_repo: Path) -> None:
+    """AC-11b: required=False 缺失 → skipped_missing, 不 fail."""
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    entries = [
+        ReviewInputEntry(kind="advisory", path="notes/nope.md", required=False)
+    ]
+    resolved = resolve_inputs(entries, fixture_pr_repo)
+    assert resolved[0].status == "skipped_missing"
+    assert resolved[0].content_sha256 is None
+
+
+def test_AC_12_content_hash_drift_fail_closed(fixture_pr_repo: Path) -> None:
+    """AC-12: content_sha256 声明值 != 盘上实测 → REVIEW_INPUT_HASH_DRIFT."""
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    entries = [
+        ReviewInputEntry(kind="spec", path="spec.md", content_sha256="0" * 64)
+    ]
+    with pytest.raises(ReviewerError) as ei:
+        resolve_inputs(entries, fixture_pr_repo)
+    assert ei.value.error.code == "REVIEW_INPUT_HASH_DRIFT"
+    assert ei.value.error.details["actual_sha256"] != "0" * 64
+
+
+def test_AC_12b_content_hash_crlf_normalized(tmp_path: Path) -> None:
+    """AC-12b: hash 按 CRLF→LF 归一化 (PR #64 Windows autocrlf 教训) —
+    声明 LF 内容的 hash, 盘上是 CRLF → 不算漂移."""
+    from suiyin_flow.acgate.gate import content_hash
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    lf_content = b"line1\nline2\n"
+    (tmp_path / "spec.md").write_bytes(b"line1\r\nline2\r\n")
+    entries = [
+        ReviewInputEntry(
+            kind="spec", path="spec.md", content_sha256=content_hash(lf_content)
+        )
+    ]
+    resolved = resolve_inputs(entries, tmp_path)
+    assert resolved[0].status == "loaded"
+
+
+def test_AC_13_authority_derived_and_ordered(fixture_pr_repo: Path) -> None:
+    """AC-13: authority 由 kind 派生 (调用方不可自定), resolved 按权威序排列."""
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    (fixture_pr_repo / "failure-modes.md").write_text("坑1", encoding="utf-8")
+    entries = [
+        ReviewInputEntry(kind="failure_modes", path="failure-modes.md"),
+        ReviewInputEntry(kind="spec", path="spec.md"),
+        ReviewInputEntry(kind="constitution", path="constitution.md"),
+    ]
+    resolved = resolve_inputs(entries, fixture_pr_repo)
+    assert [r.authority for r in resolved] == ["nc", "acceptance", "failure_modes"]
+
+
+def test_AC_14_prompt_contains_typed_inputs_and_nc_rule(
+    fixture_pr_repo: Path,
+) -> None:
+    """AC-14: prompt 含权威序声明 + nc 命中一律 nc_violation 钉死规则 +
+    契约文件路径 (契约进输入面 — 尺子对照实验落地)."""
+    from suiyin_flow.c5_reviewer.contract import ReviewInputEntry
+
+    contracts = fixture_pr_repo / "contracts"
+    contracts.mkdir()
+    (contracts / "api.md").write_text("## 接口契约", encoding="utf-8")
+    review_input = _make_input(fixture_pr_repo)
+    entries = [
+        *synthesize_core_inputs(review_input),
+        ReviewInputEntry(kind="contract", path="contracts/api.md"),
+    ]
+    resolved = resolve_inputs(entries, fixture_pr_repo)
+    prompt = render_prompt(
+        review_input, str(fixture_pr_repo / "pr_diff.patch"), resolved
+    )
+    assert "nc_violation" in prompt
+    assert "权威序" in prompt
+    assert "api.md" in prompt
+    # 权威序: constitution 行先于 contract 行
+    assert prompt.index("constitution") < prompt.index("api.md")
+
+
+def test_AC_15_inputs_manifest_invalid_fail_closed(tmp_path: Path) -> None:
+    """AC-15: manifest 不可解析 / schema_version 不符 / inputs 空 / kind 不在闭集
+    → REVIEW_INPUT_MANIFEST_INVALID."""
+    bad_version = tmp_path / "m1.yaml"
+    bad_version.write_text("schema_version: v9.9.9\ninputs: []\n", encoding="utf-8")
+    with pytest.raises(ReviewerError) as ei:
+        load_inputs_manifest(bad_version)
+    assert ei.value.error.code == "REVIEW_INPUT_MANIFEST_INVALID"
+
+    empty = tmp_path / "m2.yaml"
+    empty.write_text("schema_version: v0.1.0\ninputs: []\n", encoding="utf-8")
+    with pytest.raises(ReviewerError) as ei:
+        load_inputs_manifest(empty)
+    assert ei.value.error.code == "REVIEW_INPUT_MANIFEST_INVALID"
+
+    bad_kind = tmp_path / "m3.yaml"
+    bad_kind.write_text(
+        "schema_version: v0.1.0\ninputs:\n  - kind: warez\n    path: x.md\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReviewerError) as ei:
+        load_inputs_manifest(bad_kind)
+    assert ei.value.error.code == "REVIEW_INPUT_MANIFEST_INVALID"
+
+
+def test_AC_16_report_records_resolved_inputs(
+    fixture_pr_repo: Path, mock_claude_review_approve: list[str]
+) -> None:
+    """AC-16: review_report.json 记录本次输入面 (kind/authority/实测 hash) —
+    可审计 verdict 用什么尺子量出来."""
+    import json
+
+    review_input = _make_input(fixture_pr_repo)
+    _, report_path = execute_review(
+        review_input, claude_cmd=mock_claude_review_approve
+    )
+    data = json.loads(Path(report_path).read_text(encoding="utf-8"))
+    inputs = data["review_inputs"]
+    assert inputs is not None
+    kinds = [i["kind"] for i in inputs]
+    assert kinds[:3] == ["constitution", "spec", "plan"]  # 权威序
+    for i in inputs:
+        if i["status"] == "loaded":
+            assert len(i["content_sha256"]) == 64

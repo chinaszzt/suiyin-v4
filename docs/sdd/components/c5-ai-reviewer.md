@@ -39,6 +39,32 @@ properties:
       optional；C4 verify_report.json **绝对路径**。
       存在 → review 时纳入 ac_summary / failure 信息辅助判断；
       缺失 → C5 仅基于 spec/plan/diff review（仍 work，但 AC 覆盖判断变弱）
+  review_inputs:
+    type: array
+    description: |
+      optional (v0.4.0, M3 件 1 / gen4-plan 拍板 7)：typed inputs 清单，在核心三件
+      (constitution/spec/plan) 之外追加契约资产。核心三件自动合成 entries，
+      调用方不必重复声明。**尺子对照实验实证** (dogfood/P0-attribution/)：
+      同 C5 同 diff，spec 输入 approve/0 → 契约进输入面 block/1 真 finding。
+    items:
+      type: object
+      required: [kind, path]
+      properties:
+        kind:
+          enum: [constitution, spec, ac_map, plan, contract, seam_manifest,
+                 failure_modes, verify_report, advisory]
+          description: 闭集；authority 由 kind 派生 (KIND_AUTHORITY 固定表)，调用方不可自定
+        path: { type: string, description: 相对 repo_root 或绝对 }
+        required:
+          type: boolean
+          default: true
+          description: true 且文件缺失 → REVIEW_INPUT_MISSING fail-closed（session 不启动）
+        content_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: |
+            optional；提供时对盘上内容做 CRLF→LF 归一化 sha256 校验（PR #64 教训），
+            不一致 → REVIEW_INPUT_HASH_DRIFT fail-closed（防审到漂移后的输入）
   task_id:
     type: string
     pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'   # v0.2.0 LOCAL_ID_PATTERN (P0-1)
@@ -141,6 +167,12 @@ properties:
       mode: { enum: [single, n2_consensus, n2_arbitrated] }
       reviewer_count: { type: integer }
       arbiter_session_id: { type: string }
+  review_inputs:
+    type: array
+    description: |
+      v0.4.0；本次 review 实际输入面（resolved）：每条 = kind / 绝对 path /
+      authority / status (loaded|skipped_missing) / 实测 content_sha256。
+      审计"这个 verdict 是用什么尺子量出来的"；为报告新鲜度绑定（M3 件 4）铺路。
 ```
 
 ### 2.3 Error Schema
@@ -159,6 +191,9 @@ properties:
       - VERIFY_REPORT_PARSE_FAILED  # verify_report_path 存在但 JSON 解析失败
       - ARBITRATION_DEADLOCK     # N=2 模式下两个 reviewer + 仲裁者全部 crash / timeout
       - REPO_ROOT_NOT_FOUND      # repo_root 路径不存在
+      - REVIEW_INPUT_MISSING           # v0.4.0 required typed input 文件缺失（fail-closed）
+      - REVIEW_INPUT_HASH_DRIFT        # v0.4.0 content_sha256 声明值 != 盘上实测（fail-closed）
+      - REVIEW_INPUT_MANIFEST_INVALID  # v0.4.0 --inputs-manifest 不可解析 / schema 不符
   message: { type: string }
   details:
     type: object
@@ -188,6 +223,8 @@ properties:
 - **I6**: `reusable_knowledge_not_captured` finding 即使 severity=`low` 也必须出现在 output（C12 Knowledge Capture 持续触发, 不阻断 merge 但持续提示沉淀, 见 discussion-notes.md §十）。
 - **I7**: C5 跑在隔离 worktree 或临时 dir，**不**直接动主仓 working tree（**NC-4 worktree 隔离即安全边界** 的具体实现 — claude CLI `--permission-mode bypassPermissions` 的安全边界即 review 临时 dir 边界）。
 - **I8**: 同一 PR 二次 review（attempt > 1）必须用全新 session_id；不允许复用上次 session 状态（避免缓存污染）。
+- **I9** (v0.4.0): typed inputs fail-closed —— required entry 缺失 / content_sha256 漂移 → session **不启动**（REVIEW_INPUT_MISSING / REVIEW_INPUT_HASH_DRIFT）。审到漂移后的输入比不审更糟（verdict 与声明的尺子脱钩）。
+- **I10** (v0.4.0): 权威序 `nc > acceptance > design > failure_modes > advisory` 由 KIND_AUTHORITY 固定表派生，调用方不可自定；**nc 档命中 → category 一律 nc_violation**（不许降级）；design 档（contract/seam）违反 → spec_drift（契约是 spec 意图的精确化）；advisory 档单独不构成 block 依据。
 
 ### 3.2 Side Effects
 
@@ -226,19 +263,20 @@ properties:
 
 你是 C5 AI Reviewer。**独立审 PR**。**严禁读** implementer 的 session log（`.suiyin/sessions/*`），只读最终产物。你的核心价值是 fresh context — 避免被 implementer 视角污染，从 spec/plan 意图独立判断。
 
-## Input
+## Input (typed, 按权威序排列 — v0.4.0)
 
-- **spec**: {spec_ref}（必读，理解意图）
-- **plan**: {plan_ref}（必读，理解实施策略）
-- **constitution**: {constitution_ref}（必读，NC-1..NC-5 + PC-1..PC-3）
-- **PR diff**: {pr_diff_path}（实际产出）
-- **verify_report**: {verify_report_path}（optional，含 ac_summary + L1/L2 结果）
-- **task_id**: {task_id}（optional，回链）
+{typed_inputs_block}   ← resolved inputs 逐条渲染: - **{kind}** [{authority}]: {path} (必读)
+- **PR diff**: {pr_diff_path}（实际产出，审查对象）
+- **task_id**: {task_id}（回链）
 - **criticality**: {criticality}（low/medium/high，high 走 N=2 仲裁模式）
+
+## 权威序与归类规则 (v0.4.0, 不可协商)
+
+权威序（高 → 低）：**nc (宪法) > acceptance (spec/AC) > design (plan/契约/接缝) > failure_modes (已知坑) > advisory (辅助)**。判据冲突时以高档为准。nc 档命中 → category 一律 `nc_violation`（严禁降级）；design 档违反（契约签名/字段/枚举/接缝声明与 diff 不符）→ `spec_drift`——契约是 spec 意图的精确化，不因为写在 contracts/ 而降级为参考意见；failure_modes 档 = 复发判据检查清单；advisory 档单独不构成 block 依据。
 
 ## Steps
 
-1. 读 spec / plan / constitution 理解任务意图
+1. 按权威序读完全部 loaded 输入，理解任务意图与契约约束
 2. 读 PR diff 看实际产出
 3. 跨文件扫 complexity（调用 C11 query 做语义查重 + jscpd 语法兜底）
 4. 逐项检查：
@@ -299,6 +337,12 @@ properties:
 - **AC-8**: `criticality=high` 时 output 含 `arbitration` 字段且 `mode ∈ {n2_consensus, n2_arbitrated}`（N=2 模式生效，P1.2 spike 后启用）
 - **AC-9**: `complexity` 类 finding 必通过 C11 query（P1.2 阶段允许降级到 jscpd），不允许 reviewer 凭直觉空报 complexity
 - **AC-10**: `review_report.json` 严格符合 §2.2 schema（schema validation 100% 通过，跨 100 次 sample）
+- **AC-11** (v0.4.0): required typed input 文件缺失 → `REVIEW_INPUT_MISSING`，session 不启动；required=false 缺失 → resolved 记 `skipped_missing` 不 fail
+- **AC-12** (v0.4.0): `content_sha256` 声明值 != 盘上实测 → `REVIEW_INPUT_HASH_DRIFT` fail-closed；hash 按 CRLF→LF 归一化（盘上 CRLF、声明 LF hash 不算漂移）
+- **AC-13** (v0.4.0): authority 由 kind 派生（固定表），resolved inputs 按权威序排列
+- **AC-14** (v0.4.0): prompt 含权威序声明 + "nc 命中一律 nc_violation" 钉死规则 + 所有 loaded 输入的路径（契约进输入面）
+- **AC-15** (v0.4.0): inputs manifest 不可解析 / schema_version 不符 / inputs 空 / kind 越出闭集 → `REVIEW_INPUT_MANIFEST_INVALID`
+- **AC-16** (v0.4.0): report 记录 resolved 输入面（kind/authority/实测 hash）——verdict 可审计到尺子
 
 ## 6. Open Questions
 
@@ -423,11 +467,13 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.2.0-draft
-**Last Updated**: 2026-08-12
-**Status**: draft — P1.2 起步 spec；v0.2.0 canonical identity（gen4-plan P0-1）；Q5 / Q5-5 spike 待续
+**Version**: v0.4.0-draft
+**Last Updated**: 2026-08-13
+**Status**: draft — v0.4.0 typed inputs（gen4-plan 拍板 7 / M3 件 1）；Q5 / Q5-5 spike 待续
 
 **Changelog**:
+- v0.4.0 (2026-08-13): **MINOR — M3 件 1 typed inputs（gen4-plan 拍板 7）**。(1) §2.1 加 `review_inputs[]`（kind 闭集 / authority 由 KIND_AUTHORITY 固定表派生 / required / content_sha256 CRLF 归一化校验）；核心三件自动合成 entries；(2) fail-closed：REVIEW_INPUT_MISSING / REVIEW_INPUT_HASH_DRIFT / REVIEW_INPUT_MANIFEST_INVALID（session 不启动）；(3) §2.2 report 加 resolved `review_inputs`（实测 hash，verdict 可审计到尺子，为报告新鲜度绑定 M3 件 4 铺路）；(4) I9/I10 + AC-11..16；(5) prompt 权威序 `nc > acceptance > design > failure_modes > advisory` + 归类钉死（nc 命中一律 nc_violation；契约违反 → spec_drift 不降级）；(6) CLI `--inputs-manifest`；close harness 自动收 feature 目录契约资产（ac-map / seam-manifest / failure-modes / contracts/*.md）。**动机 = 尺子对照实验**（dogfood/P0-attribution/）：同 C5 同 diff，spec 输入 approve/0 → 契约输入 block/1 真 finding。
+- v0.3.0 (2026-08-12): **MINOR — P0-4 补记**（spec changelog 漏记，代码已发布）：§2.1 加可选 `task_ids[]`（subject=feature 收口 review：task_id 槽位放 feature_id，review 覆盖整个 feature diff）。CONTRACT_VERSION → v0.3.0。
 - v0.2.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) §2.1 加 `feature_id`（可选）；(2) `task_id` pattern 放宽为 LOCAL_ID_PATTERN（`T-001B` 合法，002·T001 实验拒收案例转正）；(3) §3.2 落盘 `reviews/<session_id>` → `reviews/<review_key>/<session_id>`（`review_key = <safe_feature>-<task_id>`，缺省退化 task_id）——review 可按身份键定位，为 P0-6 成本台账同键铺路。CONTRACT_VERSION → v0.2.0。
 - v0.1.3 (2026-07-09): **PATCH** — §2.2 category 注释 + §4 checklist：cross_platform 的 `shell=True` 判定加"用户命令字符串"例外（ADR-0005，constitution v0.2.3 cascade；C7 v0.1.1 reverify 即该例外的合法使用）。`prompt.py` 同句同步。CONTRACT_VERSION 不变（report schema 未动）。
 - v0.1.2 (2026-06-12): **PATCH** — §2.1 `constitution_ref` 默认值 `docs/sdd/constitution.md` → `.specify/memory/constitution.md`（业务项目 spec-kit 标准位置）。跟 C2 v0.3.1 同源修正（r4 真闭环发现 #1）：C5 在业务项目 review 时同样校验 ref 存在，旧默认是 v4 自身路径会误报 `SPEC_NOT_FOUND`。CONTRACT_VERSION 不变（review_report schema 未变，仅 input 默认值）。
