@@ -26,6 +26,8 @@
     lease.json          # {pid, hostname, acquired_at, purpose}
   slots/slot-<N>/       # 构建 semaphore 槽位, 同 mkdir 协议
     holder.json         # {pid, hostname, acquired_at, cmd}
+  tmp/lane-<N>/         # lane 独占 tmp; 在租约目录外 (release 的 rmdir 不能连带删它),
+                        # acquire 时清空后交付 (I4)
 ```
 
 **并发协议（不依赖 flock——Windows 无 flock）**：获取 = `mkdir`（原子，成功即持有）；
