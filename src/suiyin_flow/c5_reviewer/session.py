@@ -209,6 +209,7 @@ def run_session(
     claude_cmd: list[str] | None = None,
     feature_id: str = "",
     cost_repo_root: Path | None = None,
+    cwd: Path | None = None,
 ) -> SessionResult:
     """跑一次 C5 review session.
 
@@ -221,6 +222,7 @@ def run_session(
         claude_cmd: injectable mock for tests
         feature_id: canonical identity 的 feature 部分
         cost_repo_root: 成本台账所属 repo；None 时不记账
+        cwd: session 进程工作目录；None 时保持既有行为，使用 review_dir
 
     Returns:
         SessionResult — exit_code / duration / log_path / final_review_json / timed_out
@@ -252,7 +254,7 @@ def run_session(
         with open(log_path, "w", encoding="utf-8") as log_file:
             proc = subprocess.Popen(
                 cmd,
-                cwd=review_dir,
+                cwd=cwd if cwd is not None else review_dir,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
