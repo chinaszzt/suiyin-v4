@@ -30,6 +30,7 @@ from suiyin_flow.c4_verify.report import (
     compute_ac_summary,
     compute_overall_verdict,
 )
+from suiyin_flow.treesha import resolve_tree_sha
 
 # =============================================================================
 # AC-1: 给定 worktree 含 1 个 passing test 名为 test_AC_1_xxx,
@@ -220,3 +221,97 @@ def test_AC_8_report_schema_stable_across_100_invocations() -> None:
         )
         json_str = report.model_dump_json()
         VerifyReport.model_validate_json(json_str)  # 任一次 raise 即 test fail
+
+
+def test_AC_freshness_report_contains_target_tree_sha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C4 stamps the exact committed tree verified in a real git worktree."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(
+        ["git", "-C", str(repo), "init", "-b", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        shell=False,
+    )
+    (repo / "pyproject.toml").write_text(
+        "[project]\nname='fixture'\nversion='0'\n", encoding="utf-8"
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "add", "."],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        shell=False,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "fixture",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        shell=False,
+    )
+    monkeypatch.setattr(
+        "suiyin_flow.c4_verify.cli.pytest_runner.run_l1",
+        lambda _root: L1Report(status="pass"),
+    )
+    monkeypatch.setattr(
+        "suiyin_flow.c4_verify.cli.pytest_runner.run_l2",
+        lambda _root: L2Report(status="pass"),
+    )
+    verify_input = VerifyInput(
+        target=TargetWorktree(worktree_path=str(repo)),
+        spec_ref="spec.md",
+        ac_list=[],
+        levels=["L1", "L2"],
+        repo_root=str(repo),
+    )
+
+    assert run_verify(verify_input) == 0
+    report = VerifyReport.model_validate_json(
+        (repo / ".suiyin" / "verify" / "latest.json").read_text(encoding="utf-8")
+    )
+    assert report.target_tree_sha == resolve_tree_sha(repo)
+
+
+def test_AC_freshness_non_git_target_warns_and_keeps_report_optional(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """C4 remains independently usable when its target has no git metadata."""
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname='fixture'\nversion='0'\n", encoding="utf-8"
+    )
+    verify_input = VerifyInput(
+        target=TargetWorktree(worktree_path=str(tmp_path)),
+        spec_ref="spec.md",
+        ac_list=[],
+        levels=[],
+        repo_root=str(tmp_path),
+    )
+
+    assert run_verify(verify_input) == 0
+    report = VerifyReport.model_validate_json(
+        (tmp_path / ".suiyin" / "verify" / "latest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert report.target_tree_sha is None
+    assert "warning: target tree SHA unavailable" in capsys.readouterr().err

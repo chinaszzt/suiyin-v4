@@ -37,6 +37,7 @@ from suiyin_flow.c5_reviewer.report import (
 )
 from suiyin_flow.c5_reviewer.session import run_session
 from suiyin_flow.identity import review_key
+from suiyin_flow.treesha import resolve_tree_sha
 
 
 def execute_review(
@@ -80,6 +81,25 @@ def execute_review(
         repo_root=repo_root,
         output_path=pr_diff_path,
     )
+
+    # URL / PR 编号依赖远端 head，不假装是本地 ref；旧行为保持可运行，
+    # 但报告不带票，后续 C6 会 fail-closed。
+    is_remote_pr = review_input.pr_ref.startswith(("http://", "https://")) or (
+        review_input.pr_ref.lstrip("#").isdigit()
+    )
+    if is_remote_pr:
+        target_tree_sha = None
+        print(
+            "[c5] warning: target tree SHA unavailable for URL/number pr_ref: "
+            f"{review_input.pr_ref}",
+            file=sys.stderr,
+        )
+    else:
+        try:
+            target_tree_sha = resolve_tree_sha(repo_root, review_input.pr_ref)
+        except ValueError as exc:
+            target_tree_sha = None
+            print(f"[c5] warning: target tree SHA unavailable: {exc}", file=sys.stderr)
 
     # 2. Render prompt
     prompt_text = render_prompt(review_input, str(pr_diff_path), resolved_inputs)
@@ -148,6 +168,7 @@ def execute_review(
         session_id=session_id,
         arbitration=arbitration,
         review_inputs=resolved_inputs,
+        target_tree_sha=target_tree_sha,
     )
     report_path = write_report(report, review_dir)
 

@@ -146,12 +146,25 @@ def _write_report(path: Path, payload: Mapping[str, Any]) -> Path:
 
 
 @pytest.fixture
-def verify_report_pass(tmp_path: Path) -> Path:
+def fresh_report_tree_sha(tmp_path: Path) -> str:
+    """Tree shared by fixture_repo and fixture_repo_diverged feature branches."""
+    source = tmp_path / "fresh-report-tree"
+    source.mkdir()
+    _git(source, "init", "-b", "main")
+    (source / "README.md").write_text("# initial\n", encoding="utf-8")
+    (source / "feature.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    _git(source, "add", ".")
+    return _git(source, "write-tree").strip()
+
+
+@pytest.fixture
+def verify_report_pass(tmp_path: Path, fresh_report_tree_sha: str) -> Path:
     """C4 verify_report.json with overall_verdict=pass (§3.1 I1 字段名)."""
     return _write_report(
         tmp_path / "verify_pass.json",
         {
             "target": "fixture",
+            "target_tree_sha": fresh_report_tree_sha,
             "overall_verdict": "pass",
             "levels": [],
             "ac_summary": {"covered": [], "missing": []},
@@ -162,11 +175,12 @@ def verify_report_pass(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def verify_report_fail(tmp_path: Path) -> Path:
+def verify_report_fail(tmp_path: Path, fresh_report_tree_sha: str) -> Path:
     return _write_report(
         tmp_path / "verify_fail.json",
         {
             "target": "fixture",
+            "target_tree_sha": fresh_report_tree_sha,
             "overall_verdict": "fail",
             "levels": [],
             "ac_summary": {"covered": [], "missing": []},
@@ -177,16 +191,20 @@ def verify_report_fail(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def verify_report_missing_field(tmp_path: Path) -> Path:
+def verify_report_missing_field(tmp_path: Path, fresh_report_tree_sha: str) -> Path:
     """缺 overall_verdict 字段 → AC-6b INVALID_REPORT."""
     return _write_report(
         tmp_path / "verify_missing.json",
-        {"target": "fixture", "levels": []},  # no overall_verdict
+        {
+            "target": "fixture",
+            "target_tree_sha": fresh_report_tree_sha,
+            "levels": [],
+        },  # no overall_verdict
     )
 
 
 @pytest.fixture
-def review_report_approve(tmp_path: Path) -> Path:
+def review_report_approve(tmp_path: Path, fresh_report_tree_sha: str) -> Path:
     return _write_report(
         tmp_path / "review_approve.json",
         {
@@ -196,13 +214,14 @@ def review_report_approve(tmp_path: Path) -> Path:
             "session_id": "test-sess",
             "task_id": "T-test",
             "pr_ref": "feature",
+            "target_tree_sha": fresh_report_tree_sha,
             "contract_version": "v0.1.1",
         },
     )
 
 
 @pytest.fixture
-def review_report_block(tmp_path: Path) -> Path:
+def review_report_block(tmp_path: Path, fresh_report_tree_sha: str) -> Path:
     return _write_report(
         tmp_path / "review_block.json",
         {
@@ -225,6 +244,7 @@ def review_report_block(tmp_path: Path) -> Path:
             "session_id": "test-sess",
             "task_id": "T-test",
             "pr_ref": "33",
+            "target_tree_sha": fresh_report_tree_sha,
             "contract_version": "v0.1.1",
         },
     )

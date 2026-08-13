@@ -23,7 +23,8 @@ from suiyin_flow.identity import LOCAL_ID_PATTERN
 #   nc > acceptance > design > failure_modes > advisory; required 缺失 /
 #   hash 漂移 fail-closed (session 不启动); report 记录 resolved inputs。
 #   尺子对照实验实证: 契约进输入面 = 同 diff approve/0 → block/1 (dogfood/P0-attribution/)
-CONTRACT_VERSION: str = "v0.4.0"
+# v0.5.0 (2026-08-13): MINOR — report 加可选 target_tree_sha 新鲜度锚.
+CONTRACT_VERSION: str = "v0.5.0"
 
 # -------------------------------------------------------------------
 # Enums
@@ -254,6 +255,7 @@ class ReviewReport(BaseModel):
         description="conditional (when input.task_id 非空, v0.1.1 实际 always)",
     )
     pr_ref: str = Field(description="always; 回传 input.pr_ref")
+    target_tree_sha: str | None = None
     contract_version: str = Field(
         pattern=r"^v\d+\.\d+\.\d+$",
         description="always; 本 spec 版本号",
