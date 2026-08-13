@@ -68,34 +68,61 @@ def feature_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _write_tasks(tmp_path: Path, repo: Path) -> Path:
+def _write_tasks(tmp_path: Path, repo: Path, *, task_count: int = 2) -> Path:
     d = tmp_path / "specs"
     d.mkdir(exist_ok=True)
     path = d / "tasks.yaml"
+    task_entries = [
+        {
+            "task_id": "T-001",
+            "spec_ref": "spec.md",
+            "plan_ref": "plan.md",
+            "constitution_ref": "constitution.md",
+            "verify_cmd": "true",
+            "criticality": "medium",
+            "base_branch": FEATURE,
+            "modifies": ["impl.py"],
+        },
+        {
+            "task_id": "T-002",
+            "spec_ref": "spec.md",
+            "plan_ref": "plan.md",
+            "constitution_ref": "constitution.md",
+            "verify_cmd": "true",
+            "criticality": "low",
+            "base_branch": FEATURE,
+            "depends_on": ["T-001"],
+            "modifies": ["generated/**"],
+        },
+    ][:task_count]
     path.write_text(yaml.safe_dump({
         "schema_version": "v0.2.0",
         "feature_id": "002-demo",
-        "tasks": [
-            {
-                "task_id": "T-001",
-                "spec_ref": "spec.md",
-                "plan_ref": "plan.md",
-                "constitution_ref": "constitution.md",
-                "verify_cmd": "true",
-                "criticality": "medium",
-                "base_branch": FEATURE,
-            },
-            {
-                "task_id": "T-002",
-                "spec_ref": "spec.md",
-                "plan_ref": "plan.md",
-                "constitution_ref": "constitution.md",
-                "verify_cmd": "true",
-                "criticality": "low",
-                "base_branch": FEATURE,
-            },
+        "tasks": task_entries,
+    }, allow_unicode=True), encoding="utf-8")
+    (repo / "authorization.yaml").write_text(yaml.safe_dump({
+        "schema_version": "v0.1.0",
+        "feature_id": "002-demo",
+        "denies": {"paths": []},
+        "grants": [
+            {"task_id": task["task_id"], "write_paths": []}
+            for task in task_entries
         ],
     }, allow_unicode=True), encoding="utf-8")
+    if task_count > 1:
+        (repo / "seam-manifest.yaml").write_text(yaml.safe_dump({
+            "schema_version": "v0.1.0",
+            "feature_id": "002-demo",
+            "entries": [{
+                "seam_id": "SEAM-DEMO",
+                "kind": "interface",
+                "declaration": "T-001 output is consumed by T-002",
+                "provider_task": "T-001",
+                "consumer_tasks": ["T-002"],
+                "source": "spec.md#demo",
+                "test_ref": "tests/test_ac.py::test_AC_1_ok",
+            }],
+        }, allow_unicode=True), encoding="utf-8")
     return path
 
 
@@ -155,6 +182,8 @@ def test_AC_1_happy_path_merges(feature_repo: Path, tmp_path: Path) -> None:
     # acgate/mutation 缺工件 → skipped_warning (迁移期语义)
     by_name = {s.name: s for s in report.steps}
     assert by_name["acgate"].status == "skipped_warning"
+    assert by_name["authz"].status == "passed"
+    assert by_name["seamlint"].status == "passed"
     assert by_name["mutation"].status == "skipped_warning"
     assert by_name["verify"].status == "passed"
     assert by_name["review"].status == "passed"
@@ -341,3 +370,115 @@ def test_AC_8_gate_dry_run_does_not_merge(feature_repo: Path, tmp_path: Path) ->
     assert report.verdict == "merged"  # 评估通过 (dry-run 标记在 detail)
     assert "[dry-run]" in {s.name: s for s in report.steps}["gate"].detail
     assert _git(feature_repo, "rev-parse", "main") == main_before
+
+
+# =============================================================================
+# M4 preflight: authz / seamlint fail-fast wiring
+# =============================================================================
+
+
+def test_authz_missing_manifest_holds_at_authz(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo)
+    (feature_repo / "authorization.yaml").unlink()
+
+    report = run_close(_cfg(feature_repo, tasks, tmp_path))
+
+    assert report.verdict == "held"
+    assert report.held_at == "authz"
+    by_name = {step.name: step for step in report.steps}
+    assert by_name["authz"].status == "failed"
+    assert "feature 收口必须有写权声明" in by_name["authz"].detail
+    assert by_name["seamlint"].status == "not_reached"
+    assert by_name["mutation"].status == "not_reached"
+
+
+def test_authz_valid_manifest_passes_into_later_steps(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo)
+
+    report = run_close(_cfg(
+        feature_repo,
+        tasks,
+        tmp_path,
+        verify_cmd=f'{_PY} -c "raise SystemExit(1)"',
+    ))
+
+    assert report.held_at == "verify"
+    by_name = {step.name: step for step in report.steps}
+    assert by_name["authz"].status == "passed"
+    assert by_name["seamlint"].status == "passed"
+    assert by_name["mutation"].status == "skipped_warning"
+
+
+def test_authz_out_of_scope_diff_holds_before_seamlint(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo)
+    _git(feature_repo, "checkout", "-q", FEATURE)
+    (feature_repo / "outside.py").write_text("OUTSIDE = True\n", encoding="utf-8")
+    _git(feature_repo, "add", "outside.py")
+    _git(feature_repo, "commit", "-m", "write outside declared surface")
+    _git(feature_repo, "checkout", "-q", "main")
+
+    report = run_close(_cfg(feature_repo, tasks, tmp_path))
+
+    assert report.held_at == "authz"
+    by_name = {step.name: step for step in report.steps}
+    assert by_name["authz"].status == "failed"
+    assert "AUTHZ_PATH_UNGRANTED" in by_name["authz"].detail
+    assert by_name["seamlint"].status == "not_reached"
+
+
+def test_seamlint_missing_for_multi_task_feature_holds(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo)
+    (feature_repo / "seam-manifest.yaml").unlink()
+
+    report = run_close(_cfg(feature_repo, tasks, tmp_path))
+
+    assert report.held_at == "seamlint"
+    by_name = {step.name: step for step in report.steps}
+    assert by_name["authz"].status == "passed"
+    assert by_name["seamlint"].status == "failed"
+    assert by_name["mutation"].status == "not_reached"
+
+
+def test_seamlint_missing_for_single_task_warns_and_continues(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo, task_count=1)
+
+    report = run_close(_cfg(
+        feature_repo,
+        tasks,
+        tmp_path,
+        verify_cmd=f'{_PY} -c "raise SystemExit(1)"',
+    ))
+
+    assert report.held_at == "verify"
+    by_name = {step.name: step for step in report.steps}
+    assert by_name["seamlint"].status == "skipped_warning"
+    assert by_name["mutation"].status == "skipped_warning"
+
+
+def test_seamlint_dependency_closed_manifest_passes(
+    feature_repo: Path, tmp_path: Path
+) -> None:
+    tasks = _write_tasks(tmp_path, feature_repo)
+
+    report = run_close(_cfg(
+        feature_repo,
+        tasks,
+        tmp_path,
+        verify_cmd=f'{_PY} -c "raise SystemExit(1)"',
+    ))
+
+    assert report.held_at == "verify"
+    seam_step = {step.name: step for step in report.steps}["seamlint"]
+    assert seam_step.status == "passed"
+    assert "pending_tests=0" in seam_step.detail
+    assert seam_step.report_path is not None

@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from suiyin_flow.authz import cli as authz_cli
-from suiyin_flow.authz.gate import run_check
+from suiyin_flow.authz.gate import run_check, run_feature_check
 
 FEATURE_ID = "002-authz-feature"
 TASK_ID = "T-001"
@@ -258,3 +258,87 @@ def test_AC_10_report_json_has_stable_shape(tmp_path: Path) -> None:
     assert {"code", "dimension", "detail", "task_id"} == set(data["findings"][0])
     assert data["declared_db_writes"] == ["suiyin_desk.topics"]
     assert data["declared_network"] == ["api.internal.example"]
+
+
+def test_feature_check_uses_union_of_all_task_and_grant_paths(tmp_path: Path) -> None:
+    """Feature mode authorizes the combined path surface and has no command context."""
+    manifest_path, tasks_path, diff_path = _write_case(
+        tmp_path,
+        grant={"write_paths": ["generated/**"]},
+        diff=(
+            _diff("src/app/main.py")
+            + _diff("docs/guide.md")
+            + _diff("generated/client.py")
+        ),
+    )
+    tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+    tasks["tasks"].append(
+        {
+            "task_id": "T-002",
+            "spec_ref": "specs/002/spec.md",
+            "plan_ref": "specs/002/plan.md",
+            "verify_cmd": "pytest docs -q",
+            "modifies": ["docs/**"],
+        }
+    )
+    _write_yaml(tasks_path, tasks)
+
+    report = run_feature_check(manifest_path, tasks_path, diff_path)
+
+    assert report.passed is True
+    assert report.task_id == FEATURE_ID
+    assert report.counts == {"path": 0, "command": 0}
+
+
+def test_feature_check_denies_override_combined_grants(tmp_path: Path) -> None:
+    """Feature-level denies remain absolute even when another task grants the path."""
+    manifest_path, tasks_path, diff_path = _write_case(
+        tmp_path,
+        modifies=["src/**"],
+        denies=["src/secret/**"],
+        grant={"write_paths": ["src/secret/**"]},
+        diff=_diff("src/secret/token.py"),
+    )
+
+    report = run_feature_check(manifest_path, tasks_path, diff_path)
+
+    assert report.passed is False
+    assert [finding.code for finding in report.findings] == ["AUTHZ_PATH_DENIED"]
+    assert report.findings[0].task_id == FEATURE_ID
+
+
+def test_feature_check_unions_declarations_in_stable_order(tmp_path: Path) -> None:
+    """DB and network declarations are de-duplicated across grants in file order."""
+    manifest_path, tasks_path, diff_path = _write_case(tmp_path)
+    tasks = yaml.safe_load(tasks_path.read_text(encoding="utf-8"))
+    tasks["tasks"].append(
+        {
+            "task_id": "T-002",
+            "spec_ref": "specs/002/spec.md",
+            "plan_ref": "specs/002/plan.md",
+            "verify_cmd": "pytest -q",
+        }
+    )
+    _write_yaml(tasks_path, tasks)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    manifest["grants"] = [
+        {
+            "task_id": TASK_ID,
+            "db_writes": ["app.users", "app.audit"],
+            "network": ["api.internal.example"],
+        },
+        {
+            "task_id": "T-002",
+            "db_writes": ["app.audit", "app.events"],
+            "network": ["api.internal.example", "events.internal.example"],
+        },
+    ]
+    _write_yaml(manifest_path, manifest)
+
+    report = run_feature_check(manifest_path, tasks_path, diff_path)
+
+    assert report.declared_db_writes == ["app.users", "app.audit", "app.events"]
+    assert report.declared_network == [
+        "api.internal.example",
+        "events.internal.example",
+    ]

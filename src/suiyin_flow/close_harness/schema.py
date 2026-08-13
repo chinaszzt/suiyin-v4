@@ -17,6 +17,8 @@ CLOSE_SCHEMA_VERSION: str = "v0.1.0"
 StepName = Literal[
     "human_block",   # 本地 block 状态检查 (最先; HUMAN_BLOCKED 优先级同 C6 I8)
     "acgate",        # AC 冻结闸 (feature 相对 target 的 diff)
+    "authz",         # feature 写权声明静态闸
+    "seamlint",      # 跨 task 接缝 manifest 静态 lint
     "mutation",      # mutation 探针 (触发键命中才跑)
     "verify",        # C4 全量 (feature HEAD, throwaway worktree)
     "review",        # C5 subject=feature (含 task_ids[])
