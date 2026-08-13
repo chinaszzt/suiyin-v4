@@ -25,7 +25,7 @@
 ## 2. Manifest Schema (v0.1.0)
 
 ```yaml
-schema_version: v0.1.0          # 必填; lint 只认 v0.1.0 (draft-v0.1 明确拒收, 指引转正)
+schema_version: v0.2.0          # 必填; lint 认 v0.1.0/v0.2.0 (draft-v0.1 明确拒收, 指引转正)
 feature_id: 002-topic-triage    # 必填; LOCAL_ID_PATTERN
 source_basis: "contracts/README.md v13"   # optional; 抽取来源说明
 entries:                        # ≥1
@@ -36,7 +36,10 @@ entries:                        # ≥1
       const (...)
     provider_task: T001         # 恰好一个 owner (LOCAL_ID_PATTERN) —— 同 modifies 1:1 所有权;
                                 # draft 里 "T001（...）+ T002（...）" 这类注记语义拆去 note
-    consumer_tasks: [T004, T008]  # ≥1, LOCAL_ID_PATTERN, 不得含 provider_task
+    consumer_tasks: [T004, T008]  # LOCAL_ID_PATTERN, 不得含 provider_task; v0.2.0 起可空
+    external_consumers: []        # v0.2.0; 跨 feature/跨边界消费方 ("003-workbench"/"cmd/server"/
+                                  # "ops"), 自由标识不对 tasks.yaml 校验、不参与 L2/L3;
+                                  # consumer_tasks 与 external_consumers 至少一非空
     source: "contracts/README.md:125-144"   # 必填; 文件[:行区间/章节]
     test_ref: "tests/contract/exit_test.go::TestExitReasonClosedSet"
                                 # optional; 接缝的机械 integration test (todo §P2.0.5 #B);
@@ -120,9 +123,10 @@ suiyin-flow seamlint run --manifest <seam-manifest.yaml> --tasks-yaml <tasks.yam
 
 ---
 
-**Version**: v0.1.0-draft
+**Version**: v0.2.0-draft
 **Last Updated**: 2026-08-13
 **Status**: draft — M3 件 2（gen4-plan §四 M3 门）；schema 拍板 + lint 待实现（codex 外包）
 
 **Changelog**:
+- v0.2.0 (2026-08-13): **MINOR — M4 回放 finding 承接**：SeamEntry 加 `external_consumers`（跨 feature/跨边界消费方，自由标识，不参与 L2/L3）；consumer_tasks 允许为空当 external 非空（两者至少一非空）。动机 = SEAM-CORRECTIONS-ERRORS 病例：真实消费方是 feature 003 工作台，v0.1.0 无法表达导致强塞 feature 内消费者制造假 L3 依赖信号（`dogfood/M4-replay/` 结构性 finding #1）。v0.1.0 文件继续接受。
 - v0.1.0 (2026-08-13): 初稿。schema = M2 draft 转正（provider 单 owner / consumer_tasks 复数 / test_ref+PENDING 哨兵 / draft 拒收）；lint 四层（schema/identity/dependency/test-hook），L3 依赖闭合 = expense-tracker 变体 B + E4 SEAM-EXIT-REASON 两案的机械化承接。

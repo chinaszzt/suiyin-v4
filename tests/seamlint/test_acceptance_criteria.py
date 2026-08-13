@@ -308,3 +308,71 @@ def test_AC_10_entry_identity_and_dependency_findings_are_aggregated(tmp_path: P
     assert {
         finding.code for finding in report.findings
     } >= {"SEAM_ENTRY_INVALID", "SEAM_TASK_UNKNOWN", "SEAM_DEPENDENCY_MISSING"}
+
+
+# =============================================================================
+# v0.2.0: external_consumers (M4 回放 finding — 跨 feature 消费方表达)
+# =============================================================================
+
+
+def test_AC_11_external_only_consumer_passes(tmp_path: Path) -> None:
+    """v0.2.0: consumer_tasks 空 + external_consumers 非空 → 合法, 不产 L2/L3
+    (M4 病例: SEAM-CORRECTIONS-ERRORS 真实消费方是 feature 003, 强塞 T003 曾制造假 L3)."""
+    manifest_path, tasks_path = _write_chain(tmp_path)
+    _write_manifest(
+        manifest_path,
+        [
+            _entry(
+                "SEAM-CROSS-FEATURE",
+                provider="T-C",
+                consumer_tasks=[],
+                external_consumers=["003-workbench"],
+            )
+        ],
+        schema_version="v0.2.0",
+    )
+    report = run_lint(manifest_path, tasks_path)
+    assert report.passed is True
+    assert report.counts["SEAM_DEPENDENCY_MISSING"] == 0
+    assert report.counts["SEAM_TASK_UNKNOWN"] == 0
+
+
+def test_AC_12_no_consumer_at_all_rejected(tmp_path: Path) -> None:
+    """v0.2.0: consumer_tasks 与 external_consumers 都空 → SEAM_ENTRY_INVALID."""
+    manifest_path, tasks_path = _write_chain(tmp_path)
+    _write_manifest(
+        manifest_path,
+        [
+            _entry(
+                "SEAM-NO-CONSUMER",
+                provider="T-C",
+                consumer_tasks=[],
+                external_consumers=[],
+            )
+        ],
+        schema_version="v0.2.0",
+    )
+    report = run_lint(manifest_path, tasks_path)
+    assert report.passed is False
+    assert report.counts["SEAM_ENTRY_INVALID"] == 1
+
+
+def test_AC_13_external_consumers_not_checked_against_tasks(tmp_path: Path) -> None:
+    """v0.2.0: external_consumers 自由标识不对 tasks.yaml 校验; 混用时
+    consumer_tasks 照常走 L2/L3."""
+    manifest_path, tasks_path = _write_chain(tmp_path)
+    _write_manifest(
+        manifest_path,
+        [
+            _entry(
+                "SEAM-MIXED",
+                provider="T-C",
+                consumers=["T-A"],
+                external_consumers=["cmd/server", "ops"],
+            )
+        ],
+        schema_version="v0.2.0",
+    )
+    report = run_lint(manifest_path, tasks_path)
+    assert report.passed is True
+    assert report.counts["SEAM_TASK_UNKNOWN"] == 0
