@@ -1,0 +1,24 @@
+--- a/Makefile
++++ b/Makefile
+@@ -56,3 +56,6 @@
++test-mongo-force:
++	docker rm -f suiyin-testmongo || true
++	docker run -d --name suiyin-testmongo -p 38027:27017 mongo:7  # safety-ok: 探针复刻审计票原文
+--- a/cmd/opctl/main_test.go
++++ b/cmd/opctl/main_test.go
+@@ -32,3 +32,4 @@
++	// 修改测试连接安全策略
+--- a/internal/api/handler.go
++++ b/internal/api/handler.go
+@@ -1,3 +1,4 @@
++// 越界改动样例
+--- a/internal/guard/guard.go
++++ b/internal/guard/guard.go
+@@ -1,3 +1,4 @@
++// 越界改动样例
+--- a/internal/clockx/clockx.go
++++ b/internal/clockx/clockx.go
+@@ -40,3 +40,6 @@
++func (c *FakeClock) Set(t time.Time) {
++	c.now = t
++}

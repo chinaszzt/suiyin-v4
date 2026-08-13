@@ -1,0 +1,87 @@
+{
+  "verdict": "block",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "nc_violation",
+      "location": "internal/topic/deps.go (package-wide: ExitReason/ExitDecision/EvalOpts absent)",
+      "suggested_fix": "Add `type ExitReason string` with the closed set {ExitSilentComplete, ExitSLADeadline, ExitHardLimit, ExitForced}, plus `ExitDecision{Exit, Reason, Summary, SummaryDegraded}` and `EvalOpts{DryRun, Origin}` to internal/topic, matching contracts/README.md lines 112-127 verbatim (which explicitly states 'T001 交付' and that README overrides individual task contracts on conflict). Without these, T004's EvaluateCard signature and T008's replay-diff comparison (which the seam manifest ties to this exact enum) cannot be implemented against the declared contract. Constitution P9 底线④ names 'contract seam deviation (interface signature ... not matching contract)' as an unwaivable floor defect at any tier."
+    },
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "internal/topic/deps.go:180-192 (ScratchState.Cards()/Links())",
+      "suggested_fix": "Cards()/Links() only copy the outer slice (`copy(out, s.cards)`); store.TopicCard.Reporters ([]string, schema.go:480), store.TopicCard.ClaimedBy (*TopicCardClaim, schema.go:491), and store.CardLink.Score (*float64, schema.go:551) remain shared with the internal state, contradicting the method's own doc comment ('只读视图，调用方不得据此假设底层共享内存'). This reproduces the exact shallow-copy defect T001-topic-model.md's own revision history calls out as a real (not ruler-ambiguity) implementation defect, and which seam-manifest.yaml's SEAM-SCRATCH-STATE entry documents as a prior acceptance-review blocker fixed via a deep per-field copy + a TestScratchDeepCopyCoversAllReferenceFields guard — neither is present here. Do a field-by-field deep copy (clone Reporters slice contents, clone *TopicCardClaim/*float64 pointee) and add the guard test before T003/T008 start writing/reading this concurrently."
+    },
+    {
+      "severity": "medium",
+      "category": "reusable_knowledge_not_captured",
+      "location": "specs/002-topic-triage/seam-manifest.yaml:70-84,242-251 vs internal/topic/deps.go:70-84 (Deps struct)",
+      "suggested_fix": "seam-manifest.yaml's SEAM-DEPS/SEAM-CARD-MUTEX entries declare a `CardMu *CardMutex` field on topic.Deps attributed to a 'v13 裁决', but the actually-committed contracts/README.md is v11 and its Deps code block (lines 96-110) has no such field — nor does T001-topic-model.md v6. The diff correctly matches the committed contract (verified via TestContractShapes, which passes), so this isn't an implementation bug, but the design docs disagree with each other on whether the card-level keyed mutex primitive (plan.md's primary concurrency-safety mechanism — 'unique index is only the last line of defense') belongs in T001's Deps. Reconcile: either backport CardMu into README.md/T001-topic-model.md §一 and re-open T001, or correct/version the seam manifest so it stops citing an unlanded ruling as current source-of-truth for T002-T008 implementers who will read the seam manifest and expect the field to exist."
+    },
+    {
+      "severity": "medium",
+      "category": "reusable_knowledge_not_captured",
+      "location": "specs/002-topic-triage/authorization.yaml:9-13 (T001 grant)",
+      "suggested_fix": "T001's grant has `db_writes: []`, while T001-topic-model.md §三 explicitly authorizes writes to topic_cards (state field via Transition), our_members, topic_metrics (via Count), and config_ops (registry audit) — and internal/topic/registry.go does perform literal InsertOne/UpdateOne writes to our_members and config_ops. Every other task (T002-T008) has its db_writes list correctly populated from its own §三 grant; T001 alone is empty, which looks like a data-entry gap in the M2 migration artifact rather than a real code violation. If any downstream tooling enforces this manifest as a hard authz gate (per the commit message 'A 产物 authz 过闸'), populate T001's db_writes with [suiyin_desk.topic_cards, suiyin_desk.our_members, suiyin_desk.topic_metrics, suiyin_desk.config_ops] to match the contract before it's relied on as ground truth."
+    }
+  ],
+  "reviewed_at": "2026-08-13T06:47:41.842985Z",
+  "session_id": "870b02d7-b5f1-4bcd-90da-cbd4f238f20e",
+  "task_id": "T-002",
+  "pr_ref": "v4lab/b-product",
+  "target_tree_sha": "b72b64634079801cc14671e65cac2d85d7392e1b",
+  "contract_version": "v0.5.0",
+  "arbitration": null,
+  "review_inputs": [
+    {
+      "kind": "constitution",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/docs/constitution.md",
+      "authority": "nc",
+      "status": "loaded",
+      "content_sha256": "06bd8fb5f5157811c145a98db3846e349ee705913f71a23a1a299153020929bf"
+    },
+    {
+      "kind": "spec",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/spec.md",
+      "authority": "acceptance",
+      "status": "loaded",
+      "content_sha256": "edd28e4ee1d8e5c64a5deaf024d97746a69a51cb971f936ed438b02ca750b9d7"
+    },
+    {
+      "kind": "plan",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/plan.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "ae110d022b8e84cf1ed2567c189304301b8e16e32d83f73d9b52796ed1dfa097"
+    },
+    {
+      "kind": "contract",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/contracts/T001-topic-model.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "226ef403d9336090ce989f278f75a48517057918000e2ea54ed3f3622bd38d33"
+    },
+    {
+      "kind": "contract",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/contracts/README.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "5dd1a45ce58fda5d4dc1959d40727dcefd54ad1f4c1544aa3f9c857c4d279e14"
+    },
+    {
+      "kind": "seam_manifest",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/seam-manifest.yaml",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "aced5f258e6260b8b497f0e10e949aa085713e8c0528ce0e9191e8bafe377177"
+    },
+    {
+      "kind": "authorization",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/authorization.yaml",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "54b160476c32b2b355b21f598ec6e02df192401e86e9fc495297df161f6e66bd"
+    }
+  ]
+}

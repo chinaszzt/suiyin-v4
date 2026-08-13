@@ -1,0 +1,38 @@
+{
+  "schema_version": "v0.1.0",
+  "manifest_path": "specs/002-topic-triage/authorization.yaml",
+  "task_id": "T001",
+  "counts": {
+    "path": 4,
+    "command": 0
+  },
+  "findings": [
+    {
+      "code": "AUTHZ_PATH_UNGRANTED",
+      "dimension": "path",
+      "detail": "path 'Makefile' is outside the task's write grants",
+      "task_id": "T001"
+    },
+    {
+      "code": "AUTHZ_PATH_UNGRANTED",
+      "dimension": "path",
+      "detail": "path 'cmd/opctl/main_test.go' is outside the task's write grants",
+      "task_id": "T001"
+    },
+    {
+      "code": "AUTHZ_PATH_UNGRANTED",
+      "dimension": "path",
+      "detail": "path 'internal/api/handler.go' is outside the task's write grants",
+      "task_id": "T001"
+    },
+    {
+      "code": "AUTHZ_PATH_UNGRANTED",
+      "dimension": "path",
+      "detail": "path 'internal/guard/guard.go' is outside the task's write grants",
+      "task_id": "T001"
+    }
+  ],
+  "passed": false,
+  "declared_db_writes": [],
+  "declared_network": []
+}
