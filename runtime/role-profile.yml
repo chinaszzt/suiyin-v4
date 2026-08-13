@@ -31,10 +31,17 @@ bootstrap_special_cases:
   - sy-constitution                 # Project foundation
   # Future candidates: sy-domain-glossary (when added)
 
+# Plan gate tiers (gen4-plan 拍板 3; see role-profiles.md "Plan Gate 分档")
+plan_gate:
+  mechanical_checks_required: true  # seamlint + authz schema + tasks.yaml strict load; red = block
+  auto_pin_technical_plan: true     # D 档专属; 需前置链全绿 + 纯技术 plan (db_writes/network 全空
+                                    # + 无 spec/constitution 变更 + denies 无变更), 否则回落人 pin
+  auto_pin_marker: true             # 自动 pin 的 plan.md 头部留 <!-- auto-pinned --> 审计痕
+
 # Human gates (where humans MUST decide)
 human_gates:
   - spec_pinning                    # spec.md 最终拍板
-  - plan_pinning                    # plan.md 最终拍板
+  - plan_pinning                    # plan.md 最终拍板 (D 档纯技术 plan 经 plan_gate 机检链可自动 pin)
   - spec_drift_arbitration          # AI 执行中发现 spec 不对
   - production_deploy               # 发版按钮
   - emergency_override              # human:block label 紧急叫停

@@ -51,6 +51,8 @@ LLM 编程时代之前，"需求文档 + 设计文档"很少有人爱写——�
 ## 三、工作流 5 阶段
 
 每个阶段都是**一份文件 + 一次人审**。文件路径见仓库 `docs/sdd/` 目录约定。
+（例外：gen4-plan 拍板 3 起，D 档的**纯技术 plan** 在机检链全绿时可自动 pin——
+条件与前置链见 [role-profiles.md](role-profiles.md) 「Plan Gate 分档」节；spec 审不在此例外内。）
 
 ### 3.1 Constitution（项目宪法）
 
