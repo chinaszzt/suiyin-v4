@@ -63,6 +63,7 @@ InputKind = Literal[
     "plan",           # plan.md — 实施策略
     "contract",       # contracts/*.md — 接口契约 (尺子对照实验的关键输入)
     "seam_manifest",  # seam-manifest.yaml — 接缝声明 (M3 件 2 正式 schema)
+    "authorization",  # authorization.yaml — 写权声明 (M3 件 3; db/network 越界审查的尺子)
     "failure_modes",  # failure-modes.md — 已知坑 + 复发判据
     "verify_report",  # C4 verify_report.json — 辅助信息
     "advisory",       # 其他辅助材料 (研究笔记 / quickstart 等)
@@ -84,6 +85,7 @@ KIND_AUTHORITY: dict[str, Authority] = {
     "plan": "design",
     "contract": "design",
     "seam_manifest": "design",
+    "authorization": "design",
     "failure_modes": "failure_modes",
     "verify_report": "advisory",
     "advisory": "advisory",
