@@ -24,6 +24,7 @@ from suiyin_flow.c6_gate import cli as c6_cli
 from suiyin_flow.c7_coordinator import cli as c7_cli
 from suiyin_flow.close_harness import cli as close_cli
 from suiyin_flow.mutation import cli as mutation_cli
+from suiyin_flow.seamlint import cli as seamlint_cli
 
 _USAGE = """\
 usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate,mutation,close} ...
@@ -69,6 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         return acgate_cli.main(args)
     if cmd == "mutation":
         return mutation_cli.main(args)
+    if cmd == "seamlint":
+        return seamlint_cli.main(args)
     if cmd == "close":
         return close_cli.main(args)
 
