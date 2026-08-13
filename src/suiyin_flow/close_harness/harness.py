@@ -376,6 +376,7 @@ def _detect_feature_review_inputs(
     feature_dir = spec_path.parent
     candidates: list[tuple[InputKind, Path]] = [
         ("ac_map", feature_dir / "ac-map.md"),
+        ("authorization", feature_dir / "authorization.yaml"),
         ("failure_modes", feature_dir / "failure-modes.md"),
     ]
     # seam manifest: 正式版优先, 没有再收 draft (M2 产物是 draft; M3 件 2 转正式)

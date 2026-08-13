@@ -52,7 +52,7 @@ properties:
       properties:
         kind:
           enum: [constitution, spec, ac_map, plan, contract, seam_manifest,
-                 failure_modes, verify_report, advisory]
+                 authorization, failure_modes, verify_report, advisory]
           description: 闭集；authority 由 kind 派生 (KIND_AUTHORITY 固定表)，调用方不可自定
         path: { type: string, description: 相对 repo_root 或绝对 }
         required:
@@ -472,6 +472,7 @@ suiyin_flow/
 **Status**: draft — v0.4.0 typed inputs（gen4-plan 拍板 7 / M3 件 1）；Q5 / Q5-5 spike 待续
 
 **Changelog**:
+- v0.4.1 (2026-08-13): **PATCH — M3 件 3 cascade**：InputKind 加 `authorization`（authority=design；写权声明进输入面，db/network 越界审查有尺子——机械精判随件 8 校准，分期见 authorization-manifest.md §3.2）；close harness 自动收 `authorization.yaml`。report schema 未变。
 - v0.4.0 (2026-08-13): **MINOR — M3 件 1 typed inputs（gen4-plan 拍板 7）**。(1) §2.1 加 `review_inputs[]`（kind 闭集 / authority 由 KIND_AUTHORITY 固定表派生 / required / content_sha256 CRLF 归一化校验）；核心三件自动合成 entries；(2) fail-closed：REVIEW_INPUT_MISSING / REVIEW_INPUT_HASH_DRIFT / REVIEW_INPUT_MANIFEST_INVALID（session 不启动）；(3) §2.2 report 加 resolved `review_inputs`（实测 hash，verdict 可审计到尺子，为报告新鲜度绑定 M3 件 4 铺路）；(4) I9/I10 + AC-11..16；(5) prompt 权威序 `nc > acceptance > design > failure_modes > advisory` + 归类钉死（nc 命中一律 nc_violation；契约违反 → spec_drift 不降级）；(6) CLI `--inputs-manifest`；close harness 自动收 feature 目录契约资产（ac-map / seam-manifest / failure-modes / contracts/*.md）。**动机 = 尺子对照实验**（dogfood/P0-attribution/）：同 C5 同 diff，spec 输入 approve/0 → 契约输入 block/1 真 finding。
 - v0.3.0 (2026-08-12): **MINOR — P0-4 补记**（spec changelog 漏记，代码已发布）：§2.1 加可选 `task_ids[]`（subject=feature 收口 review：task_id 槽位放 feature_id，review 覆盖整个 feature diff）。CONTRACT_VERSION → v0.3.0。
 - v0.2.0 (2026-08-12): **MINOR — gen4-plan P0-1 canonical identity**。(1) §2.1 加 `feature_id`（可选）；(2) `task_id` pattern 放宽为 LOCAL_ID_PATTERN（`T-001B` 合法，002·T001 实验拒收案例转正）；(3) §3.2 落盘 `reviews/<session_id>` → `reviews/<review_key>/<session_id>`（`review_key = <safe_feature>-<task_id>`，缺省退化 task_id）——review 可按身份键定位，为 P0-6 成本台账同键铺路。CONTRACT_VERSION → v0.2.0。
