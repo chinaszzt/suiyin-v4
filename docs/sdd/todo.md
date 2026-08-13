@@ -411,6 +411,30 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 校准附注：P0-5 三条老规则对 desk 真 diff 误报 73 处（守卫断言/测试夹具）→ **M1 迁移必须处理误报面**，否则 desk 收口被安全闸卡死；规则 4 零误报
   - **下一步 = desk 实操：M0（冻结源 commit + effective-constitution + exception-registry）**，见 gen4-plan §四
 
+### P2.1 — gen-4 desk 迁移 M0-M5（工作场 = gen4 clone `~/suiyin-desk-gen4` @ `gen4/migration`；权威 gen4-plan §四）
+
+> 迁移文档活由 headless session 在 gen4 clone 内完成（`claude -p` + 本仓 Claude 观察验收）；
+> desk 真仓 `~/suiyin-desk`（main = `9137796` = M0 冻结 SHA）现役照跑、零接触；
+> gen4 clone 有 pre-push hook 机械拒推 main（main 禁区直到 M5 cut over）。
+
+- [x] **M0 指挥权交接 + 宪法归一** ✅ (2026-08-13)
+  - 指挥权交接：旧 CLAUDE.md `git mv` 冻结至 `docs/legacy/CLAUDE.desk-v1.md`，新薄 CLAUDE.md = gen-4 治理声明 + 分支纪律（main 禁区）+ 业务铁律 9 条 + `.suiyin/` 不入库——解决"session 无法在旧宪法下自我政变"的 bootstrap 悖论
+  - effective-constitution（`.specify/memory/constitution.md`）：27 现行 / 24 workflow-frozen（M1 矩阵主体）/ 2 废止 / 2 豁免（exception-registry）
+  - 两条待核实全清：#2 bzds 只读 = **账号层强制实证 ✅**（agent 探针 primary 直连 insert → code 13 Unauthorized，`isWritablePrimary:true` 排除拓扑遮蔽；架构修正：BZDS/DESK 同一账号 per-db 角色，持 desk 串即持 bzds 凭证）；#1 8-06 修宪记录分裂 → 留给下次 desk 修宪补登记
+- [x] **M1 原子迁移矩阵** ✅ (2026-08-13)
+  - `.specify/memory/migration-matrix.md`：33 颗粒逐条归宿（absorbed/mechanized/hold_M3/dissolved/retired 闭集），自检 orphan=0 / multiple_primary=0；E5 义务逐项指定临时承接者
+  - 四缺口移交 M3：red-first 未机械化 / 结构化裁决协议 / rescale 双向对账 / 多轮收敛协议（处置声明 = M3 件 7）
+- [x] **M2 试点 002 资产拆分** ✅ (2026-08-13)
+  - `specs/002-topic-triage/`：ac-map.md（AC 55 + GUARD 34）/ ac-manifest.yaml 骨架 / seam-manifest.draft.yaml（30 条，含 E4 病例 SEAM-EXIT-REASON）/ failure-modes.md（真实坑 9 条）
+  - 暴露 69 条 AC 待独立测试作者——M4 回放刚需，独立测试作者（P1）考虑提前
+  - session 自我纠偏实证：worktree 从 origin/main 分叉缺 M0/M1 产物 → 自主 ff 到 gen4/migration head（新宪法 worktree 铁律被自主遵守）
+- [ ] **M3 工具就绪门**（进行中，工作场回到 v4 仓；清单+分工见 scratchpad M3-execution-plan / gen4-plan §四）
+  - [x] 0. sy-tasks 反向指令清理（"Tests are OPTIONAL" / checklist T001 格式 / tasks.md 输出——M1/M2 两 session 实证会架空 AC 冻结与 canonical identity）+ 本节记账 ✅ (2026-08-13, 本 PR)
+  - [ ] 1. C5 typed inputs（拍板 7，尺子对照实验已实证方向）｜2. seam manifest 正式 schema + lint｜3. authorization manifest + 机械闸（拍板 9）｜4. C4/C5 报告新鲜度绑定｜5. 完整 lane 隔离｜6. plan gate 分档修订（拍板 3）｜7. M1 四缺口处置声明｜8. 安全闸误报面校准（73 处，M4 前必须收敛）
+  - 附注：sy-implement / sy-analyze 仍以 tasks.md 为输入面（各 4/6 处引用）——同属 spec-kit 残留，随 M3 相关件或单独小 PR 对齐 tasks.yaml
+- [ ] **M4 病例回放**（v4lab：E4 8 条按归因表逐条声明 + E5 越界票 + T003 A/B 再跑，零逃逸门）
+- [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）
+
 ### P2.0.5 — 并行盲区三件（2026-08-12 expense-tracker 双变体实验 + desk 002·T001 复盘移植；Q7-2 的前置约束）
 
 > **实验（本 session，产物在临时 scratchpad，结论以本节为准）**：极简记账库拆 T-001（SQLite repo 层）/ T-002（统计层），故意漏 `depends_on` 挂成并行，预 fork worktree + 逐字 C2 模板给干净 session。两变体三 session 全部 verify 绿、全部 commit、**零报错零求助**。变体 A（plan 钉死 DDL+签名）：session 明确发现依赖（点名 T-001 分支），test fixture 复刻 DDL 绕过，合并后端到端真能跑，损伤仅测试重复 DDL + 一条没人接的自然语言 TODO。变体 B（plan 不提存储介质）：session 造 113 行 duck-typing 万能适配器（3 种 source 形态 × 2 种记录形态），测试喂自造 fake 全绿 → rebase 干净 + I10 reverify 绿 → **静默 all_merged，端到端 KeyError（赌字段叫 `date`，T-001 按 plan 写的 `spent_on`）**。CI 9 passed，AC-1..5 逐条有 passing test，产品跑不起来。
@@ -607,10 +631,12 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 已完成: r4 #1/#2/#3（constitution_ref / reverify shell && / reverify 诊断）+ Q7-1 真并行开闸（C7 v0.1.2）。
 也可以读 docs/sdd/constitution.md v0.2.2 (NC v1.0)。
 
-【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）+ todo §P2.0** ——
-**P0 六件已全部完成 (2026-08-12~13) + 整链验收归因表达成 (dogfood/P0-attribution/)**。
-下一步 = **desk 实操 M0**（冻结 desk 源 commit + effective-constitution + exception-registry，
-gen4-plan §四）；M1 时必须处理安全闸对 desk 的 73 处误报面（归因表校准附注）。
+【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）+ todo §P2.0/§P2.1** ——
+**P0 六件 + 整链验收归因表 ✅ (2026-08-12~13)；desk 迁移 M0/M1/M2 ✅ (2026-08-13，
+gen4 clone ~/suiyin-desk-gen4 @ gen4/migration，desk 真仓零接触)**。
+当前 = **M3 工具就绪门**（§P2.1 M3 清单 8 件：C5 typed inputs / seam schema+lint /
+authorization manifest / 报告新鲜度 / lane 隔离 / plan gate 分档 / M1 四缺口声明 /
+安全闸 73 误报校准——最后一件 M4 前必须收敛）；M3 过门自检 → M4 病例回放 (v4lab) → M5。
 原推荐 (Q7-2 parked→R2 / C3 / C11 / C10) 降为 P1-P2,见 gen4-plan.md §三移植清单。
 低优先: r4 #4 auto-commit 不一致 / #5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
 
@@ -650,5 +676,5 @@ gen4-plan §四）；M1 时必须处理安全闸对 desk 的 73 处误报面（�
 
 **Version**: v0.5.5
 **Last Updated**: 2026-08-12
-**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + #1/#2/#3 已修）+ **Q7-1 真并行开闸 ✅**（C7 v0.1.2）。**当前: gen4-plan P0 最小可信链（§P2.0）—— P0-1 ✅ (2026-08-12)，下一件 P0-2 AC 冻结闸**。此前: Phase 0 关门（issue #60） — 3-OS CI + branch protection + constitution v0.2.3；后续 Phase 1 v4 自举（复活 001-sy-role 走完整自家链 + 自家 PR 默认 C5/C6）/ Phase 2 todo 拆分 + doc-lint / Phase 3 dogfood 升真实度 + P1.4（C4 L3 先于 C3）。
-**Changelog**: v0.5.6 (2026-08-12) **新增 §P2.0.5 并行盲区三件** — expense-tracker 双变体实验（漏声明依赖对三道网全部免疫：变体 B 静默 all_merged + CI 全绿 + 端到端 KeyError）+ suiyin-desk 002·T001 十二轮复盘移植；#A C2 `unmet_dependencies` 自报 + C7 机械路由 / #B 接缝 = 机械 integration test + owner（sy-tasks/sy-plan 硬约束）/ #C Q7-2 三条反循环纪律（findings 跨轮身份 / 机械预算不清零不受说服 / 尺子缺陷路由到 spec-change 永不判实现 blocker）。v0.5.5 (2026-08-12) **gen4-plan P0-1 身份与基线落地** — 新增 §P2.0（gen4-plan P0 最小可信链进度表，压过 P1.4）；canonical key `feature_id + local_task_id` 统一五落点（identity.py 单一权威；C2 v0.4.0 / C7 v0.2.0 / C5 v0.2.0 / batch v0.2.0）；T-001B 拒收案例转正；precheck v2 收口 r4 #4；README/starter prompt proxy 指引清理（系统代理自动继承，7897/59692 作废）。v0.5.4 (2026-07-09) **Phase 0 关门（issue #60）** — 2026-07-08 流程评估（自家 PR 绕自家链 / 无 CI 违 NC-5 / todo 单体 drift / dogfood 重放平台期）→ 3-OS CI（独立 PR）+ constitution v0.2.2 → v0.2.3（ADR-0005: NC-5 subprocess 条目加"用户命令字符串 shell=True"例外，r4 #2 cascade；C5 spec v0.1.3 + prompt.py 同步）+ ADR-0006: NC-6 候选三问法**不立**（P0.5 关账）；附带发现 C5 无法审宪法类 PR（input 形态 open gap）。v0.5.3 (2026-06-12) **Q7-1 真并行开闸（C7 v0.1.2 MINOR）** — `max_parallel>1` phase 内 dispatch 并发（ThreadPoolExecutor，execute_task 在 worker 线程 / state mutation 留主线程）+ 整合严格串行（ff/rebase-requeue 不变）；默认 1 保完全确定，>1 dispatch 完成序非确定但结局正确（I2 边界 = routing path 非调度时序）；AC-14/15。v0.5.2 (2026-06-12) **r4 发现 #2/#3 修复（C7 v0.1.1）** — #2 reverify `run_verify` 改 `shell=True`（真根因：`shell=False` 不解释 verify_cmd 的 `&&` → 含 `&&` 复合命令必失败误 park；初判网络瞬态已纠正）+ #3 `reverify_output` 诊断字段；防回归测试 + spec v0.1.1。v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
+**Status**: Living document — P1.1 P0 MVP ✅ + P1.2 (C5/C6) ✅ + P1.2.5 (batch) ✅ + **P1.3 全收口 ✅** + **r4 全自动真闭环 ✅**（Q1-3 实证 + #1/#2/#3 已修）+ **Q7-1 真并行开闸 ✅**（C7 v0.1.2）。**当前: gen4-plan 迁移（§P2.0 P0 六件+整链验收 ✅ 2026-08-12~13；§P2.1 M0/M1/M2 ✅ 2026-08-13 → M3 工具就绪门进行中）**。此前: Phase 0 关门（issue #60） — 3-OS CI + branch protection + constitution v0.2.3；后续 Phase 1 v4 自举（复活 001-sy-role 走完整自家链 + 自家 PR 默认 C5/C6）/ Phase 2 todo 拆分 + doc-lint / Phase 3 dogfood 升真实度 + P1.4（C4 L3 先于 C3）。
+**Changelog**: v0.5.7 (2026-08-13) **新增 §P2.1 desk 迁移 M0-M5 记账 + M3 PR 0** — P0-2~P0-6 + 整链验收归因表补记（§P2.0 全绿）；M0 指挥权交接/宪法归一（27 现行/24 frozen，bzds 账号层强制实证收口）+ M1 迁移矩阵（33 颗粒 orphan=0）+ M2 试点 002 拆分（AC55+GUARD34/seam30/坑9，69 条待独立测试作者）全部 ✅；M3 件 0 = sy-tasks 反向指令清理（"Tests are OPTIONAL"→ 测试铁律、checklist T001 格式 → LOCAL_ID_PATTERN canonical identity、tasks.md → tasks.yaml 正文归一）；starter prompt 转向 M3。v0.5.6 (2026-08-12) **新增 §P2.0.5 并行盲区三件** — expense-tracker 双变体实验（漏声明依赖对三道网全部免疫：变体 B 静默 all_merged + CI 全绿 + 端到端 KeyError）+ suiyin-desk 002·T001 十二轮复盘移植；#A C2 `unmet_dependencies` 自报 + C7 机械路由 / #B 接缝 = 机械 integration test + owner（sy-tasks/sy-plan 硬约束）/ #C Q7-2 三条反循环纪律（findings 跨轮身份 / 机械预算不清零不受说服 / 尺子缺陷路由到 spec-change 永不判实现 blocker）。v0.5.5 (2026-08-12) **gen4-plan P0-1 身份与基线落地** — 新增 §P2.0（gen4-plan P0 最小可信链进度表，压过 P1.4）；canonical key `feature_id + local_task_id` 统一五落点（identity.py 单一权威；C2 v0.4.0 / C7 v0.2.0 / C5 v0.2.0 / batch v0.2.0）；T-001B 拒收案例转正；precheck v2 收口 r4 #4；README/starter prompt proxy 指引清理（系统代理自动继承，7897/59692 作废）。v0.5.4 (2026-07-09) **Phase 0 关门（issue #60）** — 2026-07-08 流程评估（自家 PR 绕自家链 / 无 CI 违 NC-5 / todo 单体 drift / dogfood 重放平台期）→ 3-OS CI（独立 PR）+ constitution v0.2.2 → v0.2.3（ADR-0005: NC-5 subprocess 条目加"用户命令字符串 shell=True"例外，r4 #2 cascade；C5 spec v0.1.3 + prompt.py 同步）+ ADR-0006: NC-6 候选三问法**不立**（P0.5 关账）；附带发现 C5 无法审宪法类 PR（input 形态 open gap）。v0.5.3 (2026-06-12) **Q7-1 真并行开闸（C7 v0.1.2 MINOR）** — `max_parallel>1` phase 内 dispatch 并发（ThreadPoolExecutor，execute_task 在 worker 线程 / state mutation 留主线程）+ 整合严格串行（ff/rebase-requeue 不变）；默认 1 保完全确定，>1 dispatch 完成序非确定但结局正确（I2 边界 = routing path 非调度时序）；AC-14/15。v0.5.2 (2026-06-12) **r4 发现 #2/#3 修复（C7 v0.1.1）** — #2 reverify `run_verify` 改 `shell=True`（真根因：`shell=False` 不解释 verify_cmd 的 `&&` → 含 `&&` 复合命令必失败误 park；初判网络瞬态已纠正）+ #3 `reverify_output` 诊断字段；防回归测试 + spec v0.1.1。v0.5.1 (2026-06-12) **r4 全自动真闭环** — v5 login-core-r4 全程机器跑通（sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_merged 43 tests 绿），Q1-3 实证；5 发现，#1 `constitution_ref` v4-centric 默认路径错配已修（C2 v0.3.1 / C5 v0.1.2 + template/skill），#2-5 记 todo。v0.5.0 (2026-06-11) **P1.3 全收口** — C1 Planning Engine spec(#53)+impl(#54)+T-009 dogfood 闭环；P1.3 三大件（C7 / R2&锁 / C1）全 done，starter prompt 转向 P1.4。v0.4.1 (2026-06-10) P1.3 R2 retry-with-feedback + C2 worktree 活跃锁结案（C2 v0.3.0, PR #52；发现 #8 两半边全关）+ starter prompt 刷新。v0.4.0 (2026-06-10) C7 全闭环 — 第三轮真闭环纪录（发现 #9 C2 校验基准 + #10 proxy 探活）+ P1.3 C7 条目结案 + starter prompt 刷新。v0.3.2 (2026-05-28) +P1.6 hooks-based 运行时 spec 审批（远期 governance 终态）+ baseline `runtime/claude-settings.json` 改为 9 allow + 4 deny（含 python/bash/git/gh 全开 + 4 条 reflection-trigger deny）。
