@@ -27,9 +27,10 @@ from suiyin_flow.close_harness import cli as close_cli
 from suiyin_flow.lane import cli as lane_cli
 from suiyin_flow.mutation import cli as mutation_cli
 from suiyin_flow.seamlint import cli as seamlint_cli
+from suiyin_flow.testauthor import cli as testauthor_cli
 
 _USAGE = """\
-usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate,authz,mutation,close} ...
+usage: suiyin-flow {plan,verify,task,review,gate,phase,acgate,authz,mutation,testauthor,close} ...
 
 Subcommands:
   plan     C1 Planning Engine (tasks.yaml → execution_plan 依赖分层 + 并行组, P1.3)
@@ -41,6 +42,7 @@ Subcommands:
   acgate   AC 冻结闸 (行为/守卫测试 diff 拦截, gen4-plan P0-2)
   authz    Authorization manifest 静态写权闸 (gen4-plan M3 件 3)
   mutation Mutation 探针 (冻结测试证伪力验证, gen4-plan P0-3)
+  testauthor 独立测试作者 (契约驱动红测试 + AC freeze, M5 前置 1)
   close    Feature 收口 harness (C4→C5→C6 确定性串接, gen4-plan P0-4)
 
 详细帮助: `suiyin-flow <subcommand> --help`
@@ -75,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
         return authz_cli.main(args)
     if cmd == "mutation":
         return mutation_cli.main(args)
+    if cmd == "testauthor":
+        return testauthor_cli.main(args)
     if cmd == "seamlint":
         return seamlint_cli.main(args)
     if cmd == "close":
