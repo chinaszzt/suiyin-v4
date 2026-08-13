@@ -73,7 +73,8 @@ AC-1 冻结完好 pass / AC-2 删文件 block / AC-3 改名 def block / AC-4 ski
 
 ---
 
-**Version**: v0.1.0-draft
-**Last Updated**: 2026-08-12
+**Version**: v0.1.1-draft
+**Last Updated**: 2026-08-13
 **Changelog**:
+- v0.1.1 (2026-08-13): **PATCH — anchored refs**：spec_ref/test_ref 支持 `path#anchor` 形态（`ref_file_part` helper；freeze/hash 校验/diff 检测/spec_changed 全走文件部分，manifest 内锚点原样保留——锚点是文档语义，hash 粒度是文件级）。动机：M5 T003 首跑，desk M2 骨架 18 处 `spec.md#FR-N` 形态 ref 令整 manifest 冻结失败。`AC_ID_PATTERN` 抽为模块常量供 testauthor 共用。
 - v0.1.0 (2026-08-12): 初稿 + impl + 13 AC。来源 gen4-plan §二拍板 1（三类测试 + 三通道）+ §三 P0-2。

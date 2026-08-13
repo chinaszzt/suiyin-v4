@@ -48,6 +48,11 @@ def content_hash(b: bytes) -> str:
     return hashlib.sha256(norm_bytes(b)).hexdigest()
 
 
+def ref_file_part(ref: str) -> str:
+    """Return the file path portion of a manifest ref, preserving plain paths."""
+    return ref.partition("#")[0]
+
+
 # -------------------------------------------------------------------
 # git 原语
 # -------------------------------------------------------------------
@@ -185,7 +190,7 @@ def run_gate(
     # 2) 冻结测试文件逐个判定
     by_test: dict[str, list[AcEntry]] = {}
     for e in manifest.entries:
-        by_test.setdefault(e.test_ref, []).append(e)
+        by_test.setdefault(ref_file_part(e.test_ref), []).append(e)
 
     for test_ref, entries in sorted(by_test.items()):
         status = changed.get(test_ref)
@@ -276,7 +281,7 @@ def _resolve_channel(entries: list[AcEntry], changed: dict[str, str]) -> Channel
     - projection_fix: diff 含 projection-fixes/<ac_id>* 证据文件 (新旧 oracle)
     """
     for e in entries:
-        if e.spec_ref in changed:
+        if ref_file_part(e.spec_ref) in changed:
             return "spec_changed"
     changed_paths = [p for p, s in changed.items() if s in ("A", "M")]
     for e in entries:
@@ -303,7 +308,7 @@ def _staleness_findings(
             if (ref, expect) in seen:
                 continue
             seen.add((ref, expect))
-            b = show_bytes(repo_root, base_ref, ref)
+            b = show_bytes(repo_root, base_ref, ref_file_part(ref))
             actual = content_hash(b) if b is not None else None
             if actual != expect:
                 findings.append(
@@ -340,7 +345,7 @@ def freeze_manifest(
     manifest = load_manifest(manifest_path)
     for e in manifest.entries:
         for what, ref_path in (("spec", e.spec_ref), ("test", e.test_ref)):
-            b = show_bytes(repo_root, ref, ref_path)
+            b = show_bytes(repo_root, ref, ref_file_part(ref_path))
             if b is None:
                 raise AcGateError(
                     "INVALID_MANIFEST",

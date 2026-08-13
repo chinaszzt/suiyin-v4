@@ -166,4 +166,5 @@ path 圈地检查 (commit diff) → red 检 (作者 worktree 内跑 red-cmd —�
 **Status**: draft — M5 前置 1（拍板 10 第一级）；实现 codex 外包
 
 **Changelog**:
+- v0.1.1 (2026-08-13): **PATCH — M5 T003 首跑工具债**：(1) 靶单 target_id 解析时即按 acgate `AC_ID_PATTERN` 校验（fail-fast，防 session 跑完才在 freeze 撞 pattern——首跑 SEAM- 前缀实录）；(2) report 加 `freeze_error`（freeze 各早退/异常路径带明确原因，不再静默 None）。
 - v0.1.0 (2026-08-13): 初稿。测试先行顺序双会话的作者半边：typed inputs + 靶单 directive → fresh session 写测 → 圈地（authz 式）→ 红检（throwaway worktree, base 非绿才过）→ acgate freeze 交接。执行闸零新增（复用 P0-2 冻结闸）。M4 三路证据（E4#6/E5#1 残差 + 28 seam PENDING）驱动。
