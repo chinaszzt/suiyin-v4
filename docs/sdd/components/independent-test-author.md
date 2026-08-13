@@ -141,6 +141,10 @@ path 圈地检查 (commit diff) → red 检 (作者 worktree 内跑 red-cmd —�
   targets yaml）——机械可做，M5 用量起来后加 `testauthor targets-from` 子命令
 - **QT-3**: 红检对"改既有行为"类 target 的语义（base 上旧行为绿、新判据红需要测试能表达差异）
   ——首轮只覆盖增量型（M4 证据的三类都是增量型），修改型留 feature-repair 场景一起设计
+- **QT-4**（M5 试跑前发现）：**guard 型 target 在合规 base 上天然绿**——闭集/不变量护栏
+  断言当前成立的事实，红先行语义只适配"实现缺位"形态（试跑用 B 产物缺枚举绕开了这点）。
+  候选处置：guard 型的空心防护交给 mutation 探针配对验证（探针验存量的既有分工），
+  红检对 kind=guard 降级为"编译通过 + mutation 配对必红"双条件。M5 shadow 用量起来后定
 
 ## 7. Implementation Notes
 
