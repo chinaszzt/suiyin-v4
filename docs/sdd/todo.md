@@ -449,7 +449,11 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
   - 交叉确认：浅拷贝缺陷 mutation+C5 双闸独立命中；C5 meta-findings 反咬回放资产两处（CardMu 版本歪斜 / authz T001 db_writes 裁定错误）
   - **零逃逸门成立**（逃逸 = 未检出且未归因承接；每条均有检出或已排期承接）；结构性 findings：seam schema v0.2 需 `external_consumers` / 28/28 接缝测试 PENDING
   - **M5 前置由回放证据确定：独立测试作者优先级最高**（#6 与 E5#1 的残差承接 + 28 条 seam 护栏全 PENDING 三路指向）
-- [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）——**下一步**；开工前先做独立测试作者（P1 → M5 硬前置，M4 证据背书）+ 修 authz T001 db_writes 裁定 + seam schema v0.2（external_consumers）
+- [x] **M5 前置三件 ✅ (2026-08-13)**
+  - **独立测试作者**（[#85](https://github.com/chinaszzt/suiyin-v4/pull/85)，spec [independent-test-author.md](components/independent-test-author.md)）：测试先行双会话作者半边——靶单 directive → fresh session 只看声明写测（默认不读 plan）→ 圈地（只许测试路径）→ 红检（base 非绿才过，编译失败 = Go 合法红）→ acgate freeze（执行闸零新增，复用 P0-2）。**v4lab 真靶试跑 pass**：SEAM-EXIT-REASON 闭集护栏 3 具名测试、红检编译失败形态、冻结入 ac-manifest——对标 E4 事后手写的 GUARD-15，这次由独立作者从声明写出。QT-4 新记：guard 型在合规 base 天然绿，红检语义待与 mutation 配对（M5 shadow 后定）
+  - **seam schema v0.2**（[#84](https://github.com/chinaszzt/suiyin-v4/pull/84)）：`external_consumers` 跨 feature 消费方；v4lab 应用后 seamlint FAIL→PASS（M4 假 L3 病例闭环消除）
+  - **authz T001 db_writes 修正**（v4lab d3ad007，按契约 §三）——M4 C5 meta-finding 闭环
+- [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）——**下一步**：T003 主线 shadow（gen4 链在 v4lab/gen4 clone 跑真 feature 与现役并行对照）→ parity 门 → cut over。28 条 seam 靶单批量作者化是 shadow 首件事（试跑已验流程）
 - [ ] **M4 病例回放**（v4lab：E4 8 条按归因表逐条声明 + E5 越界票 + T003 A/B 再跑，零逃逸门）
 - [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）
 
