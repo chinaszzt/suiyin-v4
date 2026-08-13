@@ -86,8 +86,14 @@ properties:
   target: { type: object, description: '同 §2.1 target' }
   task_id:
     type: string
-    pattern: '^T-\d{3,}$'
+    pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'   # v0.2.0: LOCAL_ID_PATTERN (P0-1 cascade, 代码 P0-4 已修)
     description: optional；input.task_id 透传，让 C5 / 人能回链 task
+  target_tree_sha:
+    type: string
+    description: |
+      optional (v0.2.0, M3 件 4 报告新鲜度绑定)；被验 target 的 git tree sha
+      (`git rev-parse <ref>^{tree}`——tree 不是 commit, rebase 不改内容时报告仍有效)。
+      解析失败 → 字段缺省 + stderr 警告 (C4 自身不 crash)；C6 门侧对缺失 fail-closed (STALE_REPORT)。
   overall_verdict:
     enum: [pass, fail, warn_only]
   generated_at: { type: string, format: date-time }
@@ -367,11 +373,12 @@ suiyin_flow/
 
 ---
 
-**Version**: v0.1.3-draft
-**Last Updated**: 2026-07-09
+**Version**: v0.2.0-draft
+**Last Updated**: 2026-08-13
 **Status**: draft — P0 阶段 L1+L2 已实现 (PR #20+22)；P3 阶段补 L3/L4
 
 **Changelog**:
+- v0.2.0 (2026-08-13): **MINOR — M3 件 4 报告新鲜度绑定**：verify_report 加 optional `target_tree_sha`（公共 helper `treesha.resolve_tree_sha`；C4 侧解析失败仅警告，fail-closed 点在 C6）；附带把 §2.2 `task_id` pattern 对齐 LOCAL_ID_PATTERN（P0-1 cascade 漏、P0-4 代码已修，spec 补记）。CONTRACT_VERSION → v0.2.0。
 - v0.1.3 (2026-07-09): **PATCH** — §7 Venv portability：`require_tool` fallback 候选链补 Windows base-install 布局（解释器在根目录、工具在 `<root>\Scripts\` 子目录——CI `setup-python` 即此布局；旧版只探解释器同目录，漏检导致误报 `TOOLCHAIN_NOT_FOUND`）。issue #60 windows-latest CI 首跑实证。impl: PR #62
 - v0.1.2 (2026-05-24): **P1.1.2 反推** — §7 跨平台节加 NC-5 reference；§7 加 "Venv portability — require_tool fallback" 节（PR #22 实证）；§7 跟 constitution 关系加 NC-5
 - v0.1.1 (2026-05-20): §0 实现谱系简化为"(a) 唯一首选，其他业务项目自决"；§2.1 Input 加 optional `task_id`；§2.2 verify_report 加 optional `task_id`；§7 加"跨平台兼容性"节
