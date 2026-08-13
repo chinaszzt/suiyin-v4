@@ -18,7 +18,12 @@ from suiyin_flow.identity import LOCAL_ID_PATTERN
 #   task_id pattern 放宽 (LOCAL_ID_PATTERN, T-001B 合法) + 输入加 feature_id
 #   (可选) + 落盘 reviews/<uuid> → reviews/<review_key>/<uuid> (可按身份键定位)
 # v0.3.0 (2026-08-12): MINOR — P0-4: 输入加可选 task_ids[] (subject=feature 收口 review)
-CONTRACT_VERSION: str = "v0.3.0"
+# v0.4.0 (2026-08-13): MINOR — M3 件 1 (gen4-plan 拍板 7) typed inputs:
+#   review_inputs[] (kind/path/authority/required/content_sha256), 权威序
+#   nc > acceptance > design > failure_modes > advisory; required 缺失 /
+#   hash 漂移 fail-closed (session 不启动); report 记录 resolved inputs。
+#   尺子对照实验实证: 契约进输入面 = 同 diff approve/0 → block/1 (dogfood/P0-attribution/)
+CONTRACT_VERSION: str = "v0.4.0"
 
 # -------------------------------------------------------------------
 # Enums
@@ -45,6 +50,86 @@ Category = Literal[
 BLOCK_SET: frozenset[Category] = frozenset(
     {"nc_violation", "security", "spec_drift", "ac_uncovered"}
 )
+
+# -------------------------------------------------------------------
+# v0.4.0 Typed inputs (M3 件 1, gen4-plan 拍板 7)
+# -------------------------------------------------------------------
+
+# 输入 kind 闭集. 每个 kind 有固定的权威档 (KIND_AUTHORITY), 不由调用方自定.
+InputKind = Literal[
+    "constitution",   # 宪法 (NC/PC) — 最高权威
+    "spec",           # spec.md — 意图与 AC
+    "ac_map",         # M2 产物 ac-map.md / ac-manifest.yaml — AC 映射
+    "plan",           # plan.md — 实施策略
+    "contract",       # contracts/*.md — 接口契约 (尺子对照实验的关键输入)
+    "seam_manifest",  # seam-manifest.yaml — 接缝声明 (M3 件 2 正式 schema)
+    "failure_modes",  # failure-modes.md — 已知坑 + 复发判据
+    "verify_report",  # C4 verify_report.json — 辅助信息
+    "advisory",       # 其他辅助材料 (研究笔记 / quickstart 等)
+]
+
+# 权威档 (高 → 低). 判据冲突时高档为准; finding 归类按档位钉死 (见 prompt).
+Authority = Literal["nc", "acceptance", "design", "failure_modes", "advisory"]
+
+# 权威序 (index 越小越高). prompt 渲染与冲突裁决共用这一张表.
+AUTHORITY_ORDER: tuple[Authority, ...] = (
+    "nc", "acceptance", "design", "failure_modes", "advisory"
+)
+
+# kind → authority 固定映射 (单一权威, 调用方不可越级声明).
+KIND_AUTHORITY: dict[str, Authority] = {
+    "constitution": "nc",
+    "spec": "acceptance",
+    "ac_map": "acceptance",
+    "plan": "design",
+    "contract": "design",
+    "seam_manifest": "design",
+    "failure_modes": "failure_modes",
+    "verify_report": "advisory",
+    "advisory": "advisory",
+}
+
+
+class ReviewInputEntry(BaseModel):
+    """review_inputs[] 单条 (v0.4.0).
+
+    authority 由 kind 派生 (KIND_AUTHORITY), 不接受调用方覆盖 —— 权威序是
+    尺子的一部分, 允许自定就等于允许把契约降级成参考资料.
+    """
+
+    kind: InputKind
+    path: str = Field(description="相对 repo_root 或绝对路径")
+    required: bool = Field(
+        default=True,
+        description="True 时文件缺失 → REVIEW_INPUT_MISSING fail-closed (session 不启动)",
+    )
+    content_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "optional; 提供时对盘上内容做 CRLF→LF 归一化 sha256 校验, "
+            "不一致 → REVIEW_INPUT_HASH_DRIFT fail-closed (防审到漂移后的输入)"
+        ),
+    )
+
+    @property
+    def authority(self) -> Authority:
+        return KIND_AUTHORITY[self.kind]
+
+
+class ResolvedReviewInput(BaseModel):
+    """report 里记录的 resolved input (v0.4.0) — 审的是哪些输入、什么内容版本."""
+
+    kind: InputKind
+    path: str = Field(description="解析后的绝对路径")
+    authority: Authority
+    status: Literal["loaded", "skipped_missing"] = Field(
+        description="loaded=进入 review 输入面; skipped_missing=非 required 且缺失"
+    )
+    content_sha256: str | None = Field(
+        default=None,
+        description="loaded 时盘上内容的 CRLF→LF 归一化 sha256 (实测值, 非声明值)",
+    )
 
 
 # -------------------------------------------------------------------
@@ -91,6 +176,14 @@ class ReviewInput(BaseModel):
             "v0.3.0 (P0-4): subject=feature 时的成员 task 清单; 提供时 "
             "task_id 槽位放 feature_id, review 覆盖整个 feature diff。"
             "单 task review (subject=task) 不传"
+        ),
+    )
+    review_inputs: list[ReviewInputEntry] | None = Field(
+        default=None,
+        description=(
+            "v0.4.0 (M3 件 1): typed inputs 清单, 在 spec/plan/constitution 三件核心输入"
+            "之外追加 (contract / seam_manifest / failure_modes / ...)。核心三件由 "
+            "synthesize_core_inputs 自动转成 entries, 调用方不必重复声明"
         ),
     )
     criticality: Criticality = Field(
@@ -167,6 +260,13 @@ class ReviewReport(BaseModel):
         default=None,
         description="conditional (when criticality=high 走 N=2 模式)",
     )
+    review_inputs: list[ResolvedReviewInput] | None = Field(
+        default=None,
+        description=(
+            "v0.4.0; 本次 review 实际的输入面 (kind/authority/实测 hash) — "
+            "审计 '这个 verdict 是用什么尺子量出来的'; 为报告新鲜度绑定 (M3 件 4) 铺路"
+        ),
+    )
 
 
 # -------------------------------------------------------------------
@@ -183,6 +283,10 @@ ErrorCode = Literal[
     "ARBITRATION_DEADLOCK",
     "REPO_ROOT_NOT_FOUND",
     "INVALID_TASK_ID",  # task_id required after v0.1.1, schema 校验失败
+    # v0.4.0 typed inputs (fail-closed, session 不启动):
+    "REVIEW_INPUT_MISSING",           # required entry 文件缺失
+    "REVIEW_INPUT_HASH_DRIFT",        # content_sha256 声明值 != 盘上实测值
+    "REVIEW_INPUT_MANIFEST_INVALID",  # --inputs-manifest 文件不可解析 / schema 不符
 ]
 
 

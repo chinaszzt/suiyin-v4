@@ -19,6 +19,7 @@ from suiyin_flow.c5_reviewer.contract import (
     CONTRACT_VERSION,
     Arbitration,
     Finding,
+    ResolvedReviewInput,
     ReviewerError,
     ReviewInput,
     ReviewReport,
@@ -33,6 +34,7 @@ def build_report(
     findings: list[Finding],
     session_id: str,
     arbitration: Arbitration | None = None,
+    review_inputs: list[ResolvedReviewInput] | None = None,
 ) -> ReviewReport:
     """组装 ReviewReport (跟 spec §2.2 字段对齐)."""
     return ReviewReport(
@@ -44,6 +46,7 @@ def build_report(
         pr_ref=review_input.pr_ref,
         contract_version=CONTRACT_VERSION,
         arbitration=arbitration,
+        review_inputs=review_inputs,
     )
 
 

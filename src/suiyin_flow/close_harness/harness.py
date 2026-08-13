@@ -40,7 +40,13 @@ from suiyin_flow.c4_verify.contract import (
     TargetWorktree,
     VerifyReport,
 )
-from suiyin_flow.c5_reviewer.contract import Criticality, ReviewerError, ReviewInput
+from suiyin_flow.c5_reviewer.contract import (
+    Criticality,
+    InputKind,
+    ReviewerError,
+    ReviewInput,
+    ReviewInputEntry,
+)
 from suiyin_flow.c6_gate import cli as c6_cli
 from suiyin_flow.close_harness.blocks import load_block
 from suiyin_flow.close_harness.schema import (
@@ -356,6 +362,41 @@ def _step_verify(
     return str(out) if ok else None
 
 
+def _detect_feature_review_inputs(
+    repo_root: Path, spec_ref: str
+) -> list[ReviewInputEntry] | None:
+    """spec 同目录的契约资产自动进 C5 输入面 (v0.4.0 typed inputs).
+
+    尺子对照实验 (dogfood/P0-attribution/): 契约不进输入面 = 接缝全盲。
+    存在才收 (required=True, 此时文件已确认在盘上); 全缺 → None (纯 spec/plan review)。
+    """
+    spec_path = Path(spec_ref)
+    if not spec_path.is_absolute():
+        spec_path = repo_root / spec_ref
+    feature_dir = spec_path.parent
+    candidates: list[tuple[InputKind, Path]] = [
+        ("ac_map", feature_dir / "ac-map.md"),
+        ("failure_modes", feature_dir / "failure-modes.md"),
+    ]
+    # seam manifest: 正式版优先, 没有再收 draft (M2 产物是 draft; M3 件 2 转正式)
+    for seam_name in ("seam-manifest.yaml", "seam-manifest.draft.yaml"):
+        if (feature_dir / seam_name).is_file():
+            candidates.append(("seam_manifest", feature_dir / seam_name))
+            break
+    entries = [
+        ReviewInputEntry(kind=kind, path=str(p))
+        for kind, p in candidates
+        if p.is_file()
+    ]
+    contracts_dir = feature_dir / "contracts"
+    if contracts_dir.is_dir():
+        entries.extend(
+            ReviewInputEntry(kind="contract", path=str(p))
+            for p in sorted(contracts_dir.glob("*.md"))
+        )
+    return entries or None
+
+
 def _step_review(
     cfg: CloseConfig, repo_root: Path, manifest: BatchManifest, feature_id: str,
     base_branch: str, verify_path: str, steps: list[CloseStep],
@@ -374,6 +415,7 @@ def _step_review(
         task_id=feature_id,       # subject=feature: task_id 槽位放 feature_id
         feature_id=feature_id,
         task_ids=[t.task_id for t in manifest.tasks],
+        review_inputs=_detect_feature_review_inputs(repo_root, t0.spec_ref),
         criticality=crit,
         repo_root=str(repo_root),
         session_timeout_seconds=cfg.session_timeout_seconds,

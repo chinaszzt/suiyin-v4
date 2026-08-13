@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from suiyin_flow.c5_reviewer.contract import ReviewerError, ReviewInput
+from suiyin_flow.c5_reviewer.contract import (
+    ResolvedReviewInput,
+    ReviewerError,
+    ReviewInput,
+)
 
 # §4 模板. JSON example 里的 `{` 用 `{{` 转义 (因为 .format).
 _TEMPLATE = """\
@@ -20,19 +24,30 @@ _TEMPLATE = """\
 (`.suiyin/sessions/*`), 只读最终产物. 你的核心价值是 fresh context — 避免被
 implementer 视角污染, 从 spec/plan 意图独立判断.
 
-## Input
+## Input (typed, 按权威序排列 — v0.4.0)
 
-- **spec**: {spec_ref} (必读, 理解意图)
-- **plan**: {plan_ref} (必读, 理解实施策略)
-- **constitution**: {constitution_ref} (必读, NC-1..NC-5 + PC-1..PC-3)
-- **PR diff**: {pr_diff_path} (实际产出)
-- **verify_report**: {verify_report_info}
+{typed_inputs_block}
+- **PR diff**: {pr_diff_path} (实际产出, 审查对象)
 - **task_id**: {task_id} (回链 task)
 - **criticality**: {criticality} (low/medium → 单次; high → N=2 仲裁, P1.2 spike 后启用)
 
+## 权威序与归类规则 (v0.4.0, 不可协商)
+
+权威序 (高 → 低): **nc (宪法) > acceptance (spec/AC) > design (plan/契约/接缝) >
+failure_modes (已知坑) > advisory (辅助)**。判据冲突时以高档为准。
+
+- **nc 档命中 → category 一律 `nc_violation`**, 严禁降级为 pc_violation / advisory 备注
+- **acceptance 档违反** → `spec_drift` (意图不对齐) 或 `ac_uncovered` (AC 缺 test)
+- **design 档违反** (契约签名 / 字段 / 枚举 / 接缝声明与 diff 不符) → `spec_drift`
+  —— 契约是 spec 意图的精确化, 违反契约就是违反意图, **不因为它写在 contracts/
+  而降级为参考意见**
+- **failure_modes 档**: 每条已知坑的复发判据是检查清单 —— diff 命中复发判据时,
+  按坑的性质归入对应 category (通常 spec_drift 或 security), location 引用该坑条目
+- **advisory 档** (verify_report 等): 辅助判断, **单独不构成 block 依据**
+
 ## Steps
 
-1. 读 spec / plan / constitution 理解任务意图
+1. 按权威序读完全部 loaded 输入, 理解任务意图与契约约束
 2. 读 PR diff 看实际产出
 3. 跨文件扫 complexity (调用 C11 query 做语义查重 + jscpd 语法兜底)
 4. 逐项检查:
@@ -65,7 +80,7 @@ implementer 视角污染, 从 spec/plan 意图独立判断.
   "session_id": "...",
   "task_id": "{task_id}",
   "pr_ref": "{pr_ref}",
-  "contract_version": "v0.1.1"
+  "contract_version": "v0.4.0"
 }}
 ```
 
@@ -98,27 +113,32 @@ def validate_refs(task_input: ReviewInput) -> None:
             )
 
 
+def _render_typed_inputs(resolved: list[ResolvedReviewInput]) -> str:
+    """resolved inputs (已按权威序排序) → prompt 列表块."""
+    lines: list[str] = []
+    for r in resolved:
+        if r.status == "loaded":
+            lines.append(f"- **{r.kind}** [{r.authority}]: {r.path} (必读)")
+        else:
+            lines.append(f"- **{r.kind}** [{r.authority}]: (缺失, 已声明非必需 — 跳过)")
+    return "\n".join(lines)
+
+
 def render_prompt(
     task_input: ReviewInput,
     pr_diff_path: str,
+    resolved_inputs: list[ResolvedReviewInput],
 ) -> str:
     """渲染 §4 prompt template.
 
     Args:
         task_input: 已校验过的 ReviewInput.
         pr_diff_path: 拉下 PR diff 后落盘的绝对路径 (由 diff.py 产生).
+        resolved_inputs: inputs.resolve_inputs 产物 (fail-closed 校验已过, 权威序排序).
     """
-    verify_info = (
-        f"路径={task_input.verify_report_path} (optional)"
-        if task_input.verify_report_path
-        else "(未提供 — C5 仅基于 spec/plan/diff review)"
-    )
     return _TEMPLATE.format(
-        spec_ref=task_input.spec_ref,
-        plan_ref=task_input.plan_ref,
-        constitution_ref=task_input.constitution_ref,
+        typed_inputs_block=_render_typed_inputs(resolved_inputs),
         pr_diff_path=pr_diff_path,
-        verify_report_info=verify_info,
         task_id=task_input.task_id,
         criticality=task_input.criticality,
         pr_ref=task_input.pr_ref,

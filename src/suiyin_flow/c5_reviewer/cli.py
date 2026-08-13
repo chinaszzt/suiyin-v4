@@ -23,6 +23,11 @@ from suiyin_flow.c5_reviewer.contract import (
 )
 from suiyin_flow.c5_reviewer.diff import fetch_pr_diff
 from suiyin_flow.c5_reviewer.findings import derive_verdict
+from suiyin_flow.c5_reviewer.inputs import (
+    load_inputs_manifest,
+    resolve_inputs,
+    synthesize_core_inputs,
+)
 from suiyin_flow.c5_reviewer.prompt import render_prompt, validate_refs
 from suiyin_flow.c5_reviewer.report import (
     apply_block_recovery_r1,
@@ -51,6 +56,11 @@ def execute_review(
     validate_repo_root(repo_root)
     validate_refs(review_input)
 
+    # v0.4.0 typed inputs: 核心三件 + 调用方追加的 review_inputs, fail-closed
+    # 校验 (required 缺失 / hash 漂移 → session 不启动), 按权威序排序
+    entries = synthesize_core_inputs(review_input) + (review_input.review_inputs or [])
+    resolved_inputs = resolve_inputs(entries, repo_root)
+
     # Review dir (per spec §3.2 + NC-4 隔离)
     # P0-1: reviews/<review_key>/<session_id> — 按 canonical key 可定位
     # (旧 reviews/<uuid> 与 task 身份完全脱钩); session_id 保留为 run 维度
@@ -72,7 +82,7 @@ def execute_review(
     )
 
     # 2. Render prompt
-    prompt_text = render_prompt(review_input, str(pr_diff_path))
+    prompt_text = render_prompt(review_input, str(pr_diff_path), resolved_inputs)
 
     # 3. Run session
     session_result = run_session(
@@ -137,6 +147,7 @@ def execute_review(
         findings=findings,
         session_id=session_id,
         arbitration=arbitration,
+        review_inputs=resolved_inputs,
     )
     report_path = write_report(report, review_dir)
 
@@ -167,6 +178,15 @@ def _make_parser() -> argparse.ArgumentParser:
         "--constitution", dest="constitution_ref", default=".specify/memory/constitution.md"
     )
     run_p.add_argument("--verify-report", dest="verify_report_path", default=None)
+    run_p.add_argument(
+        "--inputs-manifest",
+        dest="inputs_manifest",
+        default=None,
+        help=(
+            "v0.4.0 typed inputs manifest (yaml): schema_version + inputs[] "
+            "(kind/path/required/content_sha256); 核心三件不必重复声明"
+        ),
+    )
     run_p.add_argument("--task-id", required=True, help="所有 PR 必走 task (v0.1.1)")
     run_p.add_argument(
         "--feature-id",
@@ -192,6 +212,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 2
 
+    extra_inputs = None
+    if args.inputs_manifest:
+        try:
+            extra_inputs = load_inputs_manifest(Path(args.inputs_manifest).resolve())
+        except ReviewerError as e:
+            print(f"ERROR {e.error.code}: {e.error.message}", file=sys.stderr)
+            print(e.error.model_dump_json(indent=2))
+            return 2
+
     try:
         review_input = ReviewInput(
             pr_ref=args.pr_ref,
@@ -201,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             verify_report_path=args.verify_report_path,
             task_id=args.task_id,
             feature_id=args.feature_id,
+            review_inputs=extra_inputs,
             criticality=args.criticality,
             repo_root=str(Path(args.repo_root).resolve()),
             session_timeout_seconds=args.session_timeout_seconds,
