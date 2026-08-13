@@ -1,0 +1,12 @@
+{
+      "mutant_id": "M-scratch-shallow-copy",
+      "mutant_class": "shallow_copy",
+      "target_file": "internal/topic/deps.go",
+      "outcome": "survived",
+      "test_exit_code": 0,
+      "output_tail": "ok  \tgithub.com/chinaszzt/suiyin-desk/internal/topic\t2.862s\n"
+    }
+  ],
+  "survived_count": 5,
+  "killed_count": 0
+}

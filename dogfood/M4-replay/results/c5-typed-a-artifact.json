@@ -1,0 +1,99 @@
+{
+  "verdict": "block",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "spec_drift",
+      "location": "internal/llm/llm.go:60-93",
+      "suggested_fix": "Rewrite Client/ScoreReq/CompleteReq/SummarizeReq/ClassifyReq/Meta to match contract T001-topic-model.md §一 and seam-manifest.yaml SEAM-LLM-CLIENT/SEAM-LLM-REQTYPES exactly: no Meta in method return values, Meta{Origin store.Origin} embedded in each Req, ClassifyReq{Meta; Snap store.CardSnapshot}. Define store.CardSnapshot{CardID, GroupName, Summary string, Texts []string, Origin store.Origin} in internal/store as required."
+    },
+    {
+      "severity": "critical",
+      "category": "spec_drift",
+      "location": "internal/topic/state.go:76",
+      "suggested_fix": "Change Transition to func Transition(ctx context.Context, st *store.Store, cardID string, to store.CardState, reason string) error: look up current state, validate via the existing legality table, then perform a single-document CAS update of state+updated_at, returning store.ErrIllegalTransition (not a topic-local sentinel) and writing nothing on failure. This is the only way T003/T004/T006 can avoid independently reimplementing racy UpdateOne(state) calls."
+    },
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "internal/store/schema.go:327-335 (CardState consts)",
+      "suggested_fix": "Change CardStateCollecting's literal from \"collecting\" to \"aggregating\" and CardStatePendingReview's literal from \"pending_review\" to \"pending\" to match the pinned wire encoding (aggregating/todo/pending/chitchat_archived/following/done/merged) that other features are meant to consume verbatim."
+    },
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "internal/topic/registry.go:30",
+      "suggested_fix": "Add IsOurs(ctx, wxid) (bool, error) and ListMembers(ctx) ([]store.OurMember, error) to Registry, and declare a Registry interface (with NewRegistry returning it) so T003 can implement isOurs = msg.is_our_side || Registry.IsOurs(sender_wxid) per spec §一 and FR-014/015/016."
+    },
+    {
+      "severity": "high",
+      "category": "spec_drift",
+      "location": "internal/topic/ (missing files)",
+      "suggested_fix": "Deliver the remaining T001 scope: ScratchState (NewScratch/Cards/Links/Snapshot), topic.Deps struct with all interface slots + nil-safe defaults, topic.Count(ctx, st, kind) as the sole topic_metrics writer, and the cmd/server/assemble.go skeleton wiring topic.Deps plus four placeholder Runners (topic-ingestor/topic-scheduler/llm-failure-watchdog/topic-pending-watchdog)."
+    },
+    {
+      "severity": "medium",
+      "category": "spec_drift",
+      "location": "internal/store/store.go:191-210",
+      "suggested_fix": "Rename accessors to match the contracted store access surface (Feedback(), Unfixable(), IngestLatency(), Cards(), ConfigOps()) and provide a dedicated topic.EnsureIndexes(ctx, st) error wrapper instead of appending into the existing store.EnsureIndexes."
+    }
+  ],
+  "reviewed_at": "2026-08-13T06:58:17.427816Z",
+  "session_id": "e4a69090-0e3a-4bb4-9912-9d2c3919424a",
+  "task_id": "T-001",
+  "pr_ref": "task/T-001",
+  "target_tree_sha": "3175bf5420c801a9fdfffe2683253666e253677e",
+  "contract_version": "v0.5.0",
+  "arbitration": null,
+  "review_inputs": [
+    {
+      "kind": "constitution",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/docs/constitution.md",
+      "authority": "nc",
+      "status": "loaded",
+      "content_sha256": "06bd8fb5f5157811c145a98db3846e349ee705913f71a23a1a299153020929bf"
+    },
+    {
+      "kind": "spec",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/spec.md",
+      "authority": "acceptance",
+      "status": "loaded",
+      "content_sha256": "edd28e4ee1d8e5c64a5deaf024d97746a69a51cb971f936ed438b02ca750b9d7"
+    },
+    {
+      "kind": "plan",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/plan.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "ae110d022b8e84cf1ed2567c189304301b8e16e32d83f73d9b52796ed1dfa097"
+    },
+    {
+      "kind": "contract",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/contracts/T001-topic-model.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "226ef403d9336090ce989f278f75a48517057918000e2ea54ed3f3622bd38d33"
+    },
+    {
+      "kind": "contract",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/contracts/README.md",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "5dd1a45ce58fda5d4dc1959d40727dcefd54ad1f4c1544aa3f9c857c4d279e14"
+    },
+    {
+      "kind": "seam_manifest",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/seam-manifest.yaml",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "aced5f258e6260b8b497f0e10e949aa085713e8c0528ce0e9191e8bafe377177"
+    },
+    {
+      "kind": "authorization",
+      "path": "/Users/zhangtuo/suiyin-desk-v4lab/specs/002-topic-triage/authorization.yaml",
+      "authority": "design",
+      "status": "loaded",
+      "content_sha256": "54b160476c32b2b355b21f598ec6e02df192401e86e9fc495297df161f6e66bd"
+    }
+  ]
+}

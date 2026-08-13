@@ -1,0 +1,160 @@
+{
+  "schema_version": "v0.1.0",
+  "manifest_path": "specs/002-topic-triage/seam-manifest.yaml",
+  "feature_id": "002-topic-triage",
+  "counts": {
+    "SEAM_SCHEMA_INVALID": 0,
+    "SEAM_ENTRY_INVALID": 0,
+    "SEAM_TASK_UNKNOWN": 0,
+    "SEAM_DEPENDENCY_MISSING": 1,
+    "SEAM_TEST_PENDING": 28
+  },
+  "findings": [
+    {
+      "code": "SEAM_DEPENDENCY_MISSING",
+      "seam_id": "SEAM-CORRECTIONS-ERRORS",
+      "message": "seam SEAM-CORRECTIONS-ERRORS: consumer 'T003' cannot reach provider 'T006' through depends_on"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-LLM-CLIENT",
+      "message": "seam SEAM-LLM-CLIENT has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-LLM-REQTYPES",
+      "message": "seam SEAM-LLM-REQTYPES has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-DEPS",
+      "message": "seam SEAM-DEPS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-TRIAGER",
+      "message": "seam SEAM-TRIAGER has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-REGISTRY",
+      "message": "seam SEAM-REGISTRY has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-ATTACH-HOOK",
+      "message": "seam SEAM-ATTACH-HOOK has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-REGENERATOR",
+      "message": "seam SEAM-REGENERATOR has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CORRECTIONS",
+      "message": "seam SEAM-CORRECTIONS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CROSS-GROUP",
+      "message": "seam SEAM-CROSS-GROUP has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-INGEST-OPTS",
+      "message": "seam SEAM-INGEST-OPTS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-EVAL-CARD",
+      "message": "seam SEAM-EVAL-CARD has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-TRANSITION",
+      "message": "seam SEAM-TRANSITION has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-COUNT",
+      "message": "seam SEAM-COUNT has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-METRIC-KIND",
+      "message": "seam SEAM-METRIC-KIND has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CARD-MUTEX",
+      "message": "seam SEAM-CARD-MUTEX has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CLOCKX",
+      "message": "seam SEAM-CLOCKX has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-LLM-NEW",
+      "message": "seam SEAM-LLM-NEW has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-STORE-SCHEMA",
+      "message": "seam SEAM-STORE-SCHEMA has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CARD-SNAPSHOT",
+      "message": "seam SEAM-CARD-SNAPSHOT has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CONFIG-DEFAULTS",
+      "message": "seam SEAM-CONFIG-DEFAULTS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CONFIG-OPS",
+      "message": "seam SEAM-CONFIG-OPS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-ERR-ILLEGAL-TRANSITION",
+      "message": "seam SEAM-ERR-ILLEGAL-TRANSITION has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-ERR-LLM-UNAVAILABLE",
+      "message": "seam SEAM-ERR-LLM-UNAVAILABLE has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-CORRECTIONS-ERRORS",
+      "message": "seam SEAM-CORRECTIONS-ERRORS has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-POST-COMMIT",
+      "message": "seam SEAM-POST-COMMIT has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-SESSION-CONTEXT",
+      "message": "seam SEAM-SESSION-CONTEXT has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-SIMILARITY-CONFIG",
+      "message": "seam SEAM-SIMILARITY-CONFIG has no completed test_ref"
+    },
+    {
+      "code": "SEAM_TEST_PENDING",
+      "seam_id": "SEAM-COLD-START",
+      "message": "seam SEAM-COLD-START has no completed test_ref"
+    }
+  ],
+  "passed": false
+}

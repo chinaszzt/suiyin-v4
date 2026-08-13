@@ -443,7 +443,13 @@ ADR-0002 (Python 技术栈) + constitution v0.2.0 → v0.2.1 + tests/dogfood/tes
     - **rescale 双向对账** → 溶解：seamlint L2 identity + L3 dependency 即其机械替代面（tasks.yaml 与接缝声明的双向一致性检查）
     - **多轮收敛协议** → 推迟：feature-repair 落地时参考 desk process-evolution §十一（判据闭集 / 机械预算不清零不受说服 / 尺子缺陷路由 spec-change——已固化在 todo §P2.0.5 #C）
   - **M3 门自检声明**：gen4-plan §四 M3 门内清单（seam manifest / authorization manifest / C5 typed inputs / 报告新鲜度 / lane 隔离 / plan lint 面）全部落地且各带 AC 测试；机械可判路径模型调用数 = 0（seamlint/authz/acgate/safety/freshness 全为纯静态）；fail-closed 姿态贯穿（输入缺失/漂移/manifest 不合法一律不放行）。**已知未接线面（如实声明，不宣称全自动）**：①close harness 的 seamlint/authz 步序（spec QS-2，M4 首个回放前定）②lane 分配器与 C2/C7/mutation 的 --env 接线（M4 按需）③sy-implement/sy-analyze 仍以 tasks.md 为输入面（spec-kit 残留，随用随改）④db/network 精判机械化（authz spec QA-2，判法已定向"verify_cmd 指向"式）
-- [ ] **M4 病例回放**（v4lab：E4 8 条按归因表逐条声明 + E5 越界票 + T003 A/B 再跑，零逃逸门）——**下一步**；首个回放前先定 close harness 步序（acgate→authz→seamlint?→mutation→verify→review→gate）+ 考虑独立测试作者提前
+- [x] **M4 病例回放 ✅ (2026-08-13, evidence: `dogfood/M4-replay/`；harness 步序 PR [#82](https://github.com/chinaszzt/suiyin-v4/pull/82))**
+  - **E4 8 条：7 检出 / 1 已知漏**——#1-5 mutation 5/5 复现；**#7 SEAM-EXIT-REASON 从 expected-miss 转 [critical] 点名检出**（seam 进 C5 输入面，"尺子的函数"第 3 实证）；#8 safety 规则 4 复确认；#6 done→merged 仍漏（预测内，残差 = R3 + 独立测试作者状态机正反例）
+  - **E5 票：#2/#3（Makefile 副作用/跨模块越界）authz 探针 4/4 机械检出**，A 产物合法面零误报；#1 接口面扩大 = 机制实证实例未点名（契约版本歪斜 + reviewer 聚焦缺失类；残差同 #6）
+  - 交叉确认：浅拷贝缺陷 mutation+C5 双闸独立命中；C5 meta-findings 反咬回放资产两处（CardMu 版本歪斜 / authz T001 db_writes 裁定错误）
+  - **零逃逸门成立**（逃逸 = 未检出且未归因承接；每条均有检出或已排期承接）；结构性 findings：seam schema v0.2 需 `external_consumers` / 28/28 接缝测试 PENDING
+  - **M5 前置由回放证据确定：独立测试作者优先级最高**（#6 与 E5#1 的残差承接 + 28 条 seam 护栏全 PENDING 三路指向）
+- [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）——**下一步**；开工前先做独立测试作者（P1 → M5 硬前置，M4 证据背书）+ 修 authz T001 db_writes 裁定 + seam schema v0.2（external_consumers）
 - [ ] **M4 病例回放**（v4lab：E4 8 条按归因表逐条声明 + E5 越界票 + T003 A/B 再跑，零逃逸门）
 - [ ] **M5 shadow + cut over**（desk 现役退役由 M5 管）
 
@@ -646,10 +652,10 @@ r4 全自动: sy-tasks 机器生成依赖链+modifies → C1 分组 → C7 all_m
 【推荐下一步】**先读 docs/sdd/gen4-plan.md（2026-08-08 拍板）+ todo §P2.0/§P2.1** ——
 **P0 六件 + 整链验收归因表 ✅ (2026-08-12~13)；desk 迁移 M0/M1/M2 ✅ (2026-08-13，
 gen4 clone ~/suiyin-desk-gen4 @ gen4/migration，desk 真仓零接触)**。
-**M3 工具就绪门 ✅ 全收 (2026-08-13, PR #73-#81，门自检声明见 §P2.1)**。
-当前 = **M4 病例回放**（v4lab：E4 8 条按归因表逐条声明 + E5 越界票 + T003 A/B 再跑，
-零逃逸门）；首个回放前定 close harness 步序（authz/seamlint 插点）+ 决定独立测试作者
-是否提前（M2 暴露 69 条 AC 待测试作者）。M4 后 M5 shadow + cut over。
+**M3 ✅ (PR #73-#81) + M4 病例回放 ✅ 零逃逸门成立 (2026-08-13, evidence dogfood/M4-replay/,
+harness 步序 #82)**。当前 = **M5 前置：独立测试作者**（M4 三路证据背书：#6 残差 + E5#1 残差 +
+28 条 seam 护栏全 PENDING）+ authz T001 db_writes 裁定修正 + seam schema v0.2
+（external_consumers）；然后 M5 shadow + T003 主线 + cut over（desk 现役退役）。
 原推荐 (Q7-2 parked→R2 / C3 / C11 / C10) 降为 P1-P2,见 gen4-plan.md §三移植清单。
 低优先: r4 #4 auto-commit 不一致 / #5 sy-specify 输出英语 / Q1 语义 pass 精度实测。
 
