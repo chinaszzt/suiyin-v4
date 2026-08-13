@@ -73,9 +73,16 @@ verdict: pass | fail
 ### 3.1 确定性步序
 
 ```
-resolve targets → author session (fresh, typed inputs) → path 圈地检查 →
-red 检 (base worktree 跑 red-cmd) → acgate freeze (targets → ac-manifest entries) → report
+resolve targets → 建作者 worktree (base-ref 分叉, 分支 testauthor/<feature>/<task>) →
+author session (fresh, typed inputs, 在作者 worktree 内写测) → commit →
+path 圈地检查 (commit diff) → red 检 (作者 worktree 内跑 red-cmd —— 树 = base+仅测试,
+就是红检要的形态) → acgate freeze (entries 追加进 feature ac-manifest, ref=作者 HEAD) → report
 ```
+
+> freeze 从 committed ref 钉 hash（acgate `show_bytes` 语义），所以作者产物必须先 commit；
+> 作者 worktree = base + 仅测试，红检直接在其中跑，无需另建 throwaway。
+> 作者分支保留（implementer 双会话的交接物：implementer base 合入该分支或 rebase 其上——
+> 编排归 C7/close 流程，I6）。
 
 ### 3.2 Invariants
 
@@ -85,10 +92,9 @@ red 检 (base worktree 跑 red-cmd) → acgate freeze (targets → ac-manifest e
   import 面），但 directive 必须来自声明不来自实现行为
 - **I2 圈地 fail-closed**：session 产物 diff 触碰 `--test-paths` 之外任何路径 → verdict=fail
   （复用 authz 的 diff 路径判定形态；测试作者没有实现写权——它写实现 = 自证循环回归）
-- **I3 红先行 fail-closed**：红检在 **base（不含作者产物之外的实现）** 上跑 red-cmd：
+- **I3 红先行 fail-closed**：红检在**作者 worktree（= base + 仅测试）**跑 red-cmd：
   exit 0（全绿）→ verdict=fail（base 就绿 = 测的是已有行为，不是增量判据）；
-  非 0（测试红/编译失败）→ red=true 通过。红检跑在 throwaway worktree（mutation 同款，
-  原树 byte-identical）
+  非 0（测试红/编译失败）→ red=true 通过。主仓工作树全程 byte-identical
 - **I4 冻结交接**：red 通过后逐 target 生成 ac-manifest entries（ac_id=target_id /
   test_ref / test_hash / spec_hash=声明源 hash / baseline_ref）并 `acgate freeze`；
   freeze 失败 → verdict=fail
@@ -124,7 +130,7 @@ red 检 (base worktree 跑 red-cmd) → acgate freeze (targets → ac-manifest e
 - **AC-7**: 部分 target 未产出 → 该 target=skipped + 原因，verdict 仍可 pass（authored ≥1 且
   无 I2/I3 违反），report 点名 skipped 数（不静默）
 - **AC-8**: report 带 target_tree_sha（base 的 tree sha）
-- **AC-9**: 红检跑在 throwaway worktree，原树 byte-identical（mutation AC-3 同款断言）
+- **AC-9**: 全流程主仓工作树 byte-identical（mutation AC-3 同款断言）；作者 worktree/分支保留供交接
 - **AC-10**: typed inputs required 缺失/hash 漂移 → fail-closed 不启动（复用 C5 inputs 语义）
 
 ## 6. Open Questions
